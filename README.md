@@ -1,2 +1,2 @@
 # bookmerang-backend
-Backend app Bookmerang
+.NET 8
