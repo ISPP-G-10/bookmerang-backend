@@ -6,8 +6,8 @@ WORKDIR /src
 
 COPY . .
 
-RUN dotnet restore Bookmerang.Api.csproj
-RUN dotnet publish Bookmerang.Api.csproj \
+RUN dotnet restore Bookmerang.Api/Bookmerang.Api.csproj
+RUN dotnet publish Bookmerang.Api/Bookmerang.Api.csproj \
     -c Release \
     -o /app/publish \
     --no-restore
