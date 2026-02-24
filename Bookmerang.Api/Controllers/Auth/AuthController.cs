@@ -57,17 +57,6 @@ public class AuthController : ControllerBase
 
         return Ok(usuario.ToDto());
     }
-
-    [HttpGet("test")]
-    public IActionResult Test()
-    {
-        var authHeader = Request.Headers["Authorization"].ToString();
-        return Ok(new
-        {
-            headerRecibido = authHeader.Length > 0,
-            primeros20 = authHeader.Length > 20 ? authHeader[..20] : authHeader
-        });
-    }
 }
 
 public record RegisterRequest(
