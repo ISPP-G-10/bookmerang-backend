@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Data;
 
 DotNetEnv.Env.Load();
+//DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
 
 var builder = WebApplication.CreateBuilder(args);
 
