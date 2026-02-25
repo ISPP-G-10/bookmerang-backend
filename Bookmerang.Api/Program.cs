@@ -1,7 +1,24 @@
 using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Implementation.Auth;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.EntityFrameworkCore;
+using Bookmerang.Api.Data;
+
+DotNetEnv.Env.Load();
+//DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEnvironmentVariable("CONNECTION_STRING");
+builder.Configuration["Supabase:JwtSecret"] = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET");
+builder.Configuration["Supabase:Url"] = Environment.GetEnvironmentVariable("SUPABASE_URL");
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        o => o.UseNetTopologySuite()
+    ));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -11,17 +28,52 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
         policy.WithOrigins(
-                "http://localhost:8081", 
-                "http://localhost:3000"  
+                "http://localhost:8081",
+                "http://localhost:3000"
             )
             .AllowAnyHeader()
             .AllowAnyMethod()
     );
 });
 
+// ===== JWT =====
+var supabaseUrl = builder.Configuration["Supabase:Url"];
+
+var httpClient = new HttpClient();
+var jwksJson = httpClient.GetStringAsync($"{supabaseUrl}/auth/v1/.well-known/jwks.json").Result;
+var jwks = new JsonWebKeySet(jwksJson);
+var signingKeys = jwks.GetSigningKeys();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKeys = signingKeys,
+            ValidateIssuer = true,
+            ValidIssuer = $"{supabaseUrl}/auth/v1",
+            ValidateAudience = true,
+            ValidAudience = "authenticated",
+            ValidateLifetime = true,
+            ValidAlgorithms = new[] { "ES256" }
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var authHeader = context.Request.Headers["Authorization"].ToString();
+                if (authHeader.StartsWith("Bearer "))
+                {
+                    context.Token = authHeader.Substring(7).Trim();
+                }
+                return Task.CompletedTask;
+            }
+        };
+    });
+
 // ===== SERVICIOS =====
 builder.Services.AddScoped<IAuthService, AuthService>();
-
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers();
@@ -32,18 +84,15 @@ var app = builder.Build();
 
 app.UseCors();
 
-// ===== MIDDLEWARE =====
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// ===== HTTPS REDIRECTION Y ENDPOINTS =====
-app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 app.MapGet("/", () => "Hello World!");
-// app.UseAuthentication();
-// app.UseAuthorization();
 
 app.Run();

@@ -1,28 +1,40 @@
+using Bookmerang.Api.Data;
+using Bookmerang.Api.Models;
 using Bookmerang.Api.Services.Interfaces.Auth;
+using Microsoft.EntityFrameworkCore;
+using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Services.Implementation.Auth;
 
-public class AuthService : IAuthService
+public class AuthService(AppDbContext db) : IAuthService
 {
-    public AuthService()
+    private readonly AppDbContext _db = db;
+
+    public async Task<BaseUser?> GetPerfil(string supabaseId)
     {
+        return await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
     }
 
-    public async Task<string> LoginAsync(string email, string password)
+    public async Task<(BaseUser? usuario, bool yaExistia)> Register(string supabaseId, string email, string username, string name, string profilePhoto,
+     BaseUserType type, Point location)
     {
-        // TODO: Implementar lógica de login
-        throw new NotImplementedException();
-    }
+        var existe = await _db.Users.AnyAsync(u => u.SupabaseId == supabaseId);
+        if (existe) return (null, true);
 
-    public async Task<string> RegisterAsync(string email, string password, string name)
-    {
-        // TODO: Implementar lógica de registro
-        throw new NotImplementedException();
-    }
+        var nuevoUsuario = new BaseUser
+        {
+            SupabaseId = supabaseId,
+            Email = email,
+            Username = username,
+            Name = name,
+            ProfilePhoto = profilePhoto,
+            UserType = type,
+            Location = location
+        };
 
-    public async Task<bool> ValidateTokenAsync(string token)
-    {
-        // TODO: Implementar validación de token
-        throw new NotImplementedException();
+        _db.Users.Add(nuevoUsuario);
+        await _db.SaveChangesAsync();
+
+        return (nuevoUsuario, false);
     }
 }
