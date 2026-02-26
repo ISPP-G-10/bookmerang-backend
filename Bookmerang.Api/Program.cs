@@ -1,9 +1,14 @@
 using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Implementation.Auth;
+using Bookmerang.Api.Services.Interfaces.Books;
+using Bookmerang.Api.Services.Implementation.Books;
+using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Books.Enums;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Data;
+using Npgsql;
 
 DotNetEnv.Env.Load();
 //DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
@@ -14,11 +19,17 @@ builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEn
 builder.Configuration["Supabase:JwtSecret"] = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET");
 builder.Configuration["Supabase:Url"] = Environment.GetEnvironmentVariable("SUPABASE_URL");
 
+// Registrar enums de PostgreSQL
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(builder.Configuration.GetConnectionString("DefaultConnection"));
+dataSourceBuilder.MapEnum<CoverType>("cover_type");
+dataSourceBuilder.MapEnum<BookCondition>("book_condition");
+dataSourceBuilder.MapEnum<BookStatus>("book_status");
+dataSourceBuilder.MapEnum<PricingPlan>("pricing_plan");
+dataSourceBuilder.UseNetTopologySuite();
+var dataSource = dataSourceBuilder.Build();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        o => o.UseNetTopologySuite()
-    ));
+    options.UseNpgsql(dataSource));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -74,6 +85,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // ===== SERVICIOS =====
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IBookRepository, BookRepository>();
+builder.Services.AddScoped<IBookService, BookService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers();

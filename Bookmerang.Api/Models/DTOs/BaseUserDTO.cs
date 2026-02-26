@@ -6,7 +6,7 @@ public record BaseUserDto(
     string Email,
     string Username,
     string Name,
-    string ProfilePhoto,
+    string? ProfilePhoto,
     BaseUserType UserType,
     double Latitud,
     double Longitud,

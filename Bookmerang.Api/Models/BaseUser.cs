@@ -28,9 +28,8 @@ public class BaseUser
     [Column("nombre")]
     public string Name { get; set; } = string.Empty;
 
-    [Required]
     [Column("foto_perfil_url")]
-    public string ProfilePhoto { get; set; } = string.Empty;
+    public string? ProfilePhoto { get; set; }
 
     [Required]
     [Column("type")]
