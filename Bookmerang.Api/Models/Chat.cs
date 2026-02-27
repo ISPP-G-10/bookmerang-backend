@@ -1,0 +1,1 @@
+//Descomentar las lineas 24 y 25 de Exchange.cs (relación 1:1 con esta clase)
