@@ -5,4 +5,7 @@
 # dotenvx
 .env.keys
 .env.local
-.env.*.local
+.env.*.
+
+#interno
+docs/
