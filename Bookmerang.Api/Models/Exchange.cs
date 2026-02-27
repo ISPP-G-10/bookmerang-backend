@@ -10,7 +10,8 @@ public class Exchange {
     //id int [pk, increment]
     [Key]
     [Column("exchange_id")]
-    public Guid ExchangeId { get; set; } = Guid.NewGuid();
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    public int ExchangeId { get; set; }
 
     // Atributo de Supabase NO QUITAR
     [Required]
@@ -20,14 +21,14 @@ public class Exchange {
     //chat_id int [not null, unique, note: '1 chat = 1 exchange']
     [Required]
     [Column("chat_id")]
-    public Guid ChatId { get; set; }
+    public int ChatId { get; set; }
     //[ForeignKey(nameof(ChatId))]
     //public Chat? Chat { get; set; } // Navigation property -> relación 1:1 es la interrrogación
   
     //match_id int [not null, ref: > matches.id]
     [Required]
     [Column("match_id")]
-    public Guid MatchId { get; set; }
+    public int MatchId { get; set; }
 
     [ForeignKey(nameof(MatchId))]
     public Match Match { get; set; }= null!; //FK

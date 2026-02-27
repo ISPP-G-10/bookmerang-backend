@@ -1,10 +1,10 @@
 namespace Bookmerang.Api.Models.DTOs;
 
 public record ExchangeDto(
-    Guid ExchangeId,
+    int ExchangeId,
     string SupabaseId,
-    Guid ChatId,
-    Guid MatchId,
+    int ChatId,
+    int MatchId,
     ExchangeStatus Status,
     DateTime CreatedAt,
     DateTime UpdatedAt

@@ -3,13 +3,13 @@ using NetTopologySuite.Geometries;
 namespace Bookmerang.Api.Models.DTOs;
 
 public record ExchangeMeetingDto(
-    Guid ExchangeMeetingId,
+    int ExchangeMeetingId,
     string SupabaseId,
-    Guid ExchangeId,
+    int ExchangeId,
     ExchangeMode ExchangeMode,
-    Guid BookspotId,
+    int? BookspotId,
     Point CustomLocation,
-    DateTime ScheduledAt,
+    DateTime? ScheduledAt,
     Guid ProposerId,
     ExchangeMeetingStatus MeetingStatus,
     bool MarkAsCompletedByUser1,
@@ -19,7 +19,7 @@ public record ExchangeMeetingDto(
 public static class ExchangeMeetingExtensions
 {
     public static ExchangeMeetingDto ToDto(this ExchangeMeeting meeting) => new(
-        meeting.ExchangeMeeetingId,
+        meeting.ExchangeMeetingId,
         meeting.SupabaseId,
         meeting.ExchangeId,
         meeting.ExchangeMode,
