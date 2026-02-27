@@ -1,3 +1,4 @@
+using Bookmerang.Api.Configuration;
 using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Implementation.Auth;
 using Bookmerang.Api.Services.Interfaces.Chats;
@@ -32,6 +33,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// ===== CONFIGURACIÓN =====
+builder.Services.Configure<MatcherSettings>(
+    builder.Configuration.GetSection(MatcherSettings.SectionName));
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
