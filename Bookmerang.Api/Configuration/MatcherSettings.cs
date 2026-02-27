@@ -21,4 +21,5 @@ public class FeedSettings
     public required int PriorityToDiscoveryRatio { get; set; }
     public required int DefaultPageSize { get; set; }
     public required int RecencyDecayDays { get; set; }
+    public required int SwipeValidDays { get; set; }
 }
