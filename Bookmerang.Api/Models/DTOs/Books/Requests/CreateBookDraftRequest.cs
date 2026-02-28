@@ -1,6 +1,6 @@
 using Bookmerang.Api.Models.Books.Enums;
 
-namespace Bookmerang.Api.DTOs.Books.Requests;
+namespace Bookmerang.Api.Models.DTOs.Books.Requests;
 
 /// <summary>
 /// Request para crear un borrador nuevo.

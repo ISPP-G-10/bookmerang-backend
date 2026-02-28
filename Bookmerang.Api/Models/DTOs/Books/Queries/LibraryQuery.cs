@@ -4,7 +4,6 @@ namespace Bookmerang.Api.Models.DTOs.Books.Queries;
 
 /// <summary>
 /// Parámetros de consulta para "Mi Biblioteca".
-/// Todos opcionales — sin filtros devuelve todos los libros del usuario
 /// </summary>
 public class LibraryQuery
 {

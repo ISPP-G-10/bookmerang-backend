@@ -1,4 +1,4 @@
-namespace Bookmerang.Api.DTOs.Books.Requests;
+namespace Bookmerang.Api.Models.DTOs.Books.Requests;
 
 /// <summary>
 /// Representa una foto individual

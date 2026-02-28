@@ -1,4 +1,4 @@
-namespace Bookmerang.Api.DTOs.Books.Queries;
+namespace Bookmerang.Api.Models.DTOs.Books.Queries;
 
 /// <summary>
 /// Parámetros de consulta para listar borradores.
