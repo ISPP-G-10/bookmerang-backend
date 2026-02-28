@@ -71,9 +71,36 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
         if (direction == SwipeDirection.LEFT)
             return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
 
-        // 4. Si es RIGHT, verificar match bilateral (S-8/S-9 pendientes)
-        // TODO: Implementar detección de match bilateral y creación de Match + Chat + Exchange
+        // 4. Si es RIGHT, verificar match bilateral:
+        //    ¿El owner del libro ya hizo swipe RIGHT a algún libro MÍO (en los últimos 30 días)?
+        var mutualSwipe = await FindMutualSwipeAsync(userId, book.OwnerId);
+        if (mutualSwipe == null)
+            return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
+
+        // 5. Match bilateral detectado → crear Match + Chat + Exchange (S-9 pendiente)
+        // TODO: Implementar creación atómica de Match + Chat + Exchange con pg_advisory_xact_lock
         return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
+    }
+
+    /// <summary>
+    /// Detecta match bilateral: verifica que otherUserId esté entre los usuarios
+    /// interesados (reutiliza GetInterestedUserIds con filtro temporal) y devuelve
+    /// el swipe RIGHT concreto hacia un libro del usuario actual.
+    /// Devuelve null si no hay match bilateral.
+    /// </summary>
+    private async Task<Swipe?> FindMutualSwipeAsync(int userId, int otherUserId)
+    {
+        var isInterested = await GetInterestedUserIds(userId)
+            .AnyAsync(id => id == otherUserId);
+
+        if (!isInterested)
+            return null;
+
+        return await _db.Swipes
+            .Where(s => s.SwiperId == otherUserId)
+            .Where(s => s.Direction == SwipeDirection.RIGHT)
+            .Where(s => _db.Books.Any(b => b.Id == s.BookId && b.OwnerId == userId))
+            .FirstOrDefaultAsync();
     }
 
     /// <summary>
