@@ -77,9 +77,144 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
         if (mutualSwipe == null)
             return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
 
-        // 5. Match bilateral detectado → crear Match + Chat + Exchange (S-9 pendiente)
-        // TODO: Implementar creación atómica de Match + Chat + Exchange con pg_advisory_xact_lock
-        return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
+        // 5. Match bilateral detectado → crear Match + Chat + Exchange atómicamente
+        var matchResult = await CreateMatchAtomicAsync(userId, book, mutualSwipe);
+        return new SwipeResultDto
+        {
+            Outcome = SwipeOutcome.MatchCreated,
+            Match = matchResult
+        };
+    }
+
+    /// <summary>
+    /// Crea Match + Chat + Exchange dentro de una transacción con advisory lock
+    /// para prevenir duplicados por concurrencia entre el par de usuarios.
+    /// El advisory lock se aplica sobre (min_user, max_user) para que ambos
+    /// usuarios adquieran el mismo lock independientemente de quién swipea primero. 
+    /// Si no pones min y max, se intercambiaría la clave y sería un lock distinto para cada uno
+    /// </summary>
+    private async Task<MatchCreatedDto> CreateMatchAtomicAsync(
+        int userId, Book swipedBook, Swipe mutualSwipe)
+    {
+        var otherUserId = swipedBook.OwnerId;
+        var lockKey1 = Math.Min(userId, otherUserId);
+        var lockKey2 = Math.Max(userId, otherUserId);
+
+        // Creamos la transacción
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+
+        // Advisory lock sobre el par de usuarios para evitar match duplicado
+        await _db.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock({0}, {1})", lockKey1, lockKey2);
+
+        // Verificar que no exista ya un match entre estos usuarios
+        var existingMatch = await _db.Matches.AnyAsync(m =>
+            m.User1Id == lockKey1 && m.User2Id == lockKey2);
+
+        // Si existe simplemente lo devolvemos
+        if (existingMatch)
+        {
+            await transaction.CommitAsync();
+            return await BuildMatchCreatedDto(
+                await _db.Matches.FirstAsync(m =>
+                    m.User1Id == lockKey1 && m.User2Id == lockKey2),
+                userId);
+        }
+
+        // Si no existe creamos match + chat + exchange
+        var now = DateTime.UtcNow;
+
+        var match = CreateMatch(lockKey1, lockKey2, mutualSwipe.BookId, swipedBook.Id, now);
+        await _db.SaveChangesAsync();
+
+        var chat = CreateChat(userId, otherUserId, now);
+        await _db.SaveChangesAsync();
+
+        CreateExchange(chat.Id, match.Id, now);
+
+        await _db.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return await BuildMatchCreatedDto(match, userId);
+    }
+
+    private Match CreateMatch(int user1Id, int user2Id, int book1Id, int book2Id, DateTime now)
+    {
+        var match = new Match
+        {
+            User1Id = user1Id,
+            User2Id = user2Id,
+            Book1Id = book1Id,
+            Book2Id = book2Id,
+            Status = MatchStatus.NEW,
+            CreatedAt = now
+        };
+        _db.Matches.Add(match);
+        return match;
+    }
+
+    // TODO: Reemplazar por el método de creación del módulo de chats cuando esté implementado
+    private Chat CreateChat(int userId, int otherUserId, DateTime now)
+    {
+        var chat = new Chat
+        {
+            Type = ChatType.EXCHANGE,
+            CreatedAt = now
+        };
+        _db.Chats.Add(chat);
+
+        _db.ChatParticipants.Add(new ChatParticipant
+        {
+            ChatId = chat.Id,
+            UserId = userId,
+            JoinedAt = now
+        });
+        _db.ChatParticipants.Add(new ChatParticipant
+        {
+            ChatId = chat.Id,
+            UserId = otherUserId,
+            JoinedAt = now
+        });
+
+        return chat;
+    }
+
+    // TODO: Reemplazar por el método de creación del módulo de exchanges cuando esté implementado
+    private void CreateExchange(int chatId, int matchId, DateTime now)
+    {
+        _db.Exchanges.Add(new Exchange
+        {
+            ChatId = chatId,
+            MatchId = matchId,
+            Status = ExchangeStatus.NEGOTIATING,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+    }
+
+    /// <summary>
+    /// Construye el DTO de respuesta del match creado.
+    /// </summary>
+    private async Task<MatchCreatedDto> BuildMatchCreatedDto(Match match, int userId)
+    {
+        var otherUserId = match.User1Id == userId ? match.User2Id : match.User1Id;
+        var otherUsername = await _db.BaseUsers
+            .Where(bu => bu.Id == otherUserId)
+            .Select(bu => bu.Username)
+            .FirstAsync();
+
+        var chatId = await _db.Exchanges
+            .Where(e => e.MatchId == match.Id)
+            .Select(e => e.ChatId)
+            .FirstAsync();
+
+        return new MatchCreatedDto
+        {
+            MatchId = match.Id,
+            ChatId = chatId,
+            OtherUserId = otherUserId,
+            OtherUsername = otherUsername
+        };
     }
 
     /// <summary>
