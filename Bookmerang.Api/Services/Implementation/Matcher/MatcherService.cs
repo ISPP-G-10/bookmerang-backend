@@ -15,7 +15,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     private readonly MatcherSettings _settings = settings.Value;
 
     public async Task<List<FeedBookDto>> GetFeedAsync(int userId, int page, int pageSize)
-    {   
+    {
         // 1. Obtenemos las preferencias del usuario
         var prefs = await GetUserPreferencesAsync(userId);
 
@@ -33,7 +33,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
         // Te podrías traer skip + pageSize/2 para cada uno, pero mejor traer más para asegurar que hay suficientes por página
         var fetchCount = skip + pageSize;
 
-        // 6. Nos traemos el pool p1 
+        // 6. Nos traemos el pool p1
         var p1Books = await GetPriorityBooks(userId, prefs, interestedUserIds)
             .Take(fetchCount)
             .ToListAsync();
@@ -52,10 +52,15 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
 
     public async Task<SwipeResultDto> ProcessSwipeAsync(int userId, int bookId, SwipeDirection direction)
     {
-        // 1. Validar que el libro existe y sigue PUBLISHED
-        var book = await ValidateBookIsPublishedAsync(bookId);
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+
+        // 1. Validar que el libro existe, sigue PUBLISHED y no es propio
+        var book = await ValidateBookForSwipeAsync(bookId, userId);
         if (book == null)
+        {
+            await transaction.RollbackAsync();
             return new SwipeResultDto { Outcome = SwipeOutcome.BookUnavailable };
+        }
 
         // 2. Registrar el swipe (SwiperId+BookId ya previene duplicados)
         _db.Swipes.Add(new Swipe
@@ -65,20 +70,30 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
             Direction = direction,
             CreatedAt = DateTime.UtcNow
         });
-        await _db.SaveChangesAsync();
 
-        // 3. Si es LEFT, no hay más que hacer
+        // 3. Si es LEFT, guardamos el swipe y terminamos
         if (direction == SwipeDirection.LEFT)
+        {
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
             return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
+        }
 
         // 4. Si es RIGHT, verificar match bilateral:
         //    ¿El owner del libro ya hizo swipe RIGHT a algún libro MÍO (en los últimos 30 días)?
         var mutualSwipe = await FindMutualSwipeAsync(userId, book.OwnerId);
         if (mutualSwipe == null)
+        {
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
             return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
+        }
 
-        // 5. Match bilateral detectado → crear Match + Chat + Exchange atómicamente
-        var matchResult = await CreateMatchAtomicAsync(userId, book, mutualSwipe);
+        // 5. Match bilateral detectado → crear Match + Chat + Exchange dentro de la misma transacción
+        var matchResult = await CreateMatchAsync(userId, book, mutualSwipe);
+        await _db.SaveChangesAsync();
+        await transaction.CommitAsync();
+
         return new SwipeResultDto
         {
             Outcome = SwipeOutcome.MatchCreated,
@@ -87,55 +102,51 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     }
 
     /// <summary>
-    /// Crea Match + Chat + Exchange dentro de una transacción con advisory lock
-    /// para prevenir duplicados por concurrencia entre el par de usuarios.
+    /// Crea Match + Chat + Exchange con advisory lock para prevenir duplicados
+    /// por concurrencia entre el par de usuarios.
     /// El advisory lock se aplica sobre (min_user, max_user) para que ambos
-    /// usuarios adquieran el mismo lock independientemente de quién swipea primero. 
-    /// Si no pones min y max, se intercambiaría la clave y sería un lock distinto para cada uno
+    /// usuarios adquieran el mismo lock independientemente de quién swipea primero.
+    /// Si no pones min y max, se intercambiaría la clave y sería un lock distinto para cada uno.
+    /// OJO: Se invoca dentro de la transacción ya abierta por ProcessSwipeAsync.
     /// </summary>
-    private async Task<MatchCreatedDto> CreateMatchAtomicAsync(
+    private async Task<MatchCreatedDto> CreateMatchAsync(
         int userId, Book swipedBook, Swipe mutualSwipe)
     {
         var otherUserId = swipedBook.OwnerId;
         var lockKey1 = Math.Min(userId, otherUserId);
         var lockKey2 = Math.Max(userId, otherUserId);
 
-        // Creamos la transacción
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-
         // Advisory lock sobre el par de usuarios para evitar match duplicado
         await _db.Database.ExecuteSqlRawAsync(
             "SELECT pg_advisory_xact_lock({0}, {1})", lockKey1, lockKey2);
 
         // Verificar que no exista ya un match entre estos usuarios
-        var existingMatch = await _db.Matches.AnyAsync(m =>
+        var existingMatch = await _db.Matches.FirstOrDefaultAsync(m =>
             m.User1Id == lockKey1 && m.User2Id == lockKey2);
 
         // Si existe simplemente lo devolvemos
-        if (existingMatch)
-        {
-            await transaction.CommitAsync();
-            return await BuildMatchCreatedDto(
-                await _db.Matches.FirstAsync(m =>
-                    m.User1Id == lockKey1 && m.User2Id == lockKey2),
-                userId);
-        }
+        if (existingMatch != null)
+            return await BuildMatchCreatedDto(existingMatch, userId);
 
-        // Si no existe creamos match + chat + exchange
+        // Book1Id corresponde a User1Id, Book2Id corresponde a User2Id
+        var user1Book = lockKey1 == userId ? mutualSwipe.BookId : swipedBook.Id;
+        var user2Book = lockKey1 == userId ? swipedBook.Id : mutualSwipe.BookId;
+
         var now = DateTime.UtcNow;
 
-        var match = CreateMatch(lockKey1, lockKey2, mutualSwipe.BookId, swipedBook.Id, now);
+        var match = CreateMatch(lockKey1, lockKey2, user1Book, user2Book, now);
         await _db.SaveChangesAsync();
 
-        var chat = CreateChat(userId, otherUserId, now);
+        // Persistimos el Chat primero para obtener su ID real
+        // antes de crear los participantes que lo referencian
+        var chat = CreateChat(now);
         await _db.SaveChangesAsync();
 
+        CreateChatParticipants(chat.Id, userId, otherUserId, now);
         CreateExchange(chat.Id, match.Id, now);
-
         await _db.SaveChangesAsync();
-        await transaction.CommitAsync();
 
-        return await BuildMatchCreatedDto(match, userId);
+        return await BuildMatchCreatedDto(match, chat.Id, otherUserId);
     }
 
     private Match CreateMatch(int user1Id, int user2Id, int book1Id, int book2Id, DateTime now)
@@ -154,7 +165,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     }
 
     // TODO: Reemplazar por el método de creación del módulo de chats cuando esté implementado
-    private Chat CreateChat(int userId, int otherUserId, DateTime now)
+    private Chat CreateChat(DateTime now)
     {
         var chat = new Chat
         {
@@ -162,21 +173,24 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
             CreatedAt = now
         };
         _db.Chats.Add(chat);
+        return chat;
+    }
 
+    // TODO: Reemplazar por el método de creación del módulo de chats cuando esté implementado
+    private void CreateChatParticipants(int chatId, int userId, int otherUserId, DateTime now)
+    {
         _db.ChatParticipants.Add(new ChatParticipant
         {
-            ChatId = chat.Id,
+            ChatId = chatId,
             UserId = userId,
             JoinedAt = now
         });
         _db.ChatParticipants.Add(new ChatParticipant
         {
-            ChatId = chat.Id,
+            ChatId = chatId,
             UserId = otherUserId,
             JoinedAt = now
         });
-
-        return chat;
     }
 
     // TODO: Reemplazar por el método de creación del módulo de exchanges cuando esté implementado
@@ -193,7 +207,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     }
 
     /// <summary>
-    /// Construye el DTO de respuesta del match creado.
+    /// Construye el DTO de respuesta para un match existente
     /// </summary>
     private async Task<MatchCreatedDto> BuildMatchCreatedDto(Match match, int userId)
     {
@@ -206,6 +220,27 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
         var chatId = await _db.Exchanges
             .Where(e => e.MatchId == match.Id)
             .Select(e => e.ChatId)
+            .FirstAsync();
+
+        return new MatchCreatedDto
+        {
+            MatchId = match.Id,
+            ChatId = chatId,
+            OtherUserId = otherUserId,
+            OtherUsername = otherUsername
+        };
+    }
+
+    /// <summary>
+    /// Construye el DTO de respuesta del match (para match recién creado en la misma transacción,
+    /// donde ya conocemos chatId y otherUserId).
+    /// </summary>
+    private async Task<MatchCreatedDto> BuildMatchCreatedDto(
+        Match match, int chatId, int otherUserId)
+    {
+        var otherUsername = await _db.BaseUsers
+            .Where(bu => bu.Id == otherUserId)
+            .Select(bu => bu.Username)
             .FirstAsync();
 
         return new MatchCreatedDto
@@ -239,14 +274,18 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     }
 
     /// <summary>
-    /// Valida que el libro existe y tiene status PUBLISHED.
+    /// Valida que el libro existe, tiene status PUBLISHED y no es del propio usuario.
     /// Devuelve el libro si es válido, null si no está PUBLISHED.
     /// Lanza KeyNotFoundException si el libro no existe.
+    /// Lanza InvalidOperationException si el usuario intenta swipear su propio libro.
     /// </summary>
-    private async Task<Book?> ValidateBookIsPublishedAsync(int bookId)
+    private async Task<Book?> ValidateBookForSwipeAsync(int bookId, int userId)
     {
         var book = await _db.Books.FirstOrDefaultAsync(b => b.Id == bookId)
             ?? throw new KeyNotFoundException($"No se encontró el libro con ID {bookId}.");
+
+        if (book.OwnerId == userId)
+            throw new InvalidOperationException("No puedes hacer swipe a tu propio libro.");
 
         return book.Status == BookStatus.PUBLISHED ? book : null;
     }
@@ -371,6 +410,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
         var w = _settings.Weights;
         var decayDays = (double)_settings.Feed.RecencyDecayDays;
         var now = DateTime.UtcNow;
+        var radioMeters = Math.Max(prefs.RadioKm * 1000.0, 1.0); // evita división por cero
 
         var preferredGenreIds = _db.UserPreferenceGenres
             .Where(upg => upg.PreferencesId == prefs.Id)
@@ -403,7 +443,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
                 x.OwnerUsername,
                 Score = w.GenreMatch * x.GenreMatch
                       + w.ExtensionMatch * x.ExtensionMatch
-                      + w.DistanceScore * (1.0 - x.Distance / (prefs.RadioKm * 1000.0))
+                      + w.DistanceScore * (1.0 - x.Distance / radioMeters)
                       + w.RecencyBonus * (1.0 / (1.0 + x.DaysSincePublished / decayDays))
             })
             .OrderByDescending(x => x.Score)

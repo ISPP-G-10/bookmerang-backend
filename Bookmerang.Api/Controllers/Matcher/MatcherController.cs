@@ -21,6 +21,10 @@ public class MatcherController(IMatcherService matcherService) : ControllerBase
         [FromQuery] int page = 0,
         [FromQuery] int size = 20)
     {
+        // Validar parámetros de paginación
+        if (page < 0 || size <= 0)
+            return BadRequest(new { message = "Los parámetros page y size deben ser >= 0 y > 0 respectivamente." });
+
         try
         {
             var feed = await _matcherService.GetFeedAsync(userId, page, size);
@@ -49,10 +53,15 @@ public class MatcherController(IMatcherService matcherService) : ControllerBase
                 userId, request.BookId, request.Direction);
             return Ok(result);
         }
-        // ValidateBookIsPublishedAsync: libro no encontrado
+        // ValidateBookForSwipeAsync: libro no encontrado
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        // ValidateBookForSwipeAsync: auto-swipe (usuario swipea su propio libro)
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         // SaveChangesAsync: unique index (SwiperId, BookId) violado → swipe duplicado
         catch (DbUpdateException)
