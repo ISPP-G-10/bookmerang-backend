@@ -69,7 +69,7 @@ public class ExchangeService(AppDbContext db): IExchangeService
     
     public async Task<bool> DeleteExchange(string supabaseId)
     {
-        var exchange = await _db.Exchanges.FindAsync(supabaseId) ?? throw new Exception("Exchange not found");
+        var exchange = await _db.Exchanges.FindAsync(supabaseId) ?? throw new Exception($"Exchange con id {supabaseId} no encontrado");
         
         _db.Exchanges.Remove(exchange);
         await _db.SaveChangesAsync();
