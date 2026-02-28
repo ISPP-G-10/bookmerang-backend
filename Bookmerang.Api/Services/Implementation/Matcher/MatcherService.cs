@@ -5,7 +5,6 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Matcher;
 using Microsoft.Extensions.Options;
-using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Services.Implementation.Matcher;
 
@@ -43,72 +42,96 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     }
 
     /// <summary>
-    /// P1 — Libros de usuarios que ya mostraron interés en los libros del usuario actual ( obtenidos con GetInterestedUserIds).
+    /// P1 — Libros de usuarios que ya mostraron interés en los libros del usuario actual.
     /// Filtrados por: status PUBLISHED, dentro del radio, no swipeados ya, no propios.
+    /// Solo incluye libros cuyos owners están en interestedUserIds.
     /// Ordenados por score descendente.
     /// </summary>
     private IQueryable<FeedBookDto> GetPriorityBooks(
         int userId, UserPreference prefs, IQueryable<int> interestedUserIds)
     {
-        var w = _settings.Weights; // cargamos pesos configurados
+        var candidates = GetBaseCandidates(userId, prefs)
+            .Where(b => interestedUserIds.Contains(b.OwnerId));
+
+        return ProjectWithScore(candidates, prefs, isPriority: true);
+    }
+
+    /// <summary>
+    /// P2 — Libros de descubrimiento: libros dentro del radio del usuario,
+    /// excluyendo los de P1 (interested_users) y los ya swipeados.
+    /// Ordenados por score descendente.
+    /// </summary>
+    private IQueryable<FeedBookDto> GetDiscoveryBooks(
+        int userId, UserPreference prefs, IQueryable<int> interestedUserIds)
+    {
+        var candidates = GetBaseCandidates(userId, prefs)
+            .Where(b => !interestedUserIds.Contains(b.OwnerId));
+
+        return ProjectWithScore(candidates, prefs, isPriority: false);
+    }
+
+    /// <summary>
+    /// Filtros base compartidos por P1 y P2: status PUBLISHED, no propios,
+    /// no swipeados ya y dentro del radio del usuario.
+    /// </summary>
+    private IQueryable<Book> GetBaseCandidates(int userId, UserPreference prefs)
+    {
+        return _db.Books
+            .Where(b => b.Status == BookStatus.PUBLISHED)
+            .Where(b => b.OwnerId != userId)
+            .Where(b => !_db.Swipes.Any(s => s.SwiperId == userId && s.BookId == b.Id))
+            .Where(b => _db.BaseUsers
+                .Any(bu => bu.Id == b.OwnerId
+                    && bu.Location.IsWithinDistance(prefs.Location, prefs.RadioKm * 1000.0)));
+    }
+
+    /// <summary>
+    /// Calcula el score de cada libro candidato y proyecta a FeedBookDto.
+    /// Componentes del score: genre_match, extension_match, distance_score, recency_bonus.
+    /// </summary>
+    private IQueryable<FeedBookDto> ProjectWithScore(
+        IQueryable<Book> candidates, UserPreference prefs, bool isPriority)
+    {
+        var w = _settings.Weights;
         var decayDays = (double)_settings.Feed.RecencyDecayDays;
         var now = DateTime.UtcNow;
 
-        // IDs de géneros preferidos del usuario
         var preferredGenreIds = _db.UserPreferenceGenres
             .Where(upg => upg.PreferencesId == prefs.Id)
             .Select(upg => upg.GenreId);
 
-        return _db.Books
-            // Filtros base
-            .Where(b => b.Status == BookStatus.PUBLISHED) // solo libros disponibles
-            .Where(b => b.OwnerId != userId)
-            // Solo libros de usuarios interesados en mí
-            .Where(b => interestedUserIds.Contains(b.OwnerId))
-            // Excluir libros que ya he swipeado
-            .Where(b => !_db.Swipes.Any(s => s.SwiperId == userId && s.BookId == b.Id))
-            // Dentro del radio de mi radio (distancia en metros)
-            .Where(b => _db.BaseUsers
-                .Any(bu => bu.Id == b.OwnerId
-                    && bu.Location.IsWithinDistance(prefs.Location, prefs.RadioKm * 1000.0)))
-            // Proyección con score (calculamos las componentes del score para cada libro candidato)
+        return candidates
             .Select(b => new
             {
                 Book = b,
-                // Nombre del dueño del libro
-                OwnerUsername = _db.BaseUsers 
+                OwnerUsername = _db.BaseUsers
                     .Where(bu => bu.Id == b.OwnerId)
                     .Select(bu => bu.Username)
                     .FirstOrDefault()!,
-                // 1.0 si algún género del libro coincide con los de mis preferencias
                 GenreMatch = b.BookGenres.Any(bg => preferredGenreIds.Contains(bg.GenreId))
                     ? 1.0 : 0.0,
-                // 1.0 si las páginas del libro encajan con mis preferencias de extensión
                 ExtensionMatch = b.NumPaginas != null
                     && ((prefs.Extension == BooksExtension.SHORT && b.NumPaginas <= 200)
                      || (prefs.Extension == BooksExtension.MEDIUM && b.NumPaginas > 200 && b.NumPaginas <= 400)
                      || (prefs.Extension == BooksExtension.LONG && b.NumPaginas > 400))
                     ? 1.0 : 0.0,
-                // Distancia en metros entre el owner del libro y yo
                 Distance = _db.BaseUsers
                     .Where(bu => bu.Id == b.OwnerId)
                     .Select(bu => bu.Location.Distance(prefs.Location))
                     .FirstOrDefault(),
-                // Días desde que se publicó el libro
                 DaysSincePublished = (now - b.CreatedAt!.Value).TotalDays
             })
-            // Cálculo del score final
             .Select(x => new
             {
                 x.Book,
                 x.OwnerUsername,
-                Score = w.GenreMatch * x.GenreMatch // 0.4 x (0 o 1)
-                      + w.ExtensionMatch * x.ExtensionMatch // 0.10 x (0 o 1)
-                      + w.DistanceScore * (1.0 - x.Distance / (prefs.RadioKm * 1000.0)) // 0.35 * (0.0 a 1.0) -> cuánto más cerca, mayor puntuación
-                      + w.RecencyBonus * (1.0 / (1.0 + x.DaysSincePublished / decayDays)) // 0.15 * (0.0 a 1.0) -> cuánto más nueva la publicación, más puntuación, para evitar que libros nuevos se acumulen
+                Score = w.GenreMatch * x.GenreMatch
+                      + w.ExtensionMatch * x.ExtensionMatch
+                      + w.DistanceScore * (1.0 - x.Distance / (prefs.RadioKm * 1000.0))
+                      + w.RecencyBonus * (1.0 / (1.0 + x.DaysSincePublished / decayDays))
             })
-            .OrderByDescending(x => x.Score) // ordenamos por scroe
-            .Select(x => new FeedBookDto // devolvemos la info de cada libro candidato con su puntuación y flag de P1
+            .OrderByDescending(x => x.Score)
+            .Select(x => new FeedBookDto
             {
                 Id = x.Book.Id,
                 OwnerId = x.Book.OwnerId,
@@ -123,7 +146,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
                 Genres = x.Book.BookGenres.Select(bg => bg.Genre.Name).ToList(),
                 Photos = x.Book.Photos.OrderBy(p => p.Orden).Select(p => p.Url).ToList(),
                 Score = x.Score,
-                IsPriority = true
+                IsPriority = isPriority
             });
     }
 }
