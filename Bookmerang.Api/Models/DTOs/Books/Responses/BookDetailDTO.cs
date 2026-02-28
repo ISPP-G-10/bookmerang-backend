@@ -1,6 +1,6 @@
 using Bookmerang.Api.Models.Books.Enums;
 
-namespace Bookmerang.Api.DTOs.Books.Responses;
+namespace Bookmerang.Api.Models.DTOs.Books.Responses;
 
 /// <summary>
 /// Vista completa de un libro para la pantalla de detalle.
@@ -8,7 +8,7 @@ namespace Bookmerang.Api.DTOs.Books.Responses;
 /// Solo se usa cuando el usuario abre un libro específico,
 /// nunca en listas (por rendimiento).
 /// </summary>
-public class BookDetailDto
+public class BookDetailDTO
 {
     public int Id { get; set; }
     public Guid OwnerId { get; set; }
@@ -25,7 +25,7 @@ public class BookDetailDto
     public DateTime? UpdatedAt { get; set; }
 
     // Colecciones completas — solo en detalle, nunca en listas
-    public List<BookPhotoDto> Photos { get; set; } = [];
+    public List<BookPhotoDTO> Photos { get; set; } = [];
 
     // Devolvemos nombres, no IDs — el frontend no debería necesitar
     // hacer otra llamada para resolver "genre_id=3" -> "Fantasía"

@@ -4,7 +4,7 @@ namespace Bookmerang.Api.Models.DTOs.Books.Requests;
 /// Representa una foto individual
 /// El frontend ya ha subido la imagen al storage y nos manda solo la URL.
 /// </summary>
-public class PhotoUpsertDto
+public class PhotoUpsertDTO
 {
     /// URL pública de la imagen
     /// No puede ser vacía — si el frontend manda una foto, debe tener URL.

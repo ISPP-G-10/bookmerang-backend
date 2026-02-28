@@ -1,4 +1,5 @@
 using Bookmerang.Api.Exceptions;
+using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Books;
 using Bookmerang.Api.Models.Books.Enums;
 using Bookmerang.Api.Models.DTOs.Books.Queries;
@@ -16,7 +17,7 @@ public class BookService(
 ) : IBookService
 {
     // CREAR BORRADOR
-    public async Task<BookDetailDto> CreateDraftAsync(
+    public async Task<BookDetailDTO> CreateDraftAsync(
         Guid ownerId,
         CreateBookDraftRequest request,
         CancellationToken ct = default)
@@ -48,11 +49,11 @@ public class BookService(
             await bookRepo.ReplaceLanguagesAsync(created.Id, request.LanguageIds, ct);
 
         var fullBook = await GetBookOrThrowAsync(created.Id, ct);
-        return MapToDetailDto(fullBook);
+        return MapToDetailDTO(fullBook);
     }
 
     // GESTIÓN DE FOTOS
-    public async Task<BookDetailDto> UpsertPhotosAsync(
+    public async Task<BookDetailDTO> UpsertPhotosAsync(
         int bookId,
         Guid ownerId,
         UpsertBookPhotosRequest request,
@@ -81,11 +82,11 @@ public class BookService(
         await bookRepo.ReplacePhotosAsync(bookId, newPhotos, ct);
 
         var updatedBook = await GetBookOrThrowAsync(bookId, ct);
-        return MapToDetailDto(updatedBook);
+        return MapToDetailDTO(updatedBook);
     }
 
     // ACTUALIZAR DATOS (PASO 2)
-    public async Task<BookDetailDto> UpdateDraftDataAsync(
+    public async Task<BookDetailDTO> UpdateDraftDataAsync(
         int bookId,
         Guid ownerId,
         UpdateBookDataRequest request,
@@ -109,11 +110,11 @@ public class BookService(
         await bookRepo.ReplaceLanguagesAsync(bookId, request.LanguageIds, ct);
 
         var updatedBook = await GetBookOrThrowAsync(bookId, ct);
-        return MapToDetailDto(updatedBook);
+        return MapToDetailDTO(updatedBook);
     }
 
     // ACTUALIZAR DETALLES (PASO 3)
-    public async Task<BookDetailDto> UpdateDraftDetailsAsync(
+    public async Task<BookDetailDTO> UpdateDraftDetailsAsync(
         int bookId,
         Guid ownerId,
         UpdateBookDetailsRequest request,
@@ -128,11 +129,11 @@ public class BookService(
         await bookRepo.UpdateAsync(book, ct);
 
         var updatedBook = await GetBookOrThrowAsync(bookId, ct);
-        return MapToDetailDto(updatedBook);
+        return MapToDetailDTO(updatedBook);
     }
 
     // PUBLICAR
-    public async Task<BookDetailDto> PublishAsync(
+    public async Task<BookDetailDTO> PublishAsync(
         int bookId,
         Guid ownerId,
         CancellationToken ct = default)
@@ -166,20 +167,20 @@ public class BookService(
         await matcher.OnBookPublishedAsync(bookId, ownerId, ct);
 
         var publishedBook = await GetBookOrThrowAsync(bookId, ct);
-        return MapToDetailDto(publishedBook);
+        return MapToDetailDTO(publishedBook);
     }
 
     // OBTENER MI BIBLIOTECA
-    public async Task<PagedResult<BookListItemDto>> GetMyLibraryAsync(
+    public async Task<PagedResult<BookListItemDTO>> GetMyLibraryAsync(
         Guid ownerId,
         LibraryQuery query,
         CancellationToken ct = default)
     {
         var (items, total) = await bookRepo.GetByOwnerPagedAsync(ownerId, query, ct);
 
-        return new PagedResult<BookListItemDto>
+        return new PagedResult<BookListItemDTO>
         {
-            Items = items.Select(MapToListItemDto).ToList(),
+            Items = items.Select(MapToListItemDTO).ToList(),
             Page = query.Page,
             PageSize = query.PageSize,
             Total = total
@@ -187,16 +188,16 @@ public class BookService(
     }
 
     // OBTENER MIS BORRADORES
-    public async Task<PagedResult<BookListItemDto>> GetMyDraftsAsync(
+    public async Task<PagedResult<BookListItemDTO>> GetMyDraftsAsync(
         Guid ownerId,
         DraftsQuery query,
         CancellationToken ct = default)
     {
         var (items, total) = await bookRepo.GetDraftsPagedAsync(ownerId, query, ct);
 
-        return new PagedResult<BookListItemDto>
+        return new PagedResult<BookListItemDTO>
         {
-            Items = items.Select(MapToListItemDto).ToList(),
+            Items = items.Select(MapToListItemDTO).ToList(),
             Page = query.Page,
             PageSize = query.PageSize,
             Total = total
@@ -204,14 +205,14 @@ public class BookService(
     }
 
     // OBTENER DETALLES DE UN LIBRO
-    public async Task<BookDetailDto> GetByIdAsync(
+    public async Task<BookDetailDTO> GetByIdAsync(
         int bookId,
         Guid ownerId,
         CancellationToken ct = default)
     {
         var book = await GetBookOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
-        return MapToDetailDto(book);
+        return MapToDetailDTO(book);
     }
 
     // SOFT DELETE
@@ -271,8 +272,8 @@ public class BookService(
     // MAPPERS
     // =====================================================================
 
-    /// Convierte Book a BookDetailDto (vista completa).
-    private static BookDetailDto MapToDetailDto(Book book) => new()
+    /// Convierte Book a BookDetailDTO (vista completa).
+    private static BookDetailDTO MapToDetailDTO(Book book) => new()
     {
         Id = book.Id,
         OwnerId = book.OwnerId,
@@ -289,7 +290,7 @@ public class BookService(
         UpdatedAt = book.UpdatedAt,
         Photos = book.Photos
             .OrderBy(p => p.Orden)
-            .Select(p => new BookPhotoDto
+            .Select(p => new BookPhotoDTO
             {
                 Url = p.Url,
                 Order = p.Orden
@@ -305,8 +306,8 @@ public class BookService(
             .ToList()
     };
 
-    /// Convierte Book a BookListItemDto (vista resumida para listas).
-    private static BookListItemDto MapToListItemDto(Book book) => new()
+    /// Convierte Book a BookListItemDTO (vista resumida para listas).
+    private static BookListItemDTO MapToListItemDTO(Book book) => new()
     {
         Id = book.Id,
         Titulo = book.Titulo,

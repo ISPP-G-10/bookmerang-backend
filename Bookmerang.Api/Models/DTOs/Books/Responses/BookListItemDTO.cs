@@ -7,7 +7,7 @@ namespace Bookmerang.Api.Models.DTOs.Books.Responses;
 /// Contiene SOLO los campos necesarios para renderizar una tarjeta.
 /// DTO ligero, para no sobrecargar con tantos datos.
 /// </summary>
-public class BookListItemDto
+public class BookListItemDTO
 {
     public int Id { get; set; }
     public string? Titulo { get; set; }

@@ -9,5 +9,5 @@ namespace Bookmerang.Api.Models.DTOs.Books.Requests;
 /// </summary>
 public class UpsertBookPhotosRequest
 {
-    public List<PhotoUpsertDto> Photos { get; set; } = [];
+    public List<PhotoUpsertDTO> Photos { get; set; } = [];
 }

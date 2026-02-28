@@ -87,6 +87,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
 builder.Services.AddScoped<IBookService, BookService>();
+builder.Services.AddScoped<IGenreRepository, GenreRepository>();
+builder.Services.AddScoped<ILanguageRepository, LanguageRepository>(); 
+
+// Temporal: hasta que termine marcher
+builder.Services.AddScoped<IMatcherNotifier, MatcherNotifier>(); // ← nuevo
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers();

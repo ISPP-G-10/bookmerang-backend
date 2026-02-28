@@ -7,52 +7,52 @@ namespace Bookmerang.Api.Services.Interfaces.Books;
 public interface IBookService
 {
     /// Crea un borrador nuevo con status DRAFT.
-    Task<BookDetailDto> CreateDraftAsync(
+    Task<BookDetailDTO> CreateDraftAsync(
         Guid ownerId,
         CreateBookDraftRequest request,
         CancellationToken ct = default);
 
     /// Reemplaza todas las fotos del libro.
-    Task<BookDetailDto> UpsertPhotosAsync(
+    Task<BookDetailDTO> UpsertPhotosAsync(
         int bookId,
         Guid ownerId,
         UpsertBookPhotosRequest request,
         CancellationToken ct = default);
 
     /// Actualiza los datos bibliográficos del libro.
-    Task<BookDetailDto> UpdateDraftDataAsync(
+    Task<BookDetailDTO> UpdateDraftDataAsync(
         int bookId,
         Guid ownerId,
         UpdateBookDataRequest request,
         CancellationToken ct = default);
 
     /// Actualiza los detalles del libro.
-    Task<BookDetailDto> UpdateDraftDetailsAsync(
+    Task<BookDetailDTO> UpdateDraftDetailsAsync(
         int bookId,
         Guid ownerId,
         UpdateBookDetailsRequest request,
         CancellationToken ct = default);
 
     /// Publica el libro cambiando status a PUBLISHED.
-    Task<BookDetailDto> PublishAsync(
+    Task<BookDetailDTO> PublishAsync(
         int bookId,
         Guid ownerId,
         CancellationToken ct = default);
 
     /// Obtiene los libros del usuario paginados con filtros.
-    Task<PagedResult<BookListItemDto>> GetMyLibraryAsync(
+    Task<PagedResult<BookListItemDTO>> GetMyLibraryAsync(
         Guid ownerId,
         LibraryQuery query,
         CancellationToken ct = default);
 
     /// Obtiene los borradores del usuario paginados.
-    Task<PagedResult<BookListItemDto>> GetMyDraftsAsync(
+    Task<PagedResult<BookListItemDTO>> GetMyDraftsAsync(
         Guid ownerId,
         DraftsQuery query,
         CancellationToken ct = default);
 
     /// Obtiene el detalle completo de un libro.
-    Task<BookDetailDto> GetByIdAsync(
+    Task<BookDetailDTO> GetByIdAsync(
         int bookId,
         Guid ownerId,
         CancellationToken ct = default);

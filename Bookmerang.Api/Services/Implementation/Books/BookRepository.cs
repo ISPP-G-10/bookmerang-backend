@@ -1,4 +1,5 @@
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Books;
 using Bookmerang.Api.Models.Books.Enums;
 using Bookmerang.Api.Models.DTOs.Books.Queries;
