@@ -36,7 +36,7 @@ public class Exchange {
     //status exchange_status [not null]
     [Required]
     [Column("exchange_status")]
-    public ExchangeStatus status { get; set; } = ExchangeStatus.NEGOTIATING;
+    public ExchangeStatus Status { get; set; } = ExchangeStatus.NEGOTIATING;
 
     // created_at timestamp [not null]
     [Required]

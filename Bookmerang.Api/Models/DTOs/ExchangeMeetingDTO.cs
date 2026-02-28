@@ -3,17 +3,17 @@ using NetTopologySuite.Geometries;
 namespace Bookmerang.Api.Models.DTOs;
 
 public record ExchangeMeetingDto(
-    int ExchangeMeetingId,
-    string SupabaseId,
-    int ExchangeId,
-    ExchangeMode ExchangeMode,
+    int? ExchangeMeetingId,
+    string? SupabaseId,
+    int? ExchangeId,
+    ExchangeMode? ExchangeMode,
     int? BookspotId,
-    Point CustomLocation,
+    Point? CustomLocation,
     DateTime? ScheduledAt,
-    Guid ProposerId,
-    ExchangeMeetingStatus MeetingStatus,
-    bool MarkAsCompletedByUser1,
-    bool MarkAsCompletedByUser2
+    Guid? ProposerId,
+    ExchangeMeetingStatus? MeetingStatus,
+    bool? MarkAsCompletedByUser1,
+    bool? MarkAsCompletedByUser2
 );
 
 public static class ExchangeMeetingExtensions

@@ -1,13 +1,13 @@
 namespace Bookmerang.Api.Models.DTOs;
 
 public record ExchangeDto(
-    int ExchangeId,
-    string SupabaseId,
-    int ChatId,
-    int MatchId,
-    ExchangeStatus Status,
-    DateTime CreatedAt,
-    DateTime UpdatedAt
+    int? ExchangeId,
+    string? SupabaseId,
+    int? ChatId,
+    int? MatchId,
+    ExchangeStatus? Status,
+    DateTime? CreatedAt,
+    DateTime? UpdatedAt
 );
 
 public static class ExchangeExtensions
@@ -17,7 +17,7 @@ public static class ExchangeExtensions
         exchange.SupabaseId,
         exchange.ChatId,
         exchange.MatchId,
-        exchange.status,
+        exchange.Status,
         exchange.CreatedAt,
         exchange.UpdatedAt
     );
