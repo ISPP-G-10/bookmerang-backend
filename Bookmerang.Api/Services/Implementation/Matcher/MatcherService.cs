@@ -4,6 +4,7 @@ using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Matcher;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Bookmerang.Api.Services.Implementation.Matcher;
@@ -13,14 +14,127 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     private readonly AppDbContext _db = db;
     private readonly MatcherSettings _settings = settings.Value;
 
-    public Task<List<FeedBookDto>> GetFeedAsync(int userId, int page, int pageSize)
-    {
-        throw new NotImplementedException();
+    public async Task<List<FeedBookDto>> GetFeedAsync(int userId, int page, int pageSize)
+    {   
+        // 1. Obtenemos las preferencias del usuario
+        var prefs = await GetUserPreferencesAsync(userId);
+
+        //2. Obtenemos los usuarios que han dado swipe a uno de nuestros libros en un plazo de 30 días
+        var interestedUserIds = GetInterestedUserIds(userId);
+
+        // 3. Obtenemos el ratio de intercalado de libros de la pool 1 (P1) y la pool 2 (P2)
+        var ratio = ValidatePriorityToDiscoveryRatio();
+
+        // 4. Calculamos el offset, es decir, cuántos elementos hay que saltarse para devolver los elementos correspondientes a una página concreta
+        var skip = page * pageSize; // Si page=1 y pageSize=8, tenemos que saltar los 8 primeros para devolver los libros de page=1
+
+        // 5. Configuramos la cantidad de libros a traer de cada pool, asegurando que hay suficientes de cada pool para cubrir el caso donde uno esté vacío
+        // Nos tenemos que traer los anteriores más la cantidad necesaria de la página, sin los anteriores no tienes como cortar
+        // Te podrías traer skip + pageSize/2 para cada uno, pero mejor traer más para asegurar que hay suficientes por página
+        var fetchCount = skip + pageSize;
+
+        // 6. Nos traemos el pool p1 
+        var p1Books = await GetPriorityBooks(userId, prefs, interestedUserIds)
+            .Take(fetchCount)
+            .ToListAsync();
+
+        // 7. Nos traemos el pool p2
+        var p2Books = await GetDiscoveryBooks(userId, prefs, interestedUserIds)
+            .Take(fetchCount)
+            .ToListAsync();
+
+        // 8. Intercalemos los pool con el ratio configurado
+        var interleaved = InterleaveBooks(p1Books, p2Books, ratio);
+
+        // 9. Devolvemos el resultado cortando la lista
+        return [.. interleaved.Skip(skip).Take(pageSize)];
     }
 
-    public Task<SwipeResultDto> ProcessSwipeAsync(int userId, int bookId, SwipeDirection direction)
+    public async Task<SwipeResultDto> ProcessSwipeAsync(int userId, int bookId, SwipeDirection direction)
     {
-        throw new NotImplementedException();
+        // 1. Validar que el libro existe y sigue PUBLISHED
+        var book = await ValidateBookIsPublishedAsync(bookId);
+        if (book == null)
+            return new SwipeResultDto { Outcome = SwipeOutcome.BookUnavailable };
+
+        // 2. Registrar el swipe (SwiperId+BookId ya previene duplicados)
+        _db.Swipes.Add(new Swipe
+        {
+            SwiperId = userId,
+            BookId = bookId,
+            Direction = direction,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        // 3. Si es LEFT, no hay más que hacer
+        if (direction == SwipeDirection.LEFT)
+            return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
+
+        // 4. Si es RIGHT, verificar match bilateral (S-8/S-9 pendientes)
+        // TODO: Implementar detección de match bilateral y creación de Match + Chat + Exchange
+        return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
+    }
+
+    /// <summary>
+    /// Valida que el libro existe y tiene status PUBLISHED.
+    /// Devuelve el libro si es válido, null si no está PUBLISHED.
+    /// Lanza KeyNotFoundException si el libro no existe.
+    /// </summary>
+    private async Task<Book?> ValidateBookIsPublishedAsync(int bookId)
+    {
+        var book = await _db.Books.FirstOrDefaultAsync(b => b.Id == bookId)
+            ?? throw new KeyNotFoundException($"No se encontró el libro con ID {bookId}.");
+
+        return book.Status == BookStatus.PUBLISHED ? book : null;
+    }
+
+    /// <summary>
+    /// Valida que el ratio de intercalado P1:P2 sea mayor que 0.
+    /// Un ratio <= 0 provocaría un bucle infinito en el intercalado.
+    /// </summary>
+    private int ValidatePriorityToDiscoveryRatio()
+    {
+        var ratio = _settings.Feed.PriorityToDiscoveryRatio;
+        return ratio > 0
+            ? ratio
+            : throw new InvalidOperationException(
+                "Matcher:Feed:PriorityToDiscoveryRatio debe ser mayor que 0.");
+    }
+
+    /// <summary>
+    /// Obtiene las preferencias del usuario desde la BD.
+    /// Lanza InvalidOperationException si no están configuradas.
+    /// </summary>
+    private async Task<UserPreference> GetUserPreferencesAsync(int userId)
+    {
+        return await _db.UserPreferences
+            .FirstOrDefaultAsync(up => up.UserId == userId)
+            ?? throw new InvalidOperationException(
+                "El usuario debe configurar sus preferencias antes de usar el feed.");
+    }
+
+    /// <summary>
+    /// Intercala libros P1 y P2 con el ratio configurado.
+    /// Con ratio=3: [P1, P1, P1, P2, P1, P1, P1, P2, ...].
+    /// Si un pool se agota, se rellena con el otro.
+    /// </summary>
+    private static List<FeedBookDto> InterleaveBooks(
+        List<FeedBookDto> p1, List<FeedBookDto> p2, int ratio)
+    {
+        var result = new List<FeedBookDto>(p1.Count + p2.Count);
+        int i1 = 0, i2 = 0;
+
+        while (i1 < p1.Count || i2 < p2.Count)
+        {
+            for (var r = 0; r < ratio && i1 < p1.Count; r++)
+                result.Add(p1[i1++]);
+
+            if (i2 < p2.Count)
+                result.Add(p2[i2++]);
+        }
+
+        return result;
     }
 
     /// <summary>
