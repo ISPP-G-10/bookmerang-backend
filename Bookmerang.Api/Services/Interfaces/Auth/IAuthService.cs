@@ -1,4 +1,5 @@
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Services.Interfaces.Auth;

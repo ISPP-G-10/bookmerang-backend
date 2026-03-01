@@ -1,4 +1,5 @@
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 using Npgsql.NameTranslation;
 

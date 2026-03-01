@@ -3,7 +3,7 @@ using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Implementation.Auth;
 using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Api.Services.Implementation.Chats;
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Enums;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;

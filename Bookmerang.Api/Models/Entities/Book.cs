@@ -5,7 +5,7 @@ namespace Bookmerang.Api.Models.Entities;
 public class Book
 {
     public int Id { get; set; }
-    public int OwnerId { get; set; }
+    public Guid OwnerId { get; set; }
     public string? Isbn { get; set; }
     public string? Titulo { get; set; }
     public string? Autor { get; set; }

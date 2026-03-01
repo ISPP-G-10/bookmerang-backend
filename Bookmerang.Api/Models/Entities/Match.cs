@@ -5,8 +5,8 @@ namespace Bookmerang.Api.Models.Entities;
 public class Match
 {
     public int Id { get; set; }
-    public int User1Id { get; set; }
-    public int User2Id { get; set; }
+    public Guid User1Id { get; set; }
+    public Guid User2Id { get; set; }
     public int Book1Id { get; set; }
     public int Book2Id { get; set; }
     public required MatchStatus Status { get; set; }

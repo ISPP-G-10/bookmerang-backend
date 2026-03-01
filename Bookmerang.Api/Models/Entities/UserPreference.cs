@@ -6,7 +6,7 @@ namespace Bookmerang.Api.Models.Entities;
 public class UserPreference
 {
     public int Id { get; set; }
-    public int UserId { get; set; }
+    public Guid UserId { get; set; }
     public required Point Location { get; set; }
     public int RadioKm { get; set; }
     public required BooksExtension Extension { get; set; }

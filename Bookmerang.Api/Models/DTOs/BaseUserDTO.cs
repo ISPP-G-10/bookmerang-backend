@@ -1,3 +1,6 @@
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
+
 namespace Bookmerang.Api.Models.DTOs;
 
 public record BaseUserDto(
