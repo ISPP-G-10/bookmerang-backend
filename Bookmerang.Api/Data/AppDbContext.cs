@@ -14,10 +14,30 @@ public class AppDbContext : DbContext
     public DbSet<Chat> Chats => Set<Chat>();
     public DbSet<ChatParticipant> ChatParticipants => Set<ChatParticipant>();
     public DbSet<Message> Messages => Set<Message>();
+    public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
+    public DbSet<UserPreferenceGenre> UserPreferenceGenres => Set<UserPreferenceGenre>();
+    public DbSet<Genre> Genres => Set<Genre>();
+    public DbSet<Book> Books => Set<Book>();
+    public DbSet<BookPhoto> BookPhotos => Set<BookPhoto>();
+    public DbSet<BookGenre> BookGenres => Set<BookGenre>();
+    public DbSet<Language> Languages => Set<Language>();
+    public DbSet<BookLanguage> BookLanguages => Set<BookLanguage>();
+    public DbSet<Swipe> Swipes => Set<Swipe>();
+    public DbSet<Match> Matches => Set<Match>();
+    public DbSet<Exchange> Exchanges => Set<Exchange>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+
+        // ===== ENUMS =====
+        modelBuilder.HasPostgresEnum<BooksExtension>();
+        modelBuilder.HasPostgresEnum<CoverType>();
+        modelBuilder.HasPostgresEnum<BookCondition>();
+        modelBuilder.HasPostgresEnum<BookStatus>();
+        modelBuilder.HasPostgresEnum<SwipeDirection>();
+        modelBuilder.HasPostgresEnum<MatchStatus>();
         modelBuilder.HasPostgresEnum<ChatType>("public", "chat_type", new NpgsqlNullNameTranslator());
+        modelBuilder.HasPostgresEnum<ExchangeStatus>();
 
         modelBuilder.Entity<BaseUser>(entity =>
         {
@@ -49,6 +69,220 @@ public class AppDbContext : DbContext
             entity.HasOne(m => m.Sender)
                 .WithMany()
                 .HasForeignKey(m => m.SenderId);
+        });
+
+        // ===== USERS =====
+        modelBuilder.Entity<User>(e =>
+        {
+            e.HasOne(x => x.UserPreference)
+                .WithOne()
+                .HasForeignKey<UserPreference>(x => x.UserId);
+        });
+
+        // ===== USER_PREFERENCES =====
+        modelBuilder.Entity<UserPreference>(e =>
+        {
+            e.ToTable("user_preferences");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.Location).HasColumnName("location").HasColumnType("geography(Point,4326)");
+            e.Property(x => x.RadioKm).HasColumnName("radio_km");
+            e.Property(x => x.Extension).HasColumnName("extension");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasIndex(x => x.UserId).IsUnique();
+        });
+
+        // ===== USER_PREFERENCES_GENRES =====
+        modelBuilder.Entity<UserPreferenceGenre>(e =>
+        {
+            e.ToTable("user_preferences_genres");
+            e.HasKey(x => new { x.PreferencesId, x.GenreId });
+            e.Property(x => x.PreferencesId).HasColumnName("preferences_id");
+            e.Property(x => x.GenreId).HasColumnName("genre_id");
+
+            e.HasOne(x => x.UserPreference)
+                .WithMany(x => x.UserPreferenceGenres)
+                .HasForeignKey(x => x.PreferencesId);
+
+            e.HasOne(x => x.Genre)
+                .WithMany()
+                .HasForeignKey(x => x.GenreId);
+        });
+
+        // ===== GENRES =====
+        modelBuilder.Entity<Genre>(e =>
+        {
+            e.ToTable("genres");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Name).HasColumnName("name");
+            e.HasIndex(x => x.Name).IsUnique();
+        });
+
+        // ===== BOOKS =====
+        modelBuilder.Entity<Book>(e =>
+        {
+            e.ToTable("books");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.OwnerId).HasColumnName("owner_id");
+            e.Property(x => x.Isbn).HasColumnName("isbn");
+            e.Property(x => x.Titulo).HasColumnName("titulo");
+            e.Property(x => x.Autor).HasColumnName("autor");
+            e.Property(x => x.Editorial).HasColumnName("editorial");
+            e.Property(x => x.NumPaginas).HasColumnName("num_paginas");
+            e.Property(x => x.Cover).HasColumnName("cover");
+            e.Property(x => x.Condition).HasColumnName("condition");
+            e.Property(x => x.Observaciones).HasColumnName("observaciones");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.OwnerId);
+        });
+
+        // ===== BOOK_PHOTOS =====
+        modelBuilder.Entity<BookPhoto>(e =>
+        {
+            e.ToTable("book_photos");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.BookId).HasColumnName("book_id");
+            e.Property(x => x.Url).HasColumnName("url");
+            e.Property(x => x.Orden).HasColumnName("orden").HasDefaultValue(0);
+
+            e.HasOne(x => x.Book)
+                .WithMany(x => x.Photos)
+                .HasForeignKey(x => x.BookId);
+        });
+
+        // ===== BOOKS_GENRES =====
+        modelBuilder.Entity<BookGenre>(e =>
+        {
+            e.ToTable("books_genres");
+            e.HasKey(x => new { x.BookId, x.GenreId });
+            e.Property(x => x.BookId).HasColumnName("book_id");
+            e.Property(x => x.GenreId).HasColumnName("genre_id");
+
+            e.HasOne(x => x.Book)
+                .WithMany(x => x.BookGenres)
+                .HasForeignKey(x => x.BookId);
+
+            e.HasOne(x => x.Genre)
+                .WithMany(x => x.BookGenres)
+                .HasForeignKey(x => x.GenreId);
+        });
+
+        // ===== LANGUAGES =====
+        modelBuilder.Entity<Language>(e =>
+        {
+            e.ToTable("languages");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.LanguageName).HasColumnName("language");
+            e.HasIndex(x => x.LanguageName).IsUnique();
+        });
+
+        // ===== BOOKS_LANGUAGES =====
+        modelBuilder.Entity<BookLanguage>(e =>
+        {
+            e.ToTable("books_languages");
+            e.HasKey(x => new { x.BookId, x.LanguageId });
+            e.Property(x => x.BookId).HasColumnName("book_id");
+            e.Property(x => x.LanguageId).HasColumnName("language_id");
+
+            e.HasOne(x => x.Book)
+                .WithMany(x => x.BookLanguages)
+                .HasForeignKey(x => x.BookId);
+
+            e.HasOne(x => x.Language)
+                .WithMany(x => x.BookLanguages)
+                .HasForeignKey(x => x.LanguageId);
+        });
+
+        // ===== SWIPES =====
+        modelBuilder.Entity<Swipe>(e =>
+        {
+            e.ToTable("swipes");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.SwiperId).HasColumnName("swiper_id");
+            e.Property(x => x.BookId).HasColumnName("book_id");
+            e.Property(x => x.Direction).HasColumnName("direction");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasIndex(x => new { x.SwiperId, x.BookId }).IsUnique();
+
+            e.HasOne(x => x.Book)
+                .WithMany()
+                .HasForeignKey(x => x.BookId);
+
+            e.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.SwiperId);
+        });
+
+        // ===== MATCHES =====
+        modelBuilder.Entity<Match>(e =>
+        {
+            e.ToTable("matches");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.User1Id).HasColumnName("user1_id");
+            e.Property(x => x.User2Id).HasColumnName("user2_id");
+            e.Property(x => x.Book1Id).HasColumnName("book1_id");
+            e.Property(x => x.Book2Id).HasColumnName("book2_id");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne(x => x.Book1)
+                .WithMany()
+                .HasForeignKey(x => x.Book1Id)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(x => x.Book2)
+                .WithMany()
+                .HasForeignKey(x => x.Book2Id)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.User1Id)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.User2Id)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // ===== CHATS =====
+        modelBuilder.Entity<Chat>(e =>
+        {
+            e.ToTable("chats");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Type).HasColumnName("type");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+        });
+
+        // ===== EXCHANGES =====
+        modelBuilder.Entity<Exchange>(e =>
+        {
+            e.ToTable("exchanges");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ChatId).HasColumnName("chat_id");
+            e.Property(x => x.MatchId).HasColumnName("match_id");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasIndex(x => x.ChatId).IsUnique();
+
+            e.HasOne(x => x.Chat)
+                .WithOne()
+                .HasForeignKey<Exchange>(x => x.ChatId);
+
+            e.HasOne(x => x.Match)
+                .WithMany()
+                .HasForeignKey(x => x.MatchId);
         });
     }
 }

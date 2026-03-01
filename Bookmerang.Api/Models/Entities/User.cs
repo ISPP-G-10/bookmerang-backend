@@ -18,7 +18,9 @@ public class User
     [Column("finished_exchanges")]
     public int FinishedExchanges { get; set; } = 0;
 
-    // Navigation property
+    // Navigation properties
     [ForeignKey("Id")]
     public BaseUser BaseUser { get; set; } = null!;
+    
+    public UserPreference? UserPreference { get; set; }
 }
