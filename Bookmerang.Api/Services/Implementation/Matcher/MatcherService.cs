@@ -14,7 +14,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     private readonly AppDbContext _db = db;
     private readonly MatcherSettings _settings = settings.Value;
 
-    public async Task<List<FeedBookDto>> GetFeedAsync(int userId, int page, int pageSize)
+    public async Task<List<FeedBookDto>> GetFeedAsync(Guid userId, int page, int pageSize)
     {
         // 1. Obtenemos las preferencias del usuario
         var prefs = await GetUserPreferencesAsync(userId);
@@ -50,7 +50,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
         return [.. interleaved.Skip(skip).Take(pageSize)];
     }
 
-    public async Task<SwipeResultDto> ProcessSwipeAsync(int userId, int bookId, SwipeDirection direction)
+    public async Task<SwipeResultDto> ProcessSwipeAsync(Guid userId, int bookId, SwipeDirection direction)
     {
         await using var transaction = await _db.Database.BeginTransactionAsync();
 
@@ -104,17 +104,23 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// <summary>
     /// Crea Match + Chat + Exchange con advisory lock para prevenir duplicados
     /// por concurrencia entre el par de usuarios.
-    /// El advisory lock se aplica sobre (min_user, max_user) para que ambos
+    /// El advisory lock se aplica sobre (hash(min_user), hash(max_user)) para que ambos
     /// usuarios adquieran el mismo lock independientemente de quién swipea primero.
-    /// Si no pones min y max, se intercambiaría la clave y sería un lock distinto para cada uno.
     /// OJO: Se invoca dentro de la transacción ya abierta por ProcessSwipeAsync.
     /// </summary>
     private async Task<MatchCreatedDto> CreateMatchAsync(
-        int userId, Book swipedBook, Swipe mutualSwipe)
+        Guid userId, Book swipedBook, Swipe mutualSwipe)
     {
         var otherUserId = swipedBook.OwnerId;
-        var lockKey1 = Math.Min(userId, otherUserId);
-        var lockKey2 = Math.Max(userId, otherUserId);
+
+        // Ordenar los IDs de forma determinista para el advisory lock
+        var (minId, maxId) = userId.CompareTo(otherUserId) < 0
+            ? (userId, otherUserId)
+            : (otherUserId, userId);
+
+        // pg_advisory_xact_lock requiere int — usamos hash de los Guids ordenados
+        var lockKey1 = minId.GetHashCode();
+        var lockKey2 = maxId.GetHashCode();
 
         // Advisory lock sobre el par de usuarios para evitar match duplicado
         await _db.Database.ExecuteSqlRawAsync(
@@ -122,19 +128,19 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
 
         // Verificar que no exista ya un match entre estos usuarios
         var existingMatch = await _db.Matches.FirstOrDefaultAsync(m =>
-            m.User1Id == lockKey1 && m.User2Id == lockKey2);
+            m.User1Id == minId && m.User2Id == maxId);
 
         // Si existe simplemente lo devolvemos
         if (existingMatch != null)
             return await BuildMatchCreatedDto(existingMatch, userId);
 
         // Book1Id corresponde a User1Id, Book2Id corresponde a User2Id
-        var user1Book = lockKey1 == userId ? mutualSwipe.BookId : swipedBook.Id;
-        var user2Book = lockKey1 == userId ? swipedBook.Id : mutualSwipe.BookId;
+        var user1Book = minId == userId ? mutualSwipe.BookId : swipedBook.Id;
+        var user2Book = minId == userId ? swipedBook.Id : mutualSwipe.BookId;
 
         var now = DateTime.UtcNow;
 
-        var match = CreateMatch(lockKey1, lockKey2, user1Book, user2Book, now);
+        var match = CreateMatch(minId, maxId, user1Book, user2Book, now);
         await _db.SaveChangesAsync();
 
         // Persistimos el Chat primero para obtener su ID real
@@ -149,7 +155,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
         return await BuildMatchCreatedDto(match, chat.Id, otherUserId);
     }
 
-    private Match CreateMatch(int user1Id, int user2Id, int book1Id, int book2Id, DateTime now)
+    private Match CreateMatch(Guid user1Id, Guid user2Id, int book1Id, int book2Id, DateTime now)
     {
         var match = new Match
         {
@@ -177,7 +183,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     }
 
     // TODO: Reemplazar por el método de creación del módulo de chats cuando esté implementado
-    private void CreateChatParticipants(int chatId, int userId, int otherUserId, DateTime now)
+    private void CreateChatParticipants(int chatId, Guid userId, Guid otherUserId, DateTime now)
     {
         _db.ChatParticipants.Add(new ChatParticipant
         {
@@ -209,10 +215,10 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// <summary>
     /// Construye el DTO de respuesta para un match existente
     /// </summary>
-    private async Task<MatchCreatedDto> BuildMatchCreatedDto(Match match, int userId)
+    private async Task<MatchCreatedDto> BuildMatchCreatedDto(Match match, Guid userId)
     {
         var otherUserId = match.User1Id == userId ? match.User2Id : match.User1Id;
-        var otherUsername = await _db.BaseUsers
+        var otherUsername = await _db.Users
             .Where(bu => bu.Id == otherUserId)
             .Select(bu => bu.Username)
             .FirstAsync();
@@ -236,9 +242,9 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// donde ya conocemos chatId y otherUserId).
     /// </summary>
     private async Task<MatchCreatedDto> BuildMatchCreatedDto(
-        Match match, int chatId, int otherUserId)
+        Match match, int chatId, Guid otherUserId)
     {
-        var otherUsername = await _db.BaseUsers
+        var otherUsername = await _db.Users
             .Where(bu => bu.Id == otherUserId)
             .Select(bu => bu.Username)
             .FirstAsync();
@@ -258,7 +264,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// el swipe RIGHT concreto hacia un libro del usuario actual.
     /// Devuelve null si no hay match bilateral.
     /// </summary>
-    private async Task<Swipe?> FindMutualSwipeAsync(int userId, int otherUserId)
+    private async Task<Swipe?> FindMutualSwipeAsync(Guid userId, Guid otherUserId)
     {
         var isInterested = await GetInterestedUserIds(userId)
             .AnyAsync(id => id == otherUserId);
@@ -279,7 +285,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// Lanza KeyNotFoundException si el libro no existe.
     /// Lanza InvalidOperationException si el usuario intenta swipear su propio libro.
     /// </summary>
-    private async Task<Book?> ValidateBookForSwipeAsync(int bookId, int userId)
+    private async Task<Book?> ValidateBookForSwipeAsync(int bookId, Guid userId)
     {
         var book = await _db.Books.FirstOrDefaultAsync(b => b.Id == bookId)
             ?? throw new KeyNotFoundException($"No se encontró el libro con ID {bookId}.");
@@ -307,7 +313,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// Obtiene las preferencias del usuario desde la BD.
     /// Lanza InvalidOperationException si no están configuradas.
     /// </summary>
-    private async Task<UserPreference> GetUserPreferencesAsync(int userId)
+    private async Task<UserPreference> GetUserPreferencesAsync(Guid userId)
     {
         return await _db.UserPreferences
             .FirstOrDefaultAsync(up => up.UserId == userId)
@@ -344,7 +350,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// Los libros ya intercambiados no aparecen porque su status deja de ser PUBLISHED,
     /// pero el usuario sí puede volver a aparecer con otros libros.
     /// </summary>
-    private IQueryable<int> GetInterestedUserIds(int userId)
+    private IQueryable<Guid> GetInterestedUserIds(Guid userId)
     {
         var cutoff = DateTime.UtcNow.AddDays(-_settings.Feed.SwipeValidDays);
 
@@ -363,7 +369,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// Ordenados por score descendente.
     /// </summary>
     private IQueryable<FeedBookDto> GetPriorityBooks(
-        int userId, UserPreference prefs, IQueryable<int> interestedUserIds)
+        Guid userId, UserPreference prefs, IQueryable<Guid> interestedUserIds)
     {
         var candidates = GetBaseCandidates(userId, prefs)
             .Where(b => interestedUserIds.Contains(b.OwnerId));
@@ -377,7 +383,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// Ordenados por score descendente.
     /// </summary>
     private IQueryable<FeedBookDto> GetDiscoveryBooks(
-        int userId, UserPreference prefs, IQueryable<int> interestedUserIds)
+        Guid userId, UserPreference prefs, IQueryable<Guid> interestedUserIds)
     {
         var candidates = GetBaseCandidates(userId, prefs)
             .Where(b => !interestedUserIds.Contains(b.OwnerId));
@@ -389,13 +395,13 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// Filtros base compartidos por P1 y P2: status PUBLISHED, no propios,
     /// no swipeados ya y dentro del radio del usuario.
     /// </summary>
-    private IQueryable<Book> GetBaseCandidates(int userId, UserPreference prefs)
+    private IQueryable<Book> GetBaseCandidates(Guid userId, UserPreference prefs)
     {
         return _db.Books
             .Where(b => b.Status == BookStatus.PUBLISHED)
             .Where(b => b.OwnerId != userId)
             .Where(b => !_db.Swipes.Any(s => s.SwiperId == userId && s.BookId == b.Id))
-            .Where(b => _db.BaseUsers
+            .Where(b => _db.Users
                 .Any(bu => bu.Id == b.OwnerId
                     && bu.Location.IsWithinDistance(prefs.Location, prefs.RadioKm * 1000.0)));
     }
@@ -420,7 +426,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
             .Select(b => new
             {
                 Book = b,
-                OwnerUsername = _db.BaseUsers
+                OwnerUsername = _db.Users
                     .Where(bu => bu.Id == b.OwnerId)
                     .Select(bu => bu.Username)
                     .FirstOrDefault()!,
@@ -431,7 +437,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
                      || (prefs.Extension == BooksExtension.MEDIUM && b.NumPaginas > 200 && b.NumPaginas <= 400)
                      || (prefs.Extension == BooksExtension.LONG && b.NumPaginas > 400))
                     ? 1.0 : 0.0,
-                Distance = _db.BaseUsers
+                Distance = _db.Users
                     .Where(bu => bu.Id == b.OwnerId)
                     .Select(bu => bu.Location.Distance(prefs.Location))
                     .FirstOrDefault(),

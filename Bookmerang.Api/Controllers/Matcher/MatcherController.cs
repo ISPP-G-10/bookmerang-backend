@@ -17,7 +17,7 @@ public class MatcherController(IMatcherService matcherService) : ControllerBase
     /// </summary>
     [HttpGet("feed")]
     public async Task<IActionResult> GetFeed(
-        [FromQuery] int userId,
+        [FromQuery] Guid userId,
         [FromQuery] int page = 0,
         [FromQuery] int size = 20)
     {
@@ -44,7 +44,7 @@ public class MatcherController(IMatcherService matcherService) : ControllerBase
     /// </summary>
     [HttpPost("swipe")]
     public async Task<IActionResult> Swipe(
-        [FromQuery] int userId,
+        [FromQuery] Guid userId,
         [FromBody] SwipeRequestDto request)
     {
         try

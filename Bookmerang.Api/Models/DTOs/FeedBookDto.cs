@@ -4,7 +4,7 @@ namespace Bookmerang.Api.Models.DTOs;
 public class FeedBookDto
 {
     public required int Id { get; set; }
-    public required int OwnerId { get; set; }
+    public required Guid OwnerId { get; set; }
     public required string OwnerUsername { get; set; }
     public string? Titulo { get; set; }
     public string? Autor { get; set; }
