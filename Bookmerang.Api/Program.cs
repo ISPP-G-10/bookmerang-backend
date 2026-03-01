@@ -2,6 +2,8 @@ using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Implementation.Auth;
 using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Api.Services.Implementation.Chats;
+using Bookmerang.Api.Services.Interfaces.Genres;
+using Bookmerang.Api.Services.Implementation.Genres;
 using Bookmerang.Api.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -9,8 +11,8 @@ using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Data;
 using Npgsql.NameTranslation;
 
-DotNetEnv.Env.Load();
-//DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
+//DotNetEnv.Env.Load();
+DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -85,6 +87,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 // ===== SERVICIOS =====
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
+builder.Services.AddScoped<IGenreService, GenreService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers();

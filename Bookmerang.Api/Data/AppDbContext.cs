@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<Chat> Chats => Set<Chat>();
     public DbSet<ChatParticipant> ChatParticipants => Set<ChatParticipant>();
     public DbSet<Message> Messages => Set<Message>();
+    public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
+    public DbSet<Genre> Genres => Set<Genre>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
