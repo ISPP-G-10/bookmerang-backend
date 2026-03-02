@@ -48,4 +48,48 @@ public class AuthService(AppDbContext db) : IAuthService
 
         return (nuevoUsuario, false);
     }
+
+    public async Task<BaseUser?> UpdatePerfil(string supabaseId,string? username, string? name, string? profilePhoto)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+
+        if (user == null)
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(username))
+            user.Username = username;
+
+        if (!string.IsNullOrWhiteSpace(name))
+            user.Name = name;
+
+        if (!string.IsNullOrWhiteSpace(profilePhoto))
+            user.ProfilePhoto = profilePhoto;
+
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return user;
+    }
+
+    public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail)
+{
+    if (string.IsNullOrWhiteSpace(newEmail))
+        return (null, "El email no puede estar vacío.");
+
+    var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+    if (user == null)
+        return (null, "Usuario no encontrado.");
+
+    var emailExiste = await _db.Users.AnyAsync(u => u.Email == newEmail && u.SupabaseId != supabaseId);
+    if (emailExiste)
+        return (null, "El email ya está en uso.");
+
+    user.Email = newEmail;
+    user.UpdatedAt = DateTime.UtcNow;
+
+    await _db.SaveChangesAsync();
+
+    return (user, null);
+}
 }
