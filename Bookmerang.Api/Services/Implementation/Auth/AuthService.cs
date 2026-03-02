@@ -44,6 +44,17 @@ public class AuthService(AppDbContext db) : IAuthService
             };
             _db.RegularUsers.Add(regularUser);
             await _db.SaveChangesAsync();
+            var userProgress = new UserProgress
+            {
+                UserId = regularUser.Id,
+                XpTotal = 0,
+                StreakWeeks = 0,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _db.UserProgresses.Add(userProgress);
+            await _db.SaveChangesAsync();
+
         }
 
         return (nuevoUsuario, false);

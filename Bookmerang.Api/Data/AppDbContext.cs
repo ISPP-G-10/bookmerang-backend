@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<Genre> Genres => Set<Genre>();
     public DbSet<UserPreferencesGenre> UserPreferencesGenres => Set<UserPreferencesGenre>();
+    public DbSet<UserProgress> UserProgresses => Set<UserProgress>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
