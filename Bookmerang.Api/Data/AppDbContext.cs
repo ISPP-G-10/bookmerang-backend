@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<Genre> Genres => Set<Genre>();
+    public DbSet<UserPreferencesGenre> UserPreferencesGenres => Set<UserPreferencesGenre>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,6 +25,19 @@ public class AppDbContext : DbContext
         {
             entity.HasIndex(u => u.SupabaseId).IsUnique();
             entity.HasIndex(u => u.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<UserPreferencesGenre>(entity =>
+        {
+            entity.HasKey(e => new { e.PreferencesId, e.GenreId });
+
+            entity.HasOne<UserPreference>()
+                .WithMany()
+                .HasForeignKey(e => e.PreferencesId);
+
+            entity.HasOne<Genre>()
+                .WithMany()
+                .HasForeignKey(e => e.GenreId);
         });
 
         // Chat participants: clave compuesta

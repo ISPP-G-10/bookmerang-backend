@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using Bookmerang.Api.Models;
+using System.Collections.Generic;
 
 namespace Bookmerang.Api.Models.DTOs;
 
@@ -36,4 +37,6 @@ public class UpsertUserPreferenceDto
 
     [Required]
     public double Longitude { get; set; }
+
+    public List<int>? GenreIds { get; set; }
 }

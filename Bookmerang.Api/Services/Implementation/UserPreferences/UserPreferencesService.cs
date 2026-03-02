@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 using Bookmerang.Api.Models;
+using System.Linq;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Data;
 
@@ -46,6 +47,34 @@ public class UserPreferenceService : IUserPreferenceService
         pref.UpdatedAt = now;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Sync genres if provided
+        if (request.GenreIds is not null)
+        {
+            var repo = _dbContext.Set<UserPreferencesGenre>();
+
+            var existing = await repo
+                .Where(x => x.PreferencesId == pref.Id)
+                .ToListAsync(cancellationToken);
+
+            if (existing.Any())
+            {
+                repo.RemoveRange(existing);
+            }
+
+            var newEntries = request.GenreIds
+                .Where(x => x > 0)
+                .Distinct()
+                .Select(gid => new UserPreferencesGenre { PreferencesId = pref.Id, GenreId = gid })
+                .ToList();
+
+            if (newEntries.Any())
+            {
+                await repo.AddRangeAsync(newEntries, cancellationToken);
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         return ToDto(pref);
     }
