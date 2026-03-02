@@ -108,7 +108,8 @@ builder.Services.AddSwaggerGen(c =>
             API de Bookmerang.
 
             ## Cómo autenticarse
-            1. Ejecuta en PowerShell:
+            1. Abrir la base de datos y en authentication, crear un usuario con email y password (o usar uno existente).
+            2. Ejecuta en PowerShell con tus credenciales:
             ```
             Invoke-RestMethod -Method POST `
               -Uri "http://127.0.0.1:54321/auth/v1/token?grant_type=password" `
@@ -116,10 +117,10 @@ builder.Services.AddSwaggerGen(c =>
               -ContentType "application/json" `
               -Body '{"email":"tu_email","password":"tu_password"}'
             ```
-            2. Copia el valor de `access_token` de la respuesta
-            3. Pulsa el botón **Authorize** 🔒 arriba a la derecha
-            4. Escribe: `<tu_access_token>`
-            5. Ya puedes usar todos los endpoints protegidos
+            3. Copia el valor de `access_token` de la respuesta
+            4. Pulsa el botón **Authorize** 🔒 arriba a la derecha
+            5. Escribe: `<tu_access_token>`
+            6. Registrate en la apliacación.
             """
     });
 
