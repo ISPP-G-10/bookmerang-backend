@@ -33,6 +33,11 @@ public class AuthService(AppDbContext db) : IAuthService
         };
 
         _db.BaseUsers.Add(nuevoUsuario);
+        var nuevoUser = new User
+        {
+            Id = nuevoUsuario.Id
+        };
+        _db.Users.Add(nuevoUser);
         await _db.SaveChangesAsync();
 
         return (nuevoUsuario, false);

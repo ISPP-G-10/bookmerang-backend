@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Middleware;          
+using Microsoft.OpenApi.Models;           
 using Npgsql;
 
 DotNetEnv.Env.Load();
@@ -29,7 +31,7 @@ dataSourceBuilder.UseNetTopologySuite();
 var dataSource = dataSourceBuilder.Build();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(dataSource));
+    options.UseNpgsql(dataSource, o => o.UseNetTopologySuite()));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -96,11 +98,85 @@ builder.Services.AddScoped<IMatcherNotifier, MatcherNotifier>(); // ← nuevo
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Bookmerang API",
+        Version = "v1",
+        Description = """
+            API de Bookmerang.
+
+            ## Cómo autenticarse
+            1. Ejecuta en PowerShell:
+            ```
+            Invoke-RestMethod -Method POST `
+              -Uri "http://127.0.0.1:54321/auth/v1/token?grant_type=password" `
+              -Headers @{ "apikey" = "tu_publishable_authentication_key" } `
+              -ContentType "application/json" `
+              -Body '{"email":"tu_email","password":"tu_password"}'
+            ```
+            2. Copia el valor de `access_token` de la respuesta
+            3. Pulsa el botón **Authorize** 🔒 arriba a la derecha
+            4. Escribe: `<tu_access_token>`
+            5. Ya puedes usar todos los endpoints protegidos
+            """
+    });
+
+    // Botón Authorize en Swagger UI
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Introduce el JWT de Supabase. Ejemplo: `Bearer eyJhbGc...`"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            []
+        }
+    });
+
+    c.EnableAnnotations(); // Activa [SwaggerResponse] en los controladores
+});
 
 var app = builder.Build();
 
+// ===== SEED DE DATOS (TEMPORAL, NO SE COMO SE HARÁ PERO HECHO PARA LAS PRUEBAS DE SUBIR LIBRO)=====
+// Inserta géneros e idiomas en la BD al arrancar si no existen
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await DataSeeder.SeedAsync(db);
+}
+
 app.UseCors();
+
+// ===== MIDDLEWARE DE EXCEPCIONES =====
+// Convierte excepciones en respuestas HTTP con JSON automáticamente
+app.UseMiddleware<ExceptionMiddleware>();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Bookmerang API v1");
+        c.DisplayRequestDuration();
+    });
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -111,6 +187,6 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/", () => "Hello World!");
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();

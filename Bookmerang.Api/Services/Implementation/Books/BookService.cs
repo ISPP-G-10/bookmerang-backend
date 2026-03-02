@@ -1,3 +1,4 @@
+using Bookmerang.Api.Data;
 using Bookmerang.Api.Exceptions;
 using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Books;
@@ -6,6 +7,7 @@ using Bookmerang.Api.Models.DTOs.Books.Queries;
 using Bookmerang.Api.Models.DTOs.Books.Requests;
 using Bookmerang.Api.Models.DTOs.Books.Responses;
 using Bookmerang.Api.Services.Interfaces.Books;
+using Microsoft.EntityFrameworkCore;
 
 namespace Bookmerang.Api.Services.Implementation.Books;
 
@@ -13,15 +15,18 @@ public class BookService(
     IBookRepository bookRepo,
     IGenreRepository genreRepo,
     ILanguageRepository languageRepo,
-    IMatcherNotifier matcher
+    IMatcherNotifier matcher,
+    AppDbContext db 
 ) : IBookService
 {
     // CREAR BORRADOR
     public async Task<BookDetailDTO> CreateDraftAsync(
-        Guid ownerId,
+        string supabaseId,
         CreateBookDraftRequest request,
         CancellationToken ct = default)
     {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
+
         await ValidateGenreIdsAsync(request.GenreIds, ct);
         await ValidateLanguageIdsAsync(request.LanguageIds, ct);
 
@@ -55,20 +60,18 @@ public class BookService(
     // GESTIÓN DE FOTOS
     public async Task<BookDetailDTO> UpsertPhotosAsync(
         int bookId,
-        Guid ownerId,
+        string supabaseId,
         UpsertBookPhotosRequest request,
         CancellationToken ct = default)
     {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var book = await GetBookOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
-        // Máximo 5 fotos por libro
         if (request.Photos.Count > 5)
             throw new ValidationException(
                 $"Un libro puede tener máximo 5 fotos. Se han enviado {request.Photos.Count}.");
 
-        // Normalizar el orden (0,1,2,3,4) independientemente de lo que mande el frontend
-        // Esto evita huecos o valores inesperados en el orden
         var newPhotos = request.Photos
             .OrderBy(p => p.Order)
             .Select((p, index) => new BookPhoto
@@ -85,13 +88,14 @@ public class BookService(
         return MapToDetailDTO(updatedBook);
     }
 
-    // ACTUALIZAR DATOS (PASO 2)
+    // ACTUALIZAR DATOS
     public async Task<BookDetailDTO> UpdateDraftDataAsync(
         int bookId,
-        Guid ownerId,
+        string supabaseId,
         UpdateBookDataRequest request,
         CancellationToken ct = default)
     {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var book = await GetBookOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
@@ -113,13 +117,14 @@ public class BookService(
         return MapToDetailDTO(updatedBook);
     }
 
-    // ACTUALIZAR DETALLES (PASO 3)
+    // ACTUALIZAR DETALLES
     public async Task<BookDetailDTO> UpdateDraftDetailsAsync(
         int bookId,
-        Guid ownerId,
+        string supabaseId,
         UpdateBookDetailsRequest request,
         CancellationToken ct = default)
     {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var book = await GetBookOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
@@ -135,14 +140,13 @@ public class BookService(
     // PUBLICAR
     public async Task<BookDetailDTO> PublishAsync(
         int bookId,
-        Guid ownerId,
+        string supabaseId,
         CancellationToken ct = default)
     {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var book = await GetBookOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
-        // Validaciones obligatorias para publicar
-        // Un libro publicado debe tener al menos estos campos
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(book.Titulo))
             errors.Add("El título es obligatorio para publicar.");
@@ -155,15 +159,12 @@ public class BookService(
         if (!book.BookLanguages.Any())
             errors.Add("Debe tener al menos un idioma para publicar.");
 
-        // Agrupar errores en un mismo mensaje
         if (errors.Count > 0)
             throw new ValidationException(string.Join(" ", errors));
 
         book.Status = BookStatus.Published;
         await bookRepo.UpdateAsync(book, ct);
 
-        // Cuando el módulo matcher esté listo, este notifier
-        // hará la llamada real. Por ahora DummyMatcherNotifier no hace nada.
         await matcher.OnBookPublishedAsync(bookId, ownerId, ct);
 
         var publishedBook = await GetBookOrThrowAsync(bookId, ct);
@@ -172,10 +173,11 @@ public class BookService(
 
     // OBTENER MI BIBLIOTECA
     public async Task<PagedResult<BookListItemDTO>> GetMyLibraryAsync(
-        Guid ownerId,
+        string supabaseId,
         LibraryQuery query,
         CancellationToken ct = default)
     {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var (items, total) = await bookRepo.GetByOwnerPagedAsync(ownerId, query, ct);
 
         return new PagedResult<BookListItemDTO>
@@ -189,10 +191,11 @@ public class BookService(
 
     // OBTENER MIS BORRADORES
     public async Task<PagedResult<BookListItemDTO>> GetMyDraftsAsync(
-        Guid ownerId,
+        string supabaseId,
         DraftsQuery query,
         CancellationToken ct = default)
     {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var (items, total) = await bookRepo.GetDraftsPagedAsync(ownerId, query, ct);
 
         return new PagedResult<BookListItemDTO>
@@ -204,12 +207,13 @@ public class BookService(
         };
     }
 
-    // OBTENER DETALLES DE UN LIBRO
+    // OBTENER DETALLE
     public async Task<BookDetailDTO> GetByIdAsync(
         int bookId,
-        Guid ownerId,
+        string supabaseId,
         CancellationToken ct = default)
     {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var book = await GetBookOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
         return MapToDetailDTO(book);
@@ -218,9 +222,10 @@ public class BookService(
     // SOFT DELETE
     public async Task DeleteAsync(
         int bookId,
-        Guid ownerId,
+        string supabaseId,
         CancellationToken ct = default)
     {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var book = await GetBookOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
@@ -232,7 +237,19 @@ public class BookService(
     // MÉTODOS PRIVADOS DE APOYO
     // =====================================================================
 
-    /// Carga el libro con todas sus relaciones o lanza NotFoundException.
+    /// Lanza NotFoundException si el usuario no existe.
+    private async Task<Guid> ResolveOwnerIdAsync(string supabaseId, CancellationToken ct)
+    {
+        var user = await db.BaseUsers
+            .FirstOrDefaultAsync(u => u.SupabaseId == supabaseId, ct);
+
+        if (user is null)
+            throw new NotFoundException(
+                $"No se encontró ningún usuario con supabaseId '{supabaseId}'. ¿Has llamado a /api/auth/register?");
+
+        return user.Id;
+    }
+
     private async Task<Book> GetBookOrThrowAsync(int bookId, CancellationToken ct)
     {
         var book = await bookRepo.GetByIdAsync(bookId, ct);
@@ -241,38 +258,31 @@ public class BookService(
         return book;
     }
 
-    /// Verifica que el usuario es el propietario del libro.
-    /// Lanza ForbiddenException si no lo es.
     private static void VerifyOwner(Book book, Guid ownerId)
     {
         if (book.OwnerId != ownerId)
             throw new ForbiddenException(
-                $"El usuario {ownerId} no tiene permiso para modificar el libro {book.Id}.");
+                "No tienes permiso para realizar esta acción sobre este libro.");
     }
 
-    /// Valida que todos los genre IDs existen en BD.
     private async Task ValidateGenreIdsAsync(List<int> ids, CancellationToken ct)
     {
         if (ids.Count == 0) return;
         if (!await genreRepo.AllExistAsync(ids, ct))
-            throw new ValidationException(
-                "Uno o más géneros no existen.");
+            throw new ValidationException("Uno o más géneros no existen.");
     }
 
-    /// Valida que todos los language IDs existen en BD.
     private async Task ValidateLanguageIdsAsync(List<int> ids, CancellationToken ct)
     {
         if (ids.Count == 0) return;
         if (!await languageRepo.AllExistAsync(ids, ct))
-            throw new ValidationException(
-                "Uno o más idiomas no existen.");
+            throw new ValidationException("Uno o más idiomas no existen.");
     }
 
     // =====================================================================
     // MAPPERS
     // =====================================================================
 
-    /// Convierte Book a BookDetailDTO (vista completa).
     private static BookDetailDTO MapToDetailDTO(Book book) => new()
     {
         Id = book.Id,
@@ -290,11 +300,7 @@ public class BookService(
         UpdatedAt = book.UpdatedAt,
         Photos = book.Photos
             .OrderBy(p => p.Orden)
-            .Select(p => new BookPhotoDTO
-            {
-                Url = p.Url,
-                Order = p.Orden
-            })
+            .Select(p => new BookPhotoDTO { Url = p.Url, Order = p.Orden })
             .ToList(),
         Genres = book.BookGenres
             .Select(bg => bg.Genre.Name)
@@ -306,7 +312,6 @@ public class BookService(
             .ToList()
     };
 
-    /// Convierte Book a BookListItemDTO (vista resumida para listas).
     private static BookListItemDTO MapToListItemDTO(Book book) => new()
     {
         Id = book.Id,
@@ -315,9 +320,7 @@ public class BookService(
         Status = book.Status,
         Cover = book.Cover,
         Condition = book.Condition,
-        ThumbnailUrl = book.Photos
-            .OrderBy(p => p.Orden)
-            .FirstOrDefault()?.Url,
+        ThumbnailUrl = book.Photos.OrderBy(p => p.Orden).FirstOrDefault()?.Url,
         UpdatedAt = book.UpdatedAt
     };
 }
