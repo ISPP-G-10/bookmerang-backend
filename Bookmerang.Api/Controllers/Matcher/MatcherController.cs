@@ -1,15 +1,20 @@
 using Bookmerang.Api.Models.DTOs;
+using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Interfaces.Matcher;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Bookmerang.Api.Controllers.Matcher;
 
 [ApiController]
 [Route("api/[controller]")]
-public class MatcherController(IMatcherService matcherService) : ControllerBase
+[Authorize]
+public class MatcherController(IMatcherService matcherService, IAuthService authService) : ControllerBase
 {
     private readonly IMatcherService _matcherService = matcherService;
+    private readonly IAuthService _authService = authService;
 
     /// <summary>
     /// GET /api/matcher/feed — Devuelve el feed paginado de libros candidatos.
@@ -17,17 +22,22 @@ public class MatcherController(IMatcherService matcherService) : ControllerBase
     /// </summary>
     [HttpGet("feed")]
     public async Task<IActionResult> GetFeed(
-        [FromQuery] Guid userId,
         [FromQuery] int page = 0,
         [FromQuery] int size = 20)
     {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var usuario = await _authService.GetPerfil(supabaseId);
+        if (usuario == null) return NotFound(new { message = "Usuario no encontrado en el sistema." });
+
         // Validar parámetros de paginación
         if (page < 0 || size <= 0)
             return BadRequest(new { message = "Los parámetros page y size deben ser >= 0 y > 0 respectivamente." });
 
         try
         {
-            var feed = await _matcherService.GetFeedAsync(userId, page, size);
+            var feed = await _matcherService.GetFeedAsync(usuario.Id, page, size);
             return Ok(feed);
         }
         // GetUserPreferencesAsync: preferencias no configuradas
@@ -44,13 +54,18 @@ public class MatcherController(IMatcherService matcherService) : ControllerBase
     /// </summary>
     [HttpPost("swipe")]
     public async Task<IActionResult> Swipe(
-        [FromQuery] Guid userId,
         [FromBody] SwipeRequestDto request)
     {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var usuario = await _authService.GetPerfil(supabaseId);
+        if (usuario == null) return NotFound(new { message = "Usuario no encontrado en el sistema." });
+
         try
         {
             var result = await _matcherService.ProcessSwipeAsync(
-                userId, request.BookId, request.Direction);
+                usuario.Id, request.BookId, request.Direction);
             return Ok(result);
         }
         // ValidateBookForSwipeAsync: libro no encontrado

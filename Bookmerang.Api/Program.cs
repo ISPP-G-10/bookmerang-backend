@@ -25,6 +25,13 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 #pragma warning disable CS0618 // Global type mapper is obsolete in Npgsql 7.0+ but needed for enum mapping with NTS
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ChatType>("chat_type", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookStatus>("book_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookCondition>("book_condition", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<CoverType>("cover_type", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<SwipeDirection>("swipe_direction", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BooksExtension>("books_extension", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MatchStatus>("match_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeStatus>("exchange_status", new NpgsqlNullNameTranslator());
 #pragma warning restore CS0618
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -92,7 +99,12 @@ builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IMatcherService, MatcherService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(opts =>
+    {
+        opts.JsonSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

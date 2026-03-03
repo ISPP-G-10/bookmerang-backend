@@ -9,10 +9,11 @@ using Microsoft.Extensions.Options;
 
 namespace Bookmerang.Api.Services.Implementation.Matcher;
 
-public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings) : IMatcherService
+public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings, ILogger<MatcherService> logger) : IMatcherService
 {
     private readonly AppDbContext _db = db;
     private readonly MatcherSettings _settings = settings.Value;
+    private readonly ILogger<MatcherService> _logger = logger;
 
     public async Task<List<FeedBookDto>> GetFeedAsync(Guid userId, int page, int pageSize)
     {
@@ -52,15 +53,19 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
 
     public async Task<SwipeResultDto> ProcessSwipeAsync(Guid userId, int bookId, SwipeDirection direction)
     {
+        _logger.LogWarning("[SWIPE] User={UserId} Book={BookId} Direction={Direction}", userId, bookId, direction);
         await using var transaction = await _db.Database.BeginTransactionAsync();
 
         // 1. Validar que el libro existe, sigue PUBLISHED y no es propio
         var book = await ValidateBookForSwipeAsync(bookId, userId);
         if (book == null)
         {
+            _logger.LogWarning("[SWIPE] Book {BookId} unavailable (not PUBLISHED or not found)", bookId);
             await transaction.RollbackAsync();
             return new SwipeResultDto { Outcome = SwipeOutcome.BookUnavailable };
         }
+
+        _logger.LogWarning("[SWIPE] Book {BookId} owned by {OwnerId}", bookId, book.OwnerId);
 
         // 2. Registrar el swipe (SwiperId+BookId ya previene duplicados)
         _db.Swipes.Add(new Swipe
@@ -76,6 +81,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
         {
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
+            _logger.LogWarning("[SWIPE] LEFT recorded");
             return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
         }
 
@@ -84,15 +90,22 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
         var mutualSwipe = await FindMutualSwipeAsync(userId, book.OwnerId);
         if (mutualSwipe == null)
         {
+            _logger.LogWarning("[SWIPE] RIGHT recorded, no mutual swipe found (no match)");
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
             return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
         }
 
+        _logger.LogWarning("[SWIPE] MATCH DETECTED! MutualSwipe: SwiperId={SwiperId} BookId={MutualBookId}",
+            mutualSwipe.SwiperId, mutualSwipe.BookId);
+
         // 5. Match bilateral detectado → crear Match + Chat + Exchange dentro de la misma transacción
         var matchResult = await CreateMatchAsync(userId, book, mutualSwipe);
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
+
+        _logger.LogWarning("[SWIPE] Match created: MatchId={MatchId} ChatId={ChatId} OtherUser={OtherUsername}",
+            matchResult.MatchId, matchResult.ChatId, matchResult.OtherUsername);
 
         return new SwipeResultDto
         {
@@ -266,17 +279,32 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// </summary>
     private async Task<Swipe?> FindMutualSwipeAsync(Guid userId, Guid otherUserId)
     {
-        var isInterested = await GetInterestedUserIds(userId)
-            .AnyAsync(id => id == otherUserId);
+        _logger.LogWarning("[MUTUAL] Checking if {OtherUserId} is interested in {UserId}'s books...", otherUserId, userId);
+
+        var interestedIds = await GetInterestedUserIds(userId).ToListAsync();
+        _logger.LogWarning("[MUTUAL] Interested users who swiped RIGHT on {UserId}'s books: [{InterestedIds}]",
+            userId, string.Join(", ", interestedIds));
+
+        var isInterested = interestedIds.Contains(otherUserId);
 
         if (!isInterested)
+        {
+            _logger.LogWarning("[MUTUAL] {OtherUserId} NOT found in interested users → NO match", otherUserId);
             return null;
+        }
 
-        return await _db.Swipes
+        _logger.LogWarning("[MUTUAL] {OtherUserId} IS interested! Looking for their RIGHT swipe on {UserId}'s books...", otherUserId, userId);
+
+        var swipe = await _db.Swipes
             .Where(s => s.SwiperId == otherUserId)
             .Where(s => s.Direction == SwipeDirection.RIGHT)
             .Where(s => _db.Books.Any(b => b.Id == s.BookId && b.OwnerId == userId))
             .FirstOrDefaultAsync();
+
+        _logger.LogWarning("[MUTUAL] Mutual swipe found: {Found} (SwipeId={SwipeId})",
+            swipe != null, swipe?.Id);
+
+        return swipe;
     }
 
     /// <summary>
@@ -315,10 +343,32 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings)
     /// </summary>
     private async Task<UserPreference> GetUserPreferencesAsync(Guid userId)
     {
-        return await _db.UserPreferences
-            .FirstOrDefaultAsync(up => up.UserId == userId)
-            ?? throw new InvalidOperationException(
-                "El usuario debe configurar sus preferencias antes de usar el feed.");
+        var existing = await _db.UserPreferences
+            .FirstOrDefaultAsync(up => up.UserId == userId);
+
+        if (existing != null)
+            return existing;
+
+        // Fallback: usar la ubicación del usuario y valores por defecto
+        var userLocation = await _db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => u.Location)
+            .FirstOrDefaultAsync();
+
+        if (userLocation == null)
+            throw new InvalidOperationException(
+                "No se encontró la ubicación del usuario.");
+
+        return new UserPreference
+        {
+            Id = 0,
+            UserId = userId,
+            Location = userLocation,
+            RadioKm = 50, // radio por defecto: 50 km
+            Extension = BooksExtension.MEDIUM,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
     }
 
     /// <summary>
