@@ -19,6 +19,5 @@ public class User
     public int FinishedExchanges { get; set; } = 0;
 
     // Navigation property
-    [ForeignKey("Id")]
     public BaseUser BaseUser { get; set; } = null!;
 }

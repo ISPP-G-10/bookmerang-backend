@@ -10,4 +10,5 @@ public interface IAuthService
      BaseUserType type, Point location);
     Task <BaseUser?> UpdatePerfil(string supabaseId, string? username, string? name, string? profilePhoto);
     Task <(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail);
+    Task<BaseUser> DeletePerfil(string supabaseId);
 }

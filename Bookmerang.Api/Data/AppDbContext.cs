@@ -75,6 +75,20 @@ public class AppDbContext : DbContext
                 .HasForeignKey(m => m.SenderId);
         });
 
+        // BaseUser → User (1:1) - bind to navigation property to avoid creating a shadow FK
+        modelBuilder.Entity<User>()
+            .HasOne(u => u.BaseUser)
+            .WithOne()
+            .HasForeignKey<User>(u => u.Id)
+            .OnDelete(DeleteBehavior.Cascade);
+
+         // User → UserProgress (1:1)
+        modelBuilder.Entity<UserProgress>()
+            .HasOne<User>()
+            .WithOne()
+            .HasForeignKey<UserProgress>(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // BookExtension 
         modelBuilder.HasPostgresEnum<BooksExtension>("public", "books_extension", new NpgsqlNullNameTranslator());
     }

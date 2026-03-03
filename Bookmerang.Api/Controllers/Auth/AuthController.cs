@@ -91,6 +91,24 @@ public class AuthController : ControllerBase
 
         return Ok(usuario.ToDto());
     }
+
+    [HttpDelete("perfil")]
+    [Authorize]
+    public async Task<IActionResult> DeletePerfil()
+    {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        try
+        {
+            var usuario = await _authService.DeletePerfil(supabaseId);
+            return Ok(usuario.ToDto());
+        }
+        catch (Exception ex)
+        {
+            return NotFound(ex.Message);
+        }
+    }
     
 }
 
