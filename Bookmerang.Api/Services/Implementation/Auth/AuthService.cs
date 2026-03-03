@@ -35,6 +35,17 @@ public class AuthService(AppDbContext db) : IAuthService
         _db.Users.Add(nuevoUsuario);
         await _db.SaveChangesAsync();
 
+        // Si el tipo es USER, crear también la fila en la tabla "users"
+        if (type == BaseUserType.USER)
+        {
+            var regularUser = new User
+            {
+                Id = nuevoUsuario.Id
+            };
+            _db.RegularUsers.Add(regularUser);
+            await _db.SaveChangesAsync();
+        }
+
         return (nuevoUsuario, false);
     }
 }

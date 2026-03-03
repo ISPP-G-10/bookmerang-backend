@@ -1,9 +1,13 @@
 using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Implementation.Auth;
+using Bookmerang.Api.Services.Interfaces.Chats;
+using Bookmerang.Api.Services.Implementation.Chats;
+using Bookmerang.Api.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Data;
+using Npgsql.NameTranslation;
 
 DotNetEnv.Env.Load();
 //DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
@@ -14,9 +18,15 @@ builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEn
 builder.Configuration["Supabase:JwtSecret"] = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET");
 builder.Configuration["Supabase:Url"] = Environment.GetEnvironmentVariable("SUPABASE_URL");
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+#pragma warning disable CS0618 // Global type mapper is obsolete in Npgsql 7.0+ but needed for enum mapping with NTS
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ChatType>("chat_type", new NpgsqlNullNameTranslator());
+#pragma warning restore CS0618
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
+        connectionString,
         o => o.UseNetTopologySuite()
     ));
 
@@ -74,6 +84,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // ===== SERVICIOS =====
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IChatService, ChatService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers();
