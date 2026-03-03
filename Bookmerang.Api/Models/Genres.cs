@@ -13,4 +13,6 @@ public class Genre
     [Required]
     [Column("name")]
     public string Name { get; set; } = null!;
+
+    public ICollection<UserPreferencesGenre> UserPreferences { get; set; } = new List<UserPreferencesGenre>();
 }

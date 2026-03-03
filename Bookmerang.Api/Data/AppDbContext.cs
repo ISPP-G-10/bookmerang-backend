@@ -30,14 +30,22 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<UserPreferencesGenre>(entity =>
         {
+            entity.ToTable("user_preferences_genres");
+
             entity.HasKey(e => new { e.PreferencesId, e.GenreId });
 
-            entity.HasOne<UserPreference>()
-                .WithMany()
+            entity.Property(e => e.PreferencesId)
+                .HasColumnName("preferences_id");
+
+            entity.Property(e => e.GenreId)
+                .HasColumnName("genre_id");
+
+            entity.HasOne(e => e.Preferences)
+                .WithMany(p => p.Genres)
                 .HasForeignKey(e => e.PreferencesId);
 
-            entity.HasOne<Genre>()
-                .WithMany()
+            entity.HasOne(e => e.Genre)
+                .WithMany(g => g.UserPreferences)
                 .HasForeignKey(e => e.GenreId);
         });
 
@@ -66,5 +74,8 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(m => m.SenderId);
         });
+
+        // BookExtension 
+        modelBuilder.HasPostgresEnum<BooksExtension>("public", "books_extension", new NpgsqlNullNameTranslator());
     }
 }

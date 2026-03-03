@@ -25,7 +25,7 @@ public class UserPreference
     public int RadioKm { get; set; }
 
     [Required]
-    [Column("extension")]
+    [Column("extension", TypeName = "books_extension")]
     public BooksExtension Extension { get; set; }
 
     [Required]
@@ -35,4 +35,7 @@ public class UserPreference
     [Required]
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; }
+
+    // Navigation properties
+    public ICollection<UserPreferencesGenre> Genres { get; set; } = new List<UserPreferencesGenre>();
 }
