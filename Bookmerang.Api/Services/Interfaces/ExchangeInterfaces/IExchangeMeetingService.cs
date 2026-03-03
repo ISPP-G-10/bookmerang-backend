@@ -6,10 +6,10 @@ namespace Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 
 public interface IExchangeMeetingService
 {
-    Task<ExchangeMeeting?> GetExchangeMeeting(string supabaseId);
+    Task<ExchangeMeeting?> GetExchangeMeeting(int meetingId);
     Task<List<ExchangeMeeting>> GetMeetingsByUserId(Guid proposerId);
     Task<ExchangeMeeting> CreateExchangeMeeting(int exchangeId, ExchangeMode exchangeMode,
         Guid proposerId, int? bookspotId, DateTime? scheduledAt, Point customLocation);
-    Task<ExchangeMeeting> UpdateExchangeMeeting(string supabaseId, ExchangeMeetingDto dto);
-    Task<bool> DeleteExchangeMeeting(string supabaseId);
+    Task<ExchangeMeeting> UpdateExchangeMeeting(int meetingId, UpdateExchangeMeetingDto dto);
+    Task<bool> DeleteExchangeMeeting(int meetingId);
 }

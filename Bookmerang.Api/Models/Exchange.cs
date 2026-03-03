@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 
 namespace Bookmerang.Api.Models;
@@ -22,16 +22,16 @@ public class Exchange {
     [Required]
     [Column("chat_id")]
     public int ChatId { get; set; }
-    //[ForeignKey(nameof(ChatId))]
-    //public Chat? Chat { get; set; } // Navigation property -> relación 1:1 es la interrrogación
+    [ForeignKey(nameof(ChatId))]
+    public Chat? Chat { get; set; } // Navigation property -> relación 1:1 es la interrrogación
   
     //match_id int [not null, ref: > matches.id]
     [Required]
     [Column("match_id")]
     public int MatchId { get; set; }
 
-    [ForeignKey(nameof(MatchId))]
-    public Match Match { get; set; }= null!; //FK
+    // [ForeignKey(nameof(MatchId))]
+    // public Match Match { get; set; }= null!; //FK
 
     //status exchange_status [not null]
     [Required]

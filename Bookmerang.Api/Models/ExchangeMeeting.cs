@@ -60,10 +60,12 @@ public class ExchangeMeeting {
     public ExchangeMeetingStatus MeetingStatus { get; set; } = ExchangeMeetingStatus.PROPOSAL;
 
     // mark_as_completed_by_user1 boolean [default: false]
+    //POSIBILIDAD DE DEJARLA A NULL POR DEFECTO PARA PODER DISTINGUIR CUANDO SE HA RECHAZADO EL INTERCAMBIO
     [Column("mark_as_completed_by_user1")]
     public bool MarkAsCompletedByUser1 { get; set; } = false;
 
     // mark_as_completed_by_user2 boolean [default: false]
+    //POSIBILIDAD DE DEJARLA A NULL POR DEFECTO PARA PODER DISTINGUIR CUANDO SE HA RECHAZADO EL INTERCAMBIO
     [Column("mark_as_completed_by_user2")]
     public bool MarkAsCompletedByUser2 { get; set; } = false;
 }

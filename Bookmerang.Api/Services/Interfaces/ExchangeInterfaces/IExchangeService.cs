@@ -5,9 +5,9 @@ namespace Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 
 public interface IExchangeService
 {
-    Task<Exchange?> GetExchangeById(string supabaseId);
+    Task<Exchange?> GetExchangeById(int exchangeId);
     Task<Exchange?> GetExchangeByChatId(int chatId);
-    Task<Exchange> CreateExchange(string supabase_id, int chatId, int matchId);
-    Task<Exchange> UpdateExchange(string supabaseId, ExchangeDto dto);
-    Task<bool> DeleteExchange(string supabaseId);
+    Task<Exchange> CreateExchange(int chatId, int matchId);
+    Task<Exchange> UpdateExchange(int meetingId, UpdateExchangeDto dto);
+    Task<bool> DeleteExchange(int exchangeId);
 }
