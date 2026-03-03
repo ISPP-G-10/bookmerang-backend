@@ -1,5 +1,6 @@
 using Bookmerang.Api.Data;
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Services.Interfaces.Chats;
 using Microsoft.EntityFrameworkCore;

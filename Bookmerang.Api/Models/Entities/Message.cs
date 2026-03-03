@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Bookmerang.Api.Models;
+namespace Bookmerang.Api.Models.Entities;
 
 [Table("messages")]
 public class Message

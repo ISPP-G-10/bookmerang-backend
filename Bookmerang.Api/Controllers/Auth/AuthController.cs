@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
 using System.Security.Claims;
 using NetTopologySuite.Geometries;
