@@ -14,11 +14,12 @@ namespace Bookmerang.Api.Controllers.Books;
 [Tags("Books")]
 public class BooksController(IBookService bookService) : ControllerBase
 {
-    // FIXED: Extraemos el supabaseId (string) del token JWT en lugar del Guid directamente
-    // El supabaseId se usará en el servicio para buscar el usuario en la BD
-    private string SupabaseId => User.FindFirstValue("sub")
-        ?? User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")
-        ?? throw new Exception("No se encontró el claim 'sub' en el token JWT.");
+    // Usamos el mismo criterio que AuthController para evitar inconsistencias
+    // entre claims (sub/nameidentifier) y asegurar que resolvemos al mismo usuario.
+    private string SupabaseId =>
+        User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")
+        ?? User.FindFirstValue("sub")
+        ?? throw new Exception("No se encontró el supabaseId en el token JWT.");
 
     // ─────────────────────────────────────────────────────────────────────
     // POST /api/books/draft
