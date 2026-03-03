@@ -46,6 +46,19 @@ public class AuthController : ControllerBase
         return CreatedAtAction(nameof(GetPerfil), new { }, usuario!.ToDto());
     }
 
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> GetMe()
+    {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var usuario = await _authService.GetPerfil(supabaseId);
+        if (usuario == null) return NotFound("Usuario no encontrado en el sistema.");
+
+        return Ok(new { id = usuario.Id });
+    }
+
     [HttpGet("perfil")]
     [Authorize]
     public async Task<IActionResult> GetPerfil()

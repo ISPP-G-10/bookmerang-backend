@@ -32,5 +32,5 @@ public class Message
     public Chat Chat { get; set; } = null!;
 
     [ForeignKey("SenderId")]
-    public BaseUser Sender { get; set; } = null!;
+    public User Sender { get; set; } = null!;
 }
