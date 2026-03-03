@@ -215,7 +215,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
     // TODO: Reemplazar por el método de creación del módulo de exchanges cuando esté implementado
     private void CreateExchange(int chatId, int matchId, DateTime now)
     {
-        _db.Exchanges.Add(new Exchange
+        _db.Exchanges.Add(new Models.Exchange
         {
             ChatId = chatId,
             MatchId = matchId,

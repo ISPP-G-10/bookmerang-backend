@@ -1,3 +1,4 @@
+using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +11,7 @@ public class AppDbContext : DbContext
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<BaseUser> Users => Set<BaseUser>();
-    public DbSet<Exchange> Exchanges => Set<Exchange>();
+    public DbSet<Models.Exchange> Exchanges => Set<Models.Exchange>();
     public DbSet<ExchangeMeeting> ExchangeMeetings => Set<ExchangeMeeting>();
     public DbSet<User> RegularUsers => Set<User>();
     public DbSet<Chat> Chats => Set<Chat>();
@@ -26,7 +27,6 @@ public class AppDbContext : DbContext
     public DbSet<BookLanguage> BookLanguages => Set<BookLanguage>();
     public DbSet<Swipe> Swipes => Set<Swipe>();
     public DbSet<Match> Matches => Set<Match>();
-    public DbSet<Exchange> Exchanges => Set<Exchange>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -47,7 +47,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(u => u.Email).IsUnique();
         });
 
-        modelBuilder.Entity<Exchange>(entity =>
+        modelBuilder.Entity<Models.Exchange>(entity =>
         {
             entity.HasIndex(e => e.SupabaseId).IsUnique();
             entity.HasIndex(e => e.ChatId).IsUnique();
@@ -278,10 +278,10 @@ public class AppDbContext : DbContext
         });
 
         // ===== EXCHANGES =====
-        modelBuilder.Entity<Exchange>(e =>
+        modelBuilder.Entity<Models.Exchange>(e =>
         {
             e.ToTable("exchanges");
-            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ExchangeId).HasColumnName("id");
             e.Property(x => x.ChatId).HasColumnName("chat_id");
             e.Property(x => x.MatchId).HasColumnName("match_id");
             e.Property(x => x.Status).HasColumnName("status");
@@ -289,14 +289,6 @@ public class AppDbContext : DbContext
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
             e.HasIndex(x => x.ChatId).IsUnique();
-
-            e.HasOne(x => x.Chat)
-                .WithOne()
-                .HasForeignKey<Exchange>(x => x.ChatId);
-
-            e.HasOne(x => x.Match)
-                .WithMany()
-                .HasForeignKey(x => x.MatchId);
         });
     }
 }
