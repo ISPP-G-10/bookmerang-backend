@@ -18,6 +18,7 @@ public class UserPreferenceService : IUserPreferenceService
     {
         var pref = await _dbContext.UserPreferences
             .AsNoTracking()
+            .Include(x => x.Genres)
             .FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
 
         return pref is null ? null : ToDto(pref);
@@ -84,6 +85,11 @@ public class UserPreferenceService : IUserPreferenceService
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        // Always reload genres for the response
+        pref.Genres = await _dbContext.Set<UserPreferencesGenre>()
+            .Where(x => x.PreferencesId == pref.Id)
+            .ToListAsync(cancellationToken);
+
         return ToDto(pref);
     }
 
@@ -95,6 +101,7 @@ public class UserPreferenceService : IUserPreferenceService
             UserId = pref.UserId,
             RadioKm = pref.RadioKm,
             Extension = pref.Extension,
+            GenreIds = pref.Genres?.Select(x => x.GenreId).ToList() ?? new(),
             CreatedAt = pref.CreatedAt,
             UpdatedAt = pref.UpdatedAt,
             Location = new GeoPointDto

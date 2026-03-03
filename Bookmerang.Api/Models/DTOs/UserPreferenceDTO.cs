@@ -14,6 +14,7 @@ public class UserPreferenceDto
 
     public int RadioKm { get; set; }
     public BooksExtension Extension { get; set; }
+    public List<int> GenreIds { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
