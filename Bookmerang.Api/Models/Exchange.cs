@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Text.RegularExpressions;
 
 
 namespace Bookmerang.Api.Models;
@@ -30,8 +29,8 @@ public class Exchange {
     [Column("match_id")]
     public int MatchId { get; set; }
 
-    [ForeignKey(nameof(MatchId))]
-    public Match Match { get; set; }= null!; //FK
+    //[ForeignKey(nameof(MatchId))]
+    //public Match Match { get; set; } = null!; // TODO: create Match entity
 
     //status exchange_status [not null]
     [Required]

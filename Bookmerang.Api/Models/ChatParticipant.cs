@@ -21,5 +21,5 @@ public class ChatParticipant
     public Chat Chat { get; set; } = null!;
 
     [ForeignKey("UserId")]
-    public BaseUser User { get; set; } = null!;
+    public User User { get; set; } = null!;
 }

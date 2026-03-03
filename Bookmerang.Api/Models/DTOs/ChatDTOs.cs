@@ -53,8 +53,8 @@ public static class ChatExtensions
 
     public static ChatParticipantDto ToDto(this ChatParticipant participant) => new(
         participant.UserId,
-        participant.User?.Username ?? string.Empty,
-        participant.User?.ProfilePhoto ?? string.Empty,
+        participant.User?.BaseUser?.Username ?? string.Empty,
+        participant.User?.BaseUser?.ProfilePhoto ?? string.Empty,
         participant.JoinedAt
     );
 
@@ -62,7 +62,7 @@ public static class ChatExtensions
         message.Id,
         message.ChatId,
         message.SenderId,
-        message.Sender?.Username ?? string.Empty,
+        message.Sender?.BaseUser?.Username ?? string.Empty,
         message.Body,
         message.SentAt
     );

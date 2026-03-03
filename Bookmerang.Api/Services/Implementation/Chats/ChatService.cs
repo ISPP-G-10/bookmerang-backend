@@ -20,6 +20,7 @@ public class ChatService(AppDbContext db) : IChatService
         var chats = await _db.Chats
             .Include(c => c.Participants)
                 .ThenInclude(p => p.User)
+                    .ThenInclude(u => u.BaseUser)
             .Where(c => chatIds.Contains(c.Id))
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
@@ -30,6 +31,7 @@ public class ChatService(AppDbContext db) : IChatService
         {
             var lastMessage = await _db.Messages
                 .Include(m => m.Sender)
+                    .ThenInclude(s => s.BaseUser)
                 .Where(m => m.ChatId == chat.Id)
                 .OrderByDescending(m => m.SentAt)
                 .FirstOrDefaultAsync();
@@ -53,12 +55,14 @@ public class ChatService(AppDbContext db) : IChatService
         var chat = await _db.Chats
             .Include(c => c.Participants)
                 .ThenInclude(p => p.User)
+                    .ThenInclude(u => u.BaseUser)
             .FirstOrDefaultAsync(c => c.Id == chatId);
 
         if (chat == null) return null;
 
         var lastMessage = await _db.Messages
             .Include(m => m.Sender)
+                .ThenInclude(s => s.BaseUser)
             .Where(m => m.ChatId == chatId)
             .OrderByDescending(m => m.SentAt)
             .FirstOrDefaultAsync();
@@ -73,6 +77,7 @@ public class ChatService(AppDbContext db) : IChatService
 
         var messages = await _db.Messages
             .Include(m => m.Sender)
+                .ThenInclude(s => s.BaseUser)
             .Where(m => m.ChatId == chatId)
             .OrderByDescending(m => m.SentAt)
             .Skip((page - 1) * pageSize)
@@ -104,6 +109,7 @@ public class ChatService(AppDbContext db) : IChatService
         // Recargar con el sender incluido
         var saved = await _db.Messages
             .Include(m => m.Sender)
+                .ThenInclude(s => s.BaseUser)
             .FirstAsync(m => m.Id == message.Id);
 
         return saved.ToDto();
@@ -115,7 +121,7 @@ public class ChatService(AppDbContext db) : IChatService
             return null;
 
         // Verificar que todos los usuarios existen
-        var existingUsers = await _db.Users
+        var existingUsers = await _db.RegularUsers
             .Where(u => participantIds.Contains(u.Id))
             .Select(u => u.Id)
             .ToListAsync();
@@ -157,6 +163,7 @@ public class ChatService(AppDbContext db) : IChatService
         var chat = await _db.Chats
             .Include(c => c.Participants)
                 .ThenInclude(p => p.User)
+                    .ThenInclude(u => u.BaseUser)
             .FirstOrDefaultAsync(c => c.Id == chatId);
 
         return chat?.ToDto();
