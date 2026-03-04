@@ -1,16 +1,16 @@
-using Bookmerang.Api.Configuration;
-using Bookmerang.Api.Data;
 using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Implementation.Auth;
-using Bookmerang.Api.Services.Interfaces.Chats;
-using Bookmerang.Api.Services.Implementation.Chats;
+using Bookmerang.Api.Services.Interfaces.Books;
+using Bookmerang.Api.Services.Implementation.Books;
+using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
-using Bookmerang.Api.Services.Interfaces.Matcher;
-using Bookmerang.Api.Services.Implementation.Matcher;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
-using Npgsql.NameTranslation;
+using Bookmerang.Api.Data;
+using Bookmerang.Api.Middleware;          
+using Microsoft.OpenApi.Models;           
+using Npgsql;
 
 DotNetEnv.Env.Load();
 //DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
@@ -21,28 +21,25 @@ builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEn
 builder.Configuration["Supabase:JwtSecret"] = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET");
 builder.Configuration["Supabase:Url"] = Environment.GetEnvironmentVariable("SUPABASE_URL");
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-
-#pragma warning disable CS0618 // Global type mapper is obsolete in Npgsql 7.0+ but needed for enum mapping with NTS
-Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ChatType>("chat_type", new NpgsqlNullNameTranslator());
-Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookStatus>("book_status", new NpgsqlNullNameTranslator());
-Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookCondition>("book_condition", new NpgsqlNullNameTranslator());
-Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<CoverType>("cover_type", new NpgsqlNullNameTranslator());
-Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<SwipeDirection>("swipe_direction", new NpgsqlNullNameTranslator());
-Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BooksExtension>("books_extension", new NpgsqlNullNameTranslator());
-Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MatchStatus>("match_status", new NpgsqlNullNameTranslator());
-Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeStatus>("exchange_status", new NpgsqlNullNameTranslator());
-#pragma warning restore CS0618
+// Registrar enums de PostgreSQL
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(builder.Configuration.GetConnectionString("DefaultConnection"));
+dataSourceBuilder.MapEnum<BooksExtension>("books_extension");
+dataSourceBuilder.MapEnum<CoverType>("cover_type");
+dataSourceBuilder.MapEnum<BookCondition>("book_condition");
+dataSourceBuilder.MapEnum<BookStatus>("book_status");
+dataSourceBuilder.MapEnum<PricingPlan>("pricing_plan");
+dataSourceBuilder.MapEnum<SwipeDirection>("swipe_direction");
+dataSourceBuilder.MapEnum<MatchStatus>("match_status");
+dataSourceBuilder.MapEnum<ChatType>("chat_type");
+dataSourceBuilder.MapEnum<ExchangeStatus>("exchange_status");
+dataSourceBuilder.UseNetTopologySuite();
+var dataSource = dataSourceBuilder.Build();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(
-        connectionString,
-        o => o.UseNetTopologySuite()
-    ));
+    options.UseNpgsql(dataSource, o => o.UseNetTopologySuite()));
 
-// ===== CONFIGURACIÓN =====
-builder.Services.Configure<MatcherSettings>(
-    builder.Configuration.GetSection(MatcherSettings.SectionName));
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
@@ -95,22 +92,97 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // ===== SERVICIOS =====
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IChatService, ChatService>();
-builder.Services.AddScoped<IMatcherService, MatcherService>();
+builder.Services.AddScoped<IBookRepository, BookRepository>();
+builder.Services.AddScoped<IBookService, BookService>();
+builder.Services.AddScoped<IGenreRepository, GenreRepository>();
+builder.Services.AddScoped<ILanguageRepository, LanguageRepository>(); 
+
+// Temporal: hasta que termine marcher
+builder.Services.AddScoped<IMatcherNotifier, MatcherNotifier>(); // ← nuevo
 
 // ===== CONTROLLERS Y SWAGGER =====
-builder.Services.AddControllers()
-    .AddJsonOptions(opts =>
-    {
-        opts.JsonSerializerOptions.Converters.Add(
-            new System.Text.Json.Serialization.JsonStringEnumConverter());
-    });
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Bookmerang API",
+        Version = "v1",
+        Description = """
+            API de Bookmerang.
+
+            ## Cómo autenticarse
+            1. Abrir la base de datos y en authentication, crear un usuario con email y password (o usar uno existente).
+            2. Ejecuta en PowerShell con tus credenciales:
+            ```
+            Invoke-RestMethod -Method POST `
+              -Uri "http://127.0.0.1:54321/auth/v1/token?grant_type=password" `
+              -Headers @{ "apikey" = "tu_publishable_authentication_key" } `
+              -ContentType "application/json" `
+              -Body '{"email":"tu_email","password":"tu_password"}'
+            ```
+            3. Copia el valor de `access_token` de la respuesta
+            4. Pulsa el botón **Authorize** 🔒 arriba a la derecha
+            5. Escribe: `<tu_access_token>`
+            6. Registrate en la apliacación.
+            """
+    });
+
+    // Botón Authorize en Swagger UI
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Introduce el JWT de Supabase. Ejemplo: `Bearer eyJhbGc...`"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            []
+        }
+    });
+
+    c.EnableAnnotations(); // Activa [SwaggerResponse] en los controladores
+});
 
 var app = builder.Build();
 
+// ===== SEED DE DATOS (TEMPORAL, NO SE COMO SE HARÁ PERO HECHO PARA LAS PRUEBAS DE SUBIR LIBRO)=====
+// Inserta géneros e idiomas en la BD al arrancar si no existen
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await DataSeeder.SeedAsync(db);
+}
+
 app.UseCors();
+
+// ===== MIDDLEWARE DE EXCEPCIONES =====
+// Convierte excepciones en respuestas HTTP con JSON automáticamente
+app.UseMiddleware<ExceptionMiddleware>();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Bookmerang API v1");
+        c.DisplayRequestDuration();
+    });
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -121,6 +193,6 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/", () => "Hello World!");
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();
