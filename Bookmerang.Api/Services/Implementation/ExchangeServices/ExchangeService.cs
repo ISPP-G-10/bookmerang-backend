@@ -2,7 +2,7 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
 
 namespace Bookmerang.Api.Services.Implementation.ExchangeServices;
 
