@@ -8,6 +8,6 @@ public interface IExchangeService
     Task<Exchange?> GetExchangeById(int exchangeId);
     Task<Exchange?> GetExchangeByChatId(int chatId);
     Task<Exchange> CreateExchange(int chatId, int matchId);
-    Task<Exchange> UpdateExchange(int meetingId, UpdateExchangeDto dto);
+    Task<Exchange> UpdateExchange(int exchangeId, UpdateExchangeDto dto);
     Task<bool> DeleteExchange(int exchangeId);
 }

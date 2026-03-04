@@ -10,6 +10,8 @@ using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Matcher;
 using Bookmerang.Api.Services.Implementation.Matcher;
+using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
+using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
@@ -104,6 +106,8 @@ builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<IGenreService, GenreService>();
 builder.Services.AddScoped<IMatcherService, MatcherService>();
+builder.Services.AddScoped<IExchangeService, ExchangeService>();
+builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers()

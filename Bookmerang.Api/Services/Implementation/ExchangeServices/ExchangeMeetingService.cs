@@ -8,10 +8,10 @@ using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Services.Implementation.ExchangeServices;
 
-public class ExchangeMeetingService(AppDbContext db, ExchangeService exchange_service) : IExchangeMeetingService
+public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_service) : IExchangeMeetingService
 {
     private readonly AppDbContext _db = db;
-    private readonly ExchangeService _exchange_service = exchange_service;
+    private readonly IExchangeService _exchange_service = exchange_service;
 
     public async Task<ExchangeMeeting?> GetExchangeMeeting(int meetingId)
     {

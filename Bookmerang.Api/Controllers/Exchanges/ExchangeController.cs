@@ -71,7 +71,7 @@ public class ExchangeController : ControllerBase
             return BadRequest("Se requiere un chat y un match asociados para crear un intercambio.");
 
         var exchange = await _service.CreateExchange(dto.ChatId.Value, dto.MatchId.Value);
-        return CreatedAtAction(nameof(GetExchange), new { supabaseId = exchange.SupabaseId }, exchange.ToDto());
+        return CreatedAtAction(nameof(GetExchange), new { exchangeId = exchange.ExchangeId }, exchange.ToDto());
     }
 
     /// PUT /api/exchange/{exchangeId}
