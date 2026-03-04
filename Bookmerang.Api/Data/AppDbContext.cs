@@ -173,9 +173,9 @@ public class AppDbContext : DbContext
             entity.Property(x => x.CreatedAt).HasColumnName("created_at");
             entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
-            entity.HasOne<User>()
-                .WithMany()
-                .HasForeignKey(x => x.OwnerId);
+            entity.HasOne(b => b.Owner)
+                .WithMany(u => u.Books)
+                .HasForeignKey(b => b.OwnerId);
         });
 
         // ===== BOOK PHOTOS =====
