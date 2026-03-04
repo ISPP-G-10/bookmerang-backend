@@ -17,3 +17,14 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Env
+.env
+.env.*.local
+.env.local
+.env.keys
+.env.*.keys
+.env.*.keys.local
+
+# Interno
+docs

@@ -1,0 +1,70 @@
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
+
+namespace Bookmerang.Api.Models.DTOs;
+
+// ===== Response DTOs =====
+
+public record ChatDto(
+    int Id,
+    string Type,
+    DateTime CreatedAt,
+    List<ChatParticipantDto> Participants,
+    MessageDto? LastMessage
+);
+
+public record ChatParticipantDto(
+    Guid UserId,
+    string Username,
+    string ProfilePhoto,
+    DateTime JoinedAt
+);
+
+public record MessageDto(
+    int Id,
+    int ChatId,
+    Guid SenderId,
+    string SenderUsername,
+    string Body,
+    DateTime SentAt
+);
+
+// ===== Request DTOs =====
+
+public record SendMessageRequest(
+    string Body
+);
+
+public record CreateChatRequest(
+    ChatType Type,
+    List<Guid> ParticipantIds
+);
+
+// ===== Extension Methods =====
+
+public static class ChatExtensions
+{
+    public static ChatDto ToDto(this Chat chat, Message? lastMessage = null) => new(
+        chat.Id,
+        chat.Type.ToString(),
+        chat.CreatedAt,
+        chat.Participants.Select(p => p.ToDto()).ToList(),
+        lastMessage?.ToDto()
+    );
+
+    public static ChatParticipantDto ToDto(this ChatParticipant participant) => new(
+        participant.UserId,
+        participant.User?.BaseUser?.Username ?? string.Empty,
+        participant.User?.BaseUser?.ProfilePhoto ?? string.Empty,
+        participant.JoinedAt
+    );
+
+    public static MessageDto ToDto(this Message message) => new(
+        message.Id,
+        message.ChatId,
+        message.SenderId,
+        message.Sender?.BaseUser?.Username ?? string.Empty,
+        message.Body,
+        message.SentAt
+    );
+}

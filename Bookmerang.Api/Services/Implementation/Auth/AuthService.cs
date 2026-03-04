@@ -1,28 +1,174 @@
+using Bookmerang.Api.Data;
+using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using NetTopologySuite.Geometries;
+using Microsoft.Extensions.Configuration;
+using System.Net.Http.Headers;
 
 namespace Bookmerang.Api.Services.Implementation.Auth;
 
-public class AuthService : IAuthService
+public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
 {
-    public AuthService()
+    private readonly AppDbContext _db = db;
+    private readonly IConfiguration _config = config;
+
+    public async Task<BaseUser?> GetPerfil(string supabaseId)
     {
+        return await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
     }
 
-    public async Task<string> LoginAsync(string email, string password)
+    public async Task<(BaseUser? usuario, bool yaExistia)> Register(string supabaseId, string email, string username, string name, string profilePhoto,
+     BaseUserType type, Point location)
     {
-        // TODO: Implementar lógica de login
-        throw new NotImplementedException();
+        var existe = await _db.Users.AnyAsync(u => u.SupabaseId == supabaseId);
+        if (existe) return (null, true);
+
+        var nuevoUsuario = new BaseUser
+        {
+            SupabaseId = supabaseId,
+            Email = email,
+            Username = username,
+            Name = name,
+            ProfilePhoto = profilePhoto,
+            UserType = type,
+            Location = location
+        };
+
+        _db.Users.Add(nuevoUsuario);
+        await _db.SaveChangesAsync();
+
+        // Si el tipo es USER, crear también la fila en la tabla "users"
+        if (type == BaseUserType.USER)
+        {
+            var regularUser = new User
+            {
+                Id = nuevoUsuario.Id
+            };
+            _db.RegularUsers.Add(regularUser);
+            await _db.SaveChangesAsync();
+            var userProgress = new UserProgress
+            {
+                UserId = regularUser.Id,
+                XpTotal = 0,
+                StreakWeeks = 0,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _db.UserProgresses.Add(userProgress);
+            await _db.SaveChangesAsync();
+
+        }
+
+        return (nuevoUsuario, false);
     }
 
-    public async Task<string> RegisterAsync(string email, string password, string name)
+    public async Task<BaseUser?> UpdatePerfil(string supabaseId,string? username, string? name, string? profilePhoto)
     {
-        // TODO: Implementar lógica de registro
-        throw new NotImplementedException();
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+
+        if (user == null)
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(username))
+            user.Username = username;
+
+        if (!string.IsNullOrWhiteSpace(name))
+            user.Name = name;
+
+        if (!string.IsNullOrWhiteSpace(profilePhoto))
+            user.ProfilePhoto = profilePhoto;
+
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return user;
     }
 
-    public async Task<bool> ValidateTokenAsync(string token)
+    public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail)
+{
+    if (string.IsNullOrWhiteSpace(newEmail))
+        return (null, "El email no puede estar vacío.");
+
+    var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+    if (user == null)
+        return (null, "Usuario no encontrado.");
+
+    var emailExiste = await _db.Users.AnyAsync(u => u.Email == newEmail && u.SupabaseId != supabaseId);
+    if (emailExiste)
+        return (null, "El email ya está en uso.");
+
+    user.Email = newEmail;
+    user.UpdatedAt = DateTime.UtcNow;
+
+    await _db.SaveChangesAsync();
+
+    return (user, null);
+}
+
+    public async Task<BaseUser> DeletePerfil(string supabaseId)
+{
+    var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+    if (user == null)
+        throw new Exception("Usuario no encontrado.");
+
+    var userId = user.Id;
+
+    // 1. Borrar entidades dependientes para evitar FK violations
+    var messages = await _db.Messages.Where(m => m.SenderId == userId).ToListAsync();
+    if (messages.Any()) _db.Messages.RemoveRange(messages);
+
+    var participants = await _db.ChatParticipants.Where(cp => cp.UserId == userId).ToListAsync();
+    if (participants.Any()) _db.ChatParticipants.RemoveRange(participants);
+
+    var userProgress = await _db.UserProgresses.FirstOrDefaultAsync(p => p.UserId == userId);
+    if (userProgress != null) _db.UserProgresses.Remove(userProgress);
+
+    var preferences = await _db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
+    if (preferences != null)
     {
-        // TODO: Implementar validación de token
-        throw new NotImplementedException();
+        var prefGenres = await _db.UserPreferenceGenres
+            .Where(pg => pg.PreferencesId == preferences.Id)
+            .ToListAsync();
+
+        if (prefGenres.Any()) _db.UserPreferenceGenres.RemoveRange(prefGenres);
+        _db.UserPreferences.Remove(preferences);
     }
+
+    var regularUser = await _db.RegularUsers.FindAsync(userId);
+    if (regularUser != null) _db.RegularUsers.Remove(regularUser);
+
+    await _db.SaveChangesAsync();
+
+    // 2. Borrar usuario en tu DB
+    _db.Users.Remove(user);
+    await _db.SaveChangesAsync();
+
+    // 3. Borrar usuario en Supabase Auth
+    var supabaseUrl = _config["SUPABASE_URL"];
+    var serviceRoleKey = _config["SUPABASE_SERVICE_ROLE_KEY"];
+
+    if (string.IsNullOrWhiteSpace(supabaseUrl) || string.IsNullOrWhiteSpace(serviceRoleKey))
+        throw new InvalidOperationException("Supabase configuration missing: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.");
+
+    using var http = new HttpClient();
+    http.BaseAddress = new Uri(supabaseUrl);
+    http.DefaultRequestHeaders.Authorization =
+        new AuthenticationHeaderValue("Bearer", serviceRoleKey);
+
+    var response = await http.DeleteAsync($"/auth/v1/admin/users/{supabaseId}");
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var error = await response.Content.ReadAsStringAsync();
+        throw new Exception($"Error borrando usuario en Supabase Auth: {error}");
+    }
+
+    return user;
+}
+
 }
