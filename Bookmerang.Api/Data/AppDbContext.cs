@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<UserPreferenceGenre> UserPreferenceGenres => Set<UserPreferenceGenre>();
     public DbSet<Genre> Genres => Set<Genre>();
+    public DbSet<UserProgress> UserProgresses => Set<UserProgress>();
     public DbSet<Book> Books => Set<Book>();
     public DbSet<BookPhoto> BookPhotos => Set<BookPhoto>();
     public DbSet<BookGenre> BookGenres => Set<BookGenre>();
@@ -91,6 +92,13 @@ public class AppDbContext : DbContext
                 .WithOne()
                 .HasForeignKey<UserPreference>(x => x.UserId);
         });
+
+        // User → UserProgress (1:1)
+        modelBuilder.Entity<UserProgress>()
+            .HasOne<User>()
+            .WithOne()
+            .HasForeignKey<UserProgress>(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // ===== USER_PREFERENCES =====
         modelBuilder.Entity<UserPreference>(e =>
