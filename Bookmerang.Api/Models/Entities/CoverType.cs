@@ -1,6 +1,6 @@
 using NpgsqlTypes;
 
-namespace Bookmerang.Api.Models.Books.Enums;
+namespace Bookmerang.Api.Models.Entities;
 
 public enum CoverType
 {

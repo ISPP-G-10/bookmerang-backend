@@ -1,4 +1,4 @@
-using Bookmerang.Api.Models.Books;
+using Bookmerang.Api.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bookmerang.Api.Data;

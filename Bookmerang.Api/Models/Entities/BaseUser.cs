@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using NetTopologySuite.Geometries;
 
-namespace Bookmerang.Api.Models;
+namespace Bookmerang.Api.Models.Entities;
 
 [Table("base_users")]
 public class BaseUser

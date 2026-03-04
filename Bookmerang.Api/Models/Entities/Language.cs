@@ -1,4 +1,4 @@
-namespace Bookmerang.Api.Models.Books;
+namespace Bookmerang.Api.Models.Entities;
 
 /// Catálogo de idiomas disponibles.
 public class Language

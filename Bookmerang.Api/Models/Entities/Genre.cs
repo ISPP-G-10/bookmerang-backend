@@ -1,4 +1,4 @@
-namespace Bookmerang.Api.Models.Books;
+namespace Bookmerang.Api.Models.Entities;
 
 public class Genre
 {

@@ -1,9 +1,7 @@
-using Bookmerang.Api.Models.Books;
-using Bookmerang.Api.Models.Books.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Bookmerang.Api.Models;
+namespace Bookmerang.Api.Models.Entities;
 
 [Table("books")]
 public class Book

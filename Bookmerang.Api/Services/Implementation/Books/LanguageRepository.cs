@@ -1,5 +1,5 @@
 using Bookmerang.Api.Data;
-using Bookmerang.Api.Models.Books;
+using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Services.Interfaces.Books;
 using Microsoft.EntityFrameworkCore;
 

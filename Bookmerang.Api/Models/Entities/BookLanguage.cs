@@ -1,4 +1,4 @@
-namespace Bookmerang.Api.Models.Books;
+namespace Bookmerang.Api.Models.Entities;
 
 /// Tabla de unión M:N entre books y languages.
 public class BookLanguage

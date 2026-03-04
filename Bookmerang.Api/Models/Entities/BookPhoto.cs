@@ -1,4 +1,4 @@
-namespace Bookmerang.Api.Models.Books;
+namespace Bookmerang.Api.Models.Entities;
 
 /// Estrategia de fotos: REPLACE completo.
 /// Cuando el usuario gestiona fotos, se eliminan todas las existentes

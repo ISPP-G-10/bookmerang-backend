@@ -1,6 +1,6 @@
 using NpgsqlTypes;
 
-namespace Bookmerang.Api.Models;
+namespace Bookmerang.Api.Models.Entities;
 
 public enum PricingPlan
 {

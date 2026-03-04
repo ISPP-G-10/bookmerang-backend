@@ -4,6 +4,7 @@ using Bookmerang.Api.Services.Interfaces.Auth;
 using System.Security.Claims;
 using NetTopologySuite.Geometries;
 using Bookmerang.Api.Models.DTOs;
+using Bookmerang.Api.Models.Entities;
 
 namespace Bookmeran.Controllers;
 

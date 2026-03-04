@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Bookmerang.Api.Models;
+namespace Bookmerang.Api.Models.Entities;
 
 /// Representa la tabla "users" de Supabase.
 /// Patrón TPT (Table Per Type): comparte el mismo UUID con base_users.

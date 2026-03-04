@@ -1,4 +1,4 @@
-using Bookmerang.Api.Models.Books.Enums;
+using Bookmerang.Api.Models.Entities;
 
 namespace Bookmerang.Api.Models.DTOs.Books.Requests;
 
