@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 using System.Linq;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Data;
@@ -18,7 +19,7 @@ public class UserPreferenceService : IUserPreferenceService
     {
         var pref = await _dbContext.UserPreferences
             .AsNoTracking()
-            .Include(x => x.Genres)
+            .Include(x => x.UserPreferenceGenres)
             .FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
 
         return pref is null ? null : ToDto(pref);
@@ -44,7 +45,9 @@ public class UserPreferenceService : IUserPreferenceService
         pref = new UserPreference
         {
             UserId = user,   
-            CreatedAt = now
+            CreatedAt = now,
+            Location = new Point(request.Longitude, request.Latitude) { SRID = 4326 },
+            Extension = request.Extension
         };
 
         _dbContext.UserPreferences.Add(pref);
@@ -60,7 +63,7 @@ public class UserPreferenceService : IUserPreferenceService
         // Sync genres if provided
         if (request.GenreIds is not null)
         {
-            var repo = _dbContext.Set<UserPreferencesGenre>();
+            var repo = _dbContext.Set<UserPreferenceGenre>();
 
             var existing = await repo
                 .Where(x => x.PreferencesId == pref.Id)
@@ -74,7 +77,7 @@ public class UserPreferenceService : IUserPreferenceService
             var newEntries = request.GenreIds
                 .Where(x => x > 0)
                 .Distinct()
-                .Select(gid => new UserPreferencesGenre { PreferencesId = pref.Id, GenreId = gid })
+                .Select(gid => new UserPreferenceGenre { PreferencesId = pref.Id, GenreId = gid })
                 .ToList();
 
             if (newEntries.Any())
@@ -86,7 +89,7 @@ public class UserPreferenceService : IUserPreferenceService
         }
 
         // Always reload genres for the response
-        pref.Genres = await _dbContext.Set<UserPreferencesGenre>()
+        pref.UserPreferenceGenres = await _dbContext.Set<UserPreferenceGenre>()
             .Where(x => x.PreferencesId == pref.Id)
             .ToListAsync(cancellationToken);
 
@@ -101,7 +104,7 @@ public class UserPreferenceService : IUserPreferenceService
             UserId = pref.UserId,
             RadioKm = pref.RadioKm,
             Extension = pref.Extension,
-            GenreIds = pref.Genres?.Select(x => x.GenreId).ToList() ?? new(),
+            GenreIds = pref.UserPreferenceGenres?.Select(x => x.GenreId).ToList() ?? new(),
             CreatedAt = pref.CreatedAt,
             UpdatedAt = pref.UpdatedAt,
             Location = new GeoPointDto

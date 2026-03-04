@@ -1,4 +1,4 @@
-namespace Bookmerang.Api.Models;
+namespace Bookmerang.Api.Models.Enums;
 
 public enum BooksExtension
 {

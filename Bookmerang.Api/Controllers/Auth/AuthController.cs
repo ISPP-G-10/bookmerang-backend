@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
 using System.Security.Claims;
 using NetTopologySuite.Geometries;
@@ -43,6 +44,19 @@ public class AuthController : ControllerBase
         if (yaExistia) return Conflict("El usuario ya existe en el sistema.");
 
         return CreatedAtAction(nameof(GetPerfil), new { }, usuario!.ToDto());
+    }
+
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> GetMe()
+    {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var usuario = await _authService.GetPerfil(supabaseId);
+        if (usuario == null) return NotFound("Usuario no encontrado en el sistema.");
+
+        return Ok(new { id = usuario.Id });
     }
 
     [HttpGet("perfil")]

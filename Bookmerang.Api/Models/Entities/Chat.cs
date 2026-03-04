@@ -1,7 +1,8 @@
 using System.ComponentModel.DataAnnotations;
+using Bookmerang.Api.Models.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Bookmerang.Api.Models;
+namespace Bookmerang.Api.Models.Entities;
 
 [Table("chats")]
 public class Chat

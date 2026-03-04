@@ -1,5 +1,7 @@
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
@@ -129,11 +131,11 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
     var preferences = await _db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
     if (preferences != null)
     {
-        var prefGenres = await _db.UserPreferencesGenres
+        var prefGenres = await _db.UserPreferenceGenres
             .Where(pg => pg.PreferencesId == preferences.Id)
             .ToListAsync();
 
-        if (prefGenres.Any()) _db.UserPreferencesGenres.RemoveRange(prefGenres);
+        if (prefGenres.Any()) _db.UserPreferenceGenres.RemoveRange(prefGenres);
         _db.UserPreferences.Remove(preferences);
     }
 

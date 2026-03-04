@@ -1,6 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Enums;
 using System.Collections.Generic;
 
 namespace Bookmerang.Api.Models.DTOs;

@@ -1,4 +1,4 @@
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
 
 namespace Bookmerang.Api.Services.Interfaces.Genres;
 

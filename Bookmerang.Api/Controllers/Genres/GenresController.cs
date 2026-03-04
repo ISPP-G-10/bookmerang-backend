@@ -1,4 +1,4 @@
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Services.Interfaces.Genres;
 using Microsoft.AspNetCore.Mvc;
 
