@@ -51,6 +51,8 @@ public class ExchangeService(AppDbContext db): IExchangeService
         if (dto.Status.HasValue)
             exchange.Status = dto.Status.Value;
 
+        // Make sure any existing timestamps have UTC kind before saving
+        exchange.CreatedAt = DateTime.SpecifyKind(exchange.CreatedAt, DateTimeKind.Utc);
         exchange.UpdatedAt = DateTime.UtcNow; //Siempre se actualiza la fecha de actualización
 
         _db.Exchanges.Update(exchange);
@@ -69,6 +71,7 @@ public class ExchangeService(AppDbContext db): IExchangeService
         _db.Exchanges.Remove(exchange);
         await _db.SaveChangesAsync();
         
-        return exchange == null;
+        // return true when deletion is successful
+        return true;
     }
 }

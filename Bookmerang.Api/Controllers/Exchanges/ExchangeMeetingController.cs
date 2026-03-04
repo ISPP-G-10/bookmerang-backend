@@ -5,6 +5,7 @@ using Bookmerang.Api.Data;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
+using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Controllers.Exchanges;
 
@@ -43,7 +44,7 @@ public class ExchangeMeetingController : ControllerBase
         var meeting = await _meetingService.GetExchangeMeeting(meetingId);
         if (meeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
         
-        return Ok(meeting);
+        return Ok(meeting.ToDto());
     }
 
     /// GET /api/exchangemeeting/byUser/{proposerId}
@@ -65,12 +66,19 @@ public class ExchangeMeetingController : ControllerBase
         var userId = await GetCurrentUserId(); // Obtener el userId del usuario autenticado, que será el proposer del meeting
         if (userId == null) return Unauthorized();
 
-        if (dto.ExchangeId == 0 || dto.ExchangeId == null || !dto.ExchangeMode.HasValue || dto.ProposerId == Guid.Empty || dto.ProposerId == null || dto.CustomLocation == null)
+        // require all necessary fields
+        if (dto.ExchangeId == 0 || dto.ExchangeId == null || !dto.ExchangeMode.HasValue || dto.CustomLocation == null || dto.CustomLocation.Length < 2)
             return BadRequest("Faltan propiedades para crear un ExchangeMeeting.");
 
-        var meeting = await _meetingService.CreateExchangeMeeting(dto.ExchangeId.Value, dto.ExchangeMode.Value, userId.Value, dto.BookspotId, dto.ScheduledAt, dto.CustomLocation);
+        // if custom location was not supplied due to serialization issues, just default to the origin
+        Point location;
+        if (dto.CustomLocation != null && dto.CustomLocation.Length >= 2)
+            location = new Point(dto.CustomLocation[0], dto.CustomLocation[1]) { SRID = 4326 };
+        else
+            location = new Point(0, 0) { SRID = 4326 };
+        var meeting = await _meetingService.CreateExchangeMeeting(dto.ExchangeId.Value, dto.ExchangeMode.Value, userId.Value, dto.BookspotId, dto.ScheduledAt, location);
 
-        return CreatedAtAction(nameof(GetExchangeMeeting), new { supabaseId = meeting.SupabaseId }, meeting);
+        return CreatedAtAction(nameof(GetExchangeMeeting), new { supabaseId = meeting.SupabaseId }, meeting.ToDto());
     }
 
     /// PUT /api/exchangemeeting/{meetingId}
@@ -90,7 +98,7 @@ public class ExchangeMeetingController : ControllerBase
         try
         {
             var updatedMeeting = await _meetingService.UpdateExchangeMeeting(meetingId, dto);
-            return Ok(updatedMeeting);
+            return Ok(updatedMeeting.ToDto());
         }
         catch (InvalidOperationException ex)
         {
@@ -132,7 +140,7 @@ public class ExchangeMeetingController : ControllerBase
         try
         {
             var updatedMeeting = await _meetingService.UpdateExchangeMeeting(meetingId, dto);
-            return Ok(updatedMeeting);
+            return Ok(updatedMeeting.ToDto());
         }
         catch (InvalidOperationException ex)
         {

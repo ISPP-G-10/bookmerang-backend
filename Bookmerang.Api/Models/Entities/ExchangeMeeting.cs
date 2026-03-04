@@ -6,7 +6,7 @@ using Bookmerang.Api.Models.Enums;
 
 namespace Bookmerang.Api.Models.Entities;
 
-[Table("exchange_meeting")]
+[Table("exchange_meetings")]
 public class ExchangeMeeting {
     //id int [pk, increment]
     [Key]
@@ -26,9 +26,9 @@ public class ExchangeMeeting {
     [ForeignKey(nameof(ExchangeId))]
     public Exchange Exchange { get; set; } = null!;  // Navigation property
 
-    // mode exchange_mode [not null]
+    // mode column in DB is simply 'mode'
     [Required]
-    [Column("exchange_mode")]
+    [Column("mode")]
     public ExchangeMode ExchangeMode { get; set; } = ExchangeMode.BOOKSPOT;
     
     // bookspot_id int [ref: > bookspots.id]
@@ -54,9 +54,9 @@ public class ExchangeMeeting {
     [ForeignKey(nameof(ProposerId))]
     public User Proposer { get; set; } = null!;  // Navigation property
     
-    // status exchange_meeting_status [not null]
+    // status column in DB is simply 'status'
     [Required]
-    [Column("exchange_meeting_status")]
+    [Column("status")]
     public ExchangeMeetingStatus MeetingStatus { get; set; } = ExchangeMeetingStatus.PROPOSAL;
 
     // mark_as_completed_by_user1 boolean [default: false]

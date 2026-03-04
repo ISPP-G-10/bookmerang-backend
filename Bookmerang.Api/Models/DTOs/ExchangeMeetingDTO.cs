@@ -8,7 +8,7 @@ public record ExchangeMeetingDto(
     int? ExchangeId,
     ExchangeMode? ExchangeMode,
     int? BookspotId,
-    Point? CustomLocation,
+    double[]? CustomLocation, // [x, y] coordinates
     DateTime? ScheduledAt,
     Guid? ProposerId,
     ExchangeMeetingStatus? MeetingStatus,
@@ -32,7 +32,7 @@ public static class ExchangeMeetingExtensions
         meeting.ExchangeId,
         meeting.ExchangeMode,
         meeting.BookspotId,
-        meeting.CustomLocation,
+        meeting.CustomLocation != null ? new double[]{ meeting.CustomLocation.X, meeting.CustomLocation.Y } : null,
         meeting.ScheduledAt,
         meeting.ProposerId,
         meeting.MeetingStatus,

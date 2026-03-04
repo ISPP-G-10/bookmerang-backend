@@ -37,6 +37,8 @@ Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<CoverType>("cover_type", new Np
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<SwipeDirection>("swipe_direction", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MatchStatus>("match_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeStatus>("exchange_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeMode>("exchange_mode", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeMeetingStatus>("exchange_meeting_status", new NpgsqlNullNameTranslator());
 #pragma warning restore CS0618
 
 builder.Services.AddDbContext<AppDbContext>(options =>

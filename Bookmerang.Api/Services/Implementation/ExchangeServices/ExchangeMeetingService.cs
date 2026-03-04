@@ -92,6 +92,10 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
                 meeting.MeetingStatus = dto.MeetingStatus.Value;
         }
 
+        // ensure the exchange's timestamps have UTC kind before saving
+        exchange.CreatedAt = DateTime.SpecifyKind(exchange.CreatedAt, DateTimeKind.Utc);
+        exchange.UpdatedAt = DateTime.UtcNow;
+
         _db.ExchangeMeetings.Update(meeting);
         _db.Exchanges.Update(exchange);
         
@@ -119,6 +123,6 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         _db.ExchangeMeetings.Remove(meeting);
         await _db.SaveChangesAsync();
         
-        return meeting == null;
+        return true;
     }
 }
