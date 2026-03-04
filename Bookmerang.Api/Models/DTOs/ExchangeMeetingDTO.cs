@@ -1,16 +1,26 @@
 using NetTopologySuite.Geometries;
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 
 namespace Bookmerang.Api.Models.DTOs;
 
 public record ExchangeMeetingDto(
-    int? ExchangeMeetingId,
-    string? SupabaseId,
     int? ExchangeId,
+    ExchangeMode? ExchangeMode,
+    int? BookspotId,
+    double[]? CustomLocation, // [x, y] coordinates
+    DateTime? ScheduledAt,
+    Guid? ProposerId,
+    ExchangeMeetingStatus? MeetingStatus,
+    bool? MarkAsCompletedByUser1,
+    bool? MarkAsCompletedByUser2
+);
+
+public record UpdateExchangeMeetingDto(
     ExchangeMode? ExchangeMode,
     int? BookspotId,
     Point? CustomLocation,
     DateTime? ScheduledAt,
-    Guid? ProposerId,
     ExchangeMeetingStatus? MeetingStatus,
     bool? MarkAsCompletedByUser1,
     bool? MarkAsCompletedByUser2
@@ -19,12 +29,10 @@ public record ExchangeMeetingDto(
 public static class ExchangeMeetingExtensions
 {
     public static ExchangeMeetingDto ToDto(this ExchangeMeeting meeting) => new(
-        meeting.ExchangeMeetingId,
-        meeting.SupabaseId,
         meeting.ExchangeId,
         meeting.ExchangeMode,
         meeting.BookspotId,
-        meeting.CustomLocation,
+        meeting.CustomLocation != null ? new double[]{ meeting.CustomLocation.X, meeting.CustomLocation.Y } : null,
         meeting.ScheduledAt,
         meeting.ProposerId,
         meeting.MeetingStatus,

@@ -1,8 +1,9 @@
+using Bookmerang.Api.Models.Enums;
+using Bookmerang.Api.Models.Entities;
+
 namespace Bookmerang.Api.Models.DTOs;
 
 public record ExchangeDto(
-    int? ExchangeId,
-    string? SupabaseId,
     int? ChatId,
     int? MatchId,
     ExchangeStatus? Status,
@@ -10,11 +11,15 @@ public record ExchangeDto(
     DateTime? UpdatedAt
 );
 
+public record UpdateExchangeDto(
+    int? ChatId,
+    int? MatchId,
+    ExchangeStatus? Status
+);
+
 public static class ExchangeExtensions
 {
     public static ExchangeDto ToDto(this Exchange exchange) => new(
-        exchange.ExchangeId,
-        exchange.SupabaseId,
         exchange.ChatId,
         exchange.MatchId,
         exchange.Status,

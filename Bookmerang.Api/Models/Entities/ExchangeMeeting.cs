@@ -1,12 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using NetTopologySuite.Geometries;
+using Bookmerang.Api.Models.Enums;
 
 
-namespace Bookmerang.Api.Models;
+namespace Bookmerang.Api.Models.Entities;
 
-[Table("exchange_meeting")]
+[Table("exchange_meetings")]
 public class ExchangeMeeting {
     //id int [pk, increment]
     [Key]
@@ -26,9 +26,9 @@ public class ExchangeMeeting {
     [ForeignKey(nameof(ExchangeId))]
     public Exchange Exchange { get; set; } = null!;  // Navigation property
 
-    // mode exchange_mode [not null]
+    // mode column in DB is simply 'mode'
     [Required]
-    [Column("exchange_mode")]
+    [Column("mode")]
     public ExchangeMode ExchangeMode { get; set; } = ExchangeMode.BOOKSPOT;
     
     // bookspot_id int [ref: > bookspots.id]
@@ -51,19 +51,21 @@ public class ExchangeMeeting {
     [Required]
     [Column("proposer_id")]
     public Guid ProposerId { get; set; } //Esta sí es Guid, pq la PK en User es UUID
-    // [ForeignKey(nameof(ProposerId))]
-    // public User Proposer { get; set; } = null!;  // Navigation property
+    [ForeignKey(nameof(ProposerId))]
+    public User Proposer { get; set; } = null!;  // Navigation property
     
-    // status exchange_meeting_status [not null]
+    // status column in DB is simply 'status'
     [Required]
-    [Column("exchange_meeting_status")]
+    [Column("status")]
     public ExchangeMeetingStatus MeetingStatus { get; set; } = ExchangeMeetingStatus.PROPOSAL;
 
     // mark_as_completed_by_user1 boolean [default: false]
+    //POSIBILIDAD DE DEJARLA A NULL POR DEFECTO PARA PODER DISTINGUIR CUANDO SE HA RECHAZADO EL INTERCAMBIO
     [Column("mark_as_completed_by_user1")]
     public bool MarkAsCompletedByUser1 { get; set; } = false;
 
     // mark_as_completed_by_user2 boolean [default: false]
+    //POSIBILIDAD DE DEJARLA A NULL POR DEFECTO PARA PODER DISTINGUIR CUANDO SE HA RECHAZADO EL INTERCAMBIO
     [Column("mark_as_completed_by_user2")]
     public bool MarkAsCompletedByUser2 { get; set; } = false;
 }
