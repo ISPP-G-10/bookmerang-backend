@@ -1,10 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using NetTopologySuite.Geometries;
+using Bookmerang.Api.Models.Enums;
 
 
-namespace Bookmerang.Api.Models;
+namespace Bookmerang.Api.Models.Entities;
 
 [Table("exchange_meeting")]
 public class ExchangeMeeting {
@@ -51,8 +51,8 @@ public class ExchangeMeeting {
     [Required]
     [Column("proposer_id")]
     public Guid ProposerId { get; set; } //Esta sí es Guid, pq la PK en User es UUID
-    // [ForeignKey(nameof(ProposerId))]
-    // public User Proposer { get; set; } = null!;  // Navigation property
+    [ForeignKey(nameof(ProposerId))]
+    public User Proposer { get; set; } = null!;  // Navigation property
     
     // status exchange_meeting_status [not null]
     [Required]

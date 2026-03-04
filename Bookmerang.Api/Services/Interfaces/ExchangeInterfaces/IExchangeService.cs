@@ -1,4 +1,4 @@
-using Bookmerang.Api.Models;
+using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.DTOs;
 
 namespace Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
