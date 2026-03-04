@@ -25,6 +25,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEnvironmentVariable("CONNECTION_STRING");
 builder.Configuration["Supabase:JwtSecret"] = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET");
 builder.Configuration["Supabase:Url"] = Environment.GetEnvironmentVariable("SUPABASE_URL");
+builder.Configuration["Supabase:ServiceRoleKey"] = Environment.GetEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY");
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
