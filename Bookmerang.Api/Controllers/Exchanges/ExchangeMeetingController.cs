@@ -35,8 +35,6 @@ public class ExchangeMeetingController : ControllerBase
         return user?.Id;
     }
 
-    //Añadir getAll
-
     /// GET /api/exchangemeeting/{meetingId}
     [HttpGet("{meetingId}")]
     public async Task<IActionResult> GetExchangeMeeting(int meetingId)
@@ -48,6 +46,17 @@ public class ExchangeMeetingController : ControllerBase
         if (meeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
         
         return Ok(meeting.ToDto());
+    }
+
+    /// GET /api/exchangemeeting
+    [HttpGet]
+    public async Task<IActionResult> GetAllExchangeMeetings()
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var meetings = await _meetingService.GetAllExchangeMeetings();
+        return Ok(meetings.Select(m => m.ToDto()));
     }
 
     /// GET /api/exchangemeeting/byUser/{proposerId}
@@ -91,7 +100,8 @@ public class ExchangeMeetingController : ControllerBase
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var oldMeeting = (await _meetingService.GetExchangeMeeting(meetingId))!; // Significa que el meeting existe, porque si no se encuentra se lanza una excepción ens el servicio y se devuelve un BadRequest con el mensaje de error.
+        var oldMeeting = await _meetingService.GetExchangeMeeting(meetingId);
+        if (oldMeeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
 
         if(!IsUserAuthorizedToMarkAsCompleted(oldMeeting.ProposerId, userId.Value, dto.MarkAsCompletedByUser1.HasValue, dto.MarkAsCompletedByUser2.HasValue))
         {
@@ -126,7 +136,9 @@ public class ExchangeMeetingController : ControllerBase
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var oldMeeting = (await _meetingService.GetExchangeMeeting(meetingId))!; // Significa que el meeting existe, porque si no se encuentra se lanza una excepción en el servicio y se devuelve un BadRequest con el mensaje de error.
+        var oldMeeting = await _meetingService.GetExchangeMeeting(meetingId);
+        if (oldMeeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
+        
         UpdateExchangeMeetingDto dto;
         
         if(oldMeeting.ProposerId == userId)

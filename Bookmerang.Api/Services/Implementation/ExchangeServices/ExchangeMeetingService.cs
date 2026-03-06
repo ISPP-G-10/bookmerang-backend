@@ -28,6 +28,16 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
             .ToListAsync();
     }
 
+    public async Task<List<ExchangeMeeting>> GetAllExchangeMeetings()
+    {
+        return await _db.ExchangeMeetings.ToListAsync();
+    }
+
+    public async Task<List<ExchangeMeeting>> GetAllExchangeMeetingsByUser(Guid userId)
+    {
+        return await _db.ExchangeMeetings.Where(m => m.ProposerId == userId).ToListAsync();
+    }
+
     // se supone que no da fallo los valores opcionales
     public async Task<ExchangeMeeting> CreateExchangeMeeting(int exchangeId, ExchangeMode exchangeMode, Guid proposerId, int? bookspotId, DateTime? scheduledAt, Point customLocation)
     {

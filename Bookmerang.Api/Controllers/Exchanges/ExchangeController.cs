@@ -42,7 +42,7 @@ public class ExchangeController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var exchange = await _service.GetExchangeById(exchangeId);
-        if (exchange == null) return NotFound("Intercambio no encontrado.");
+        if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
 
         return Ok(exchange.ToDto());
     }
@@ -55,7 +55,7 @@ public class ExchangeController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var exchange = await _service.GetExchangeByChatId(chatId);
-        if (exchange == null) return NotFound("El intercambio correspondiente a ese chat no se ha encontrado.");
+        if (exchange == null) return NotFound($"El intercambio correspondiente al chat con id {chatId} no se ha encontrado.");
 
         return Ok(exchange.ToDto());
     }
