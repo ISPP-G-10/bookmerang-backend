@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Bookmerang.Api.Models.DTOs;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Data;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +34,8 @@ public class ExchangeMeetingController : ControllerBase
         var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
         return user?.Id;
     }
+
+    //Añadir getAll
 
     /// GET /api/exchangemeeting/{meetingId}
     [HttpGet("{meetingId}")]
@@ -67,7 +70,7 @@ public class ExchangeMeetingController : ControllerBase
         if (userId == null) return Unauthorized();
 
         // require all necessary fields
-        if (dto.ExchangeId == 0 || dto.ExchangeId == null || !dto.ExchangeMode.HasValue || dto.CustomLocation == null || dto.CustomLocation.Length < 2)
+        if (dto.ExchangeId == 0 || dto.ExchangeId == null || !dto.ExchangeMode.HasValue || (dto.ExchangeMode == ExchangeMode.CUSTOM && dto.CustomLocation == null))
             return BadRequest("Faltan propiedades para crear un ExchangeMeeting.");
 
         // if custom location was not supplied due to serialization issues, just default to the origin
@@ -78,7 +81,7 @@ public class ExchangeMeetingController : ControllerBase
             location = new Point(0, 0) { SRID = 4326 };
         var meeting = await _meetingService.CreateExchangeMeeting(dto.ExchangeId.Value, dto.ExchangeMode.Value, userId.Value, dto.BookspotId, dto.ScheduledAt, location);
 
-        return CreatedAtAction(nameof(GetExchangeMeeting), new { supabaseId = meeting.SupabaseId }, meeting.ToDto());
+        return CreatedAtAction(nameof(GetExchangeMeeting), meeting.ToDto());
     }
 
     /// PUT /api/exchangemeeting/{meetingId}

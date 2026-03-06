@@ -60,6 +60,19 @@ public class ExchangeController : ControllerBase
         return Ok(exchange.ToDto());
     }
 
+    /// GET /api/exchange
+    [HttpGet]
+    public async Task<IActionResult> GetAllExchanges()
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var exchanges = await _service.GetAllExchanges();
+        if (exchanges == null || exchanges.Count == 0) return NotFound("No se encontraron intercambios en el sistema.");
+
+        return Ok(exchanges.Select(e => e.ToDto()));
+    }
+
     /// POST /api/exchange
     [HttpPost]
     public async Task<IActionResult> CreateExchange([FromBody] ExchangeDto dto)
@@ -74,34 +87,16 @@ public class ExchangeController : ControllerBase
         return CreatedAtAction(nameof(GetExchange), new { exchangeId = exchange.ExchangeId }, exchange.ToDto());
     }
 
-    /// PUT /api/exchange/{exchangeId}
-    [HttpPut("{exchangeId}")]
-    public async Task<IActionResult> UpdateExchange(int exchangeId, [FromBody] UpdateExchangeDto dto)
-    {
-        var userId = await GetCurrentUserId();
-        if (userId == null) return Unauthorized();
-
-        try
-        {
-            var updated = await _service.UpdateExchange(exchangeId, dto);
-            return Ok(updated.ToDto());
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
-
-    [HttpPut("{exchangeId}/accept")]
+    [HttpPatch("{exchangeId}/accept")]
     public async Task<ActionResult> AcceptExchange(int exchangeId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        UpdateExchangeDto dto = new(null, null, ExchangeStatus.ACCEPTED);
+        var newStatus = ExchangeStatus.ACCEPTED;
         try
         {
-            var updated = await _service.UpdateExchange(exchangeId, dto);
+            var updated = await _service.UpdateExchangeStatus(exchangeId, newStatus);
             return Ok(updated.ToDto());
         }
         catch (InvalidOperationException ex)
@@ -110,15 +105,15 @@ public class ExchangeController : ControllerBase
         }
     }
 
-    [HttpPut("{exchangeId}/complete")]
+    [HttpPatch("{exchangeId}/complete")]
     public async Task<ActionResult> CompleteExchange(int exchangeId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
-        UpdateExchangeDto dto = new(null, null, ExchangeStatus.COMPLETED);
+        var newStatus = ExchangeStatus.COMPLETED;
         try
         {
-            var updated = await _service.UpdateExchange(exchangeId, dto);
+            var updated = await _service.UpdateExchangeStatus(exchangeId, newStatus);
             return Ok(updated.ToDto());
         }
         catch (InvalidOperationException ex)
@@ -127,15 +122,15 @@ public class ExchangeController : ControllerBase
         }
     }
 
-    [HttpPut("{exchangeId}/report")]
+    [HttpPatch("{exchangeId}/report")]
     public async Task<ActionResult> ReportExchange(int exchangeId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
-        UpdateExchangeDto dto = new(null, null, ExchangeStatus.INCIDENT);
+        var newStatus = ExchangeStatus.INCIDENT;
         try
         {
-            var updated = await _service.UpdateExchange(exchangeId, dto);
+            var updated = await _service.UpdateExchangeStatus(exchangeId, newStatus);
             return Ok(updated.ToDto());
         }
         catch (InvalidOperationException ex)
@@ -143,10 +138,6 @@ public class ExchangeController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
-
-    //Se puede manejar toda la logica de las variables y demas desde los controladores
-    //Para que el usuario no tenga que tocar nada en el update, que haya endpoints
-    //para todo
 
     /// DELETE /api/exchange/{exchangeId}
     [HttpDelete("{exchangeId}")]
