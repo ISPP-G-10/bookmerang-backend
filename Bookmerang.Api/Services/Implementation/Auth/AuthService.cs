@@ -1,3 +1,4 @@
+using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Entities;
@@ -16,9 +17,53 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
     private readonly AppDbContext _db = db;
     private readonly IConfiguration _config = config;
 
-    public async Task<BaseUser?> GetPerfil(string supabaseId)
+    public async Task<ProfileDto?> GetPerfil(string supabaseId)
     {
-        return await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+        if (user == null) return null;
+
+        var progress = await _db.UserProgresses.FirstOrDefaultAsync(p => p.UserId == user.Id);
+
+        // Lógica de gamificación base
+        var xp = progress?.XpTotal ?? 0;
+        var level = (xp / 1000) + 1; // 1000 XP por nivel
+        var inksToNextLevel = 1000 - (xp % 1000);
+        var progressPercent = (double)(xp % 1000) / 1000.0;
+
+        // Tier basado en el nivel
+        string tier = "BRONCE";
+        if (level >= 50) tier = "DIAMANTE";
+        else if (level >= 25) tier = "PLATINO";
+        else if (level >= 10) tier = "ORO";
+        else if (level >= 5) tier = "PLATA";
+
+        // Bonus basado en racha
+        var streak = progress?.StreakWeeks ?? 0;
+        var bonus = Math.Min(streak * 4, 20); // 4% por semana, máx 20%
+
+        // Simulamos MonthlyInkDrops y DaysUntilReset por ahora o los podemos derivar
+        var monthlyInkDrops = xp % 500; // Solo para mostrar un valor
+        var daysUntilReset = DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month) - DateTime.UtcNow.Day;
+
+        return new ProfileDto
+        {
+            Id = user.Id,
+            SupabaseId = user.SupabaseId,
+            Email = user.Email,
+            Username = user.Username,
+            Name = user.Name,
+            Avatar = user.ProfilePhoto,
+            Latitud = user.Location.Y,
+            Longitud = user.Location.X,
+            Level = level,
+            Tier = tier,
+            MonthlyInkDrops = monthlyInkDrops,
+            DaysUntilReset = daysUntilReset,
+            InksToNextLevel = inksToNextLevel,
+            Progress = progressPercent,
+            Streak = streak,
+            Bonus = bonus
+        };
     }
 
     public async Task<(BaseUser? usuario, bool yaExistia)> Register(string supabaseId, string email, string username, string name, string profilePhoto,
