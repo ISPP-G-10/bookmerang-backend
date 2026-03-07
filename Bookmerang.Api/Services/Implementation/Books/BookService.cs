@@ -17,6 +17,8 @@ public class BookService(
     AppDbContext db 
 ) : IBookService
 {
+    private const int RequiredPhotosToPublish = 5;
+
     // CREAR BORRADOR
     public async Task<BookDetailDTO> CreateDraftAsync(
         string supabaseId,
@@ -69,6 +71,9 @@ public class BookService(
         if (request.Photos.Count > 5)
             throw new ValidationException(
                 $"Un libro puede tener máximo 5 fotos. Se han enviado {request.Photos.Count}.");
+
+        if (request.Photos.Any(p => string.IsNullOrWhiteSpace(p.Url)))
+            throw new ValidationException("Todas las fotos deben incluir una URL válida.");
 
         var newPhotos = request.Photos
             .OrderBy(p => p.Order)
@@ -146,10 +151,19 @@ public class BookService(
         VerifyOwner(book, ownerId);
 
         var errors = new List<string>();
+        if (book.Photos.Count != RequiredPhotosToPublish)
+            errors.Add(
+                $"Debes subir exactamente {RequiredPhotosToPublish} fotos para publicar. Actualmente hay {book.Photos.Count}.");
+        if (string.IsNullOrWhiteSpace(book.Isbn))
+            errors.Add("El ISBN es obligatorio para publicar.");
         if (string.IsNullOrWhiteSpace(book.Titulo))
             errors.Add("El título es obligatorio para publicar.");
         if (string.IsNullOrWhiteSpace(book.Autor))
             errors.Add("El autor es obligatorio para publicar.");
+        if (book.Cover is null)
+            errors.Add("El tipo de tapa es obligatorio para publicar.");
+        if (!book.NumPaginas.HasValue || book.NumPaginas.Value <= 0)
+            errors.Add("El número de páginas es obligatorio para publicar.");
         if (book.Condition is null)
             errors.Add("La condición es obligatoria para publicar.");
         if (!book.BookGenres.Any())
