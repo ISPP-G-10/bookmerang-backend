@@ -6,12 +6,15 @@ using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Api.Services.Implementation.Chats;
 using Bookmerang.Api.Services.Interfaces.Genres;
 using Bookmerang.Api.Services.Implementation.Genres;
+using Bookmerang.Api.Services.Interfaces.Books;
+using Bookmerang.Api.Services.Implementation.Books;
 using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Matcher;
 using Bookmerang.Api.Services.Implementation.Matcher;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
+using Bookmerang.Api.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
@@ -112,6 +115,12 @@ builder.Services.AddScoped<IMatcherService, MatcherService>();
 builder.Services.AddScoped<IExchangeService, ExchangeService>();
 builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
 
+// Books
+builder.Services.AddScoped<IBookService, BookService>();
+builder.Services.AddScoped<IBookRepository, BookRepository>();
+builder.Services.AddScoped<IGenreRepository, GenreRepository>();
+builder.Services.AddScoped<ILanguageRepository, LanguageRepository>();
+
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers()
     .AddJsonOptions(opts =>
@@ -120,11 +129,56 @@ builder.Services.AddControllers()
             new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.EnableAnnotations();
+    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Introduce el token JWT: Bearer {token}"
+    });
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var sequences = new[]
+    {
+        "SELECT setval('books_id_seq',            COALESCE((SELECT MAX(id) FROM books), 0) + 1, false)",
+        "SELECT setval('book_photos_id_seq',       COALESCE((SELECT MAX(id) FROM book_photos), 0) + 1, false)",
+        "SELECT setval('swipes_id_seq',            COALESCE((SELECT MAX(id) FROM swipes), 0) + 1, false)",
+        "SELECT setval('matches_id_seq',           COALESCE((SELECT MAX(id) FROM matches), 0) + 1, false)",
+        "SELECT setval('chats_id_seq',             COALESCE((SELECT MAX(id) FROM chats), 0) + 1, false)",
+        "SELECT setval('messages_id_seq',          COALESCE((SELECT MAX(id) FROM messages), 0) + 1, false)",
+        "SELECT setval('exchanges_id_seq',         COALESCE((SELECT MAX(id) FROM exchanges), 0) + 1, false)",
+        "SELECT setval('user_preferences_id_seq',  COALESCE((SELECT MAX(id) FROM user_preferences), 0) + 1, false)",
+    };
+    foreach (var sql in sequences)
+        db.Database.ExecuteSqlRaw(sql);
+}
+
 app.UseCors();
+app.UseMiddleware<ExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
