@@ -111,4 +111,42 @@ public class ChatController : ControllerBase
 
         return CreatedAtAction(nameof(GetChat), new { chatId = chat.Id }, chat);
     }
+
+    /// Marca que el usuario está escribiendo en un chat.
+    /// POST /api/chat/{chatId}/typing
+    [HttpPost("{chatId:int}/typing")]
+    public async Task<IActionResult> StartTyping(int chatId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var success = await _chatService.StartTyping(chatId, userId.Value);
+        if (!success) return Forbid();
+
+        return NoContent();
+    }
+
+    /// Marca que el usuario dejó de escribir en un chat.
+    /// DELETE /api/chat/{chatId}/typing
+    [HttpDelete("{chatId:int}/typing")]
+    public async Task<IActionResult> StopTyping(int chatId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        await _chatService.StopTyping(chatId, userId.Value);
+        return NoContent();
+    }
+
+    /// Obtiene los usuarios que están escribiendo en un chat.
+    /// GET /api/chat/{chatId}/typing
+    [HttpGet("{chatId:int}/typing")]
+    public async Task<IActionResult> GetTypingUsers(int chatId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var typingUsers = await _chatService.GetTypingUsers(chatId, userId.Value);
+        return Ok(typingUsers);
+    }
 }

@@ -66,10 +66,10 @@ public class AuthController : ControllerBase
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
         if (supabaseId == null) return Unauthorized();
 
-        var usuario = await _authService.GetPerfil(supabaseId);
-        if (usuario == null) return NotFound("Usuario no encontrado en el sistema.");
+        var profile = await _authService.GetPerfil(supabaseId);
+        if (profile == null) return NotFound("Usuario no encontrado en el sistema.");
 
-        return Ok(usuario.ToDto());
+        return Ok(profile);
     }
 
     [HttpPatch("perfil")]
