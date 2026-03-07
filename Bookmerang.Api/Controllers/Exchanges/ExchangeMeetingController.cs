@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Bookmerang.Api.Models.DTOs;
+using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Data;
 using System.Security.Claims;
@@ -17,11 +18,13 @@ namespace Bookmerang.Api.Controllers.Exchanges;
 public class ExchangeMeetingController : ControllerBase
 {
     private readonly IExchangeMeetingService _meetingService;
+    private readonly IExchangeService _exchangeService;
     private readonly AppDbContext _db;
 
-    public ExchangeMeetingController(IExchangeMeetingService meetingService, AppDbContext db)
+    public ExchangeMeetingController(IExchangeMeetingService meetingService, AppDbContext db, IExchangeService exchangeService)
     {
         _meetingService = meetingService;
+        _exchangeService = exchangeService;
         _db = db;
     }
 
@@ -89,7 +92,12 @@ public class ExchangeMeetingController : ControllerBase
         // require all necessary fields
         if (dto.ExchangeId == 0 || dto.ExchangeId == null || !dto.ExchangeMode.HasValue || (dto.ExchangeMode == ExchangeMode.CUSTOM && dto.CustomLocation == null))
             return BadRequest("Faltan propiedades para crear un ExchangeMeeting.");
-
+        
+        var exchange = await _exchangeService.GetExchangeWithMatch(dto.ExchangeId.Value);
+        if (exchange == null) return NotFound($"ExchangeMeeting con id {exchange!.ExchangeId} no encontrado.");
+        
+        if (!IsUserInExchange(userId.Value, exchange!.Match)) return Forbid();
+        
         // if custom location was not supplied due to serialization issues, just default to the origin
         Point location;
         if (dto.CustomLocation != null && dto.CustomLocation.Length >= 2)
@@ -112,8 +120,10 @@ public class ExchangeMeetingController : ControllerBase
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var oldMeeting = await _meetingService.GetExchangeMeeting(meetingId);
+        var oldMeeting = await _meetingService.GetExchangeMeetingWithRelations(meetingId);
         if (oldMeeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
+
+        if (!IsUserInExchange(userId.Value, oldMeeting.Exchange.Match)) return Forbid();
 
         if(!IsUserAuthorizedToMarkAsCompleted(oldMeeting.ProposerId, userId.Value, dto.MarkAsCompletedByUser1 == true, dto.MarkAsCompletedByUser2 == true))
         {
@@ -146,8 +156,8 @@ public class ExchangeMeetingController : ControllerBase
         return true;
     }
 
-    [HttpPut("{meetingId}/accept")]
-    public async Task<IActionResult> AcceptExchangeMeeting(int meetingId)
+    [HttpPut("{meetingId}/complete")]
+    public async Task<IActionResult> CompleteExchange(int meetingId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
@@ -179,18 +189,24 @@ public class ExchangeMeetingController : ControllerBase
         }
     }
 
-    [HttpPut("{meetingId}/refuse")]
-    public async Task<IActionResult> RefuseMeting(int meetingId)
+    private static bool IsUserInExchange(Guid userLoggedId, Match match)
+    {
+        return userLoggedId == match.User1Id || userLoggedId == match.User2Id;
+    }
+
+    [HttpPut("{meetingId}/accept")]
+    public async Task<IActionResult> AcceptExchangeMeeting(int meetingId) 
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var newStatus = ExchangeMeetingStatus.REFUSED;
-        UpdateExchangeMeetingDto dto = new(null, null, null, null, newStatus, null, null);
+        UpdateExchangeMeetingDto dto;
+        dto = new(null, null, null, null, ExchangeMeetingStatus.ACCEPTED, null, null);
+
         try
         {
-            var updated = await _meetingService.UpdateExchangeMeeting(meetingId, dto);
-            return Ok(updated.ToDto());
+            var updatedMeeting = await _meetingService.UpdateExchangeMeeting(meetingId, dto);
+            return Ok(updatedMeeting.ToDto());
         }
         catch (InvalidOperationException ex)
         {
@@ -200,11 +216,18 @@ public class ExchangeMeetingController : ControllerBase
 
 
     /// DELETE /api/exchangemeeting/{meetingId}
+    /// Llamar a este endpoint cuando se rechace una quedada (se borran directamente)
     [HttpDelete("{meetingId}")]
     public async Task<IActionResult> DeleteExchangeMeeting(int meetingId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
+
+        var oldMeeting = await _meetingService.GetExchangeMeetingWithRelations(meetingId);
+
+        if (oldMeeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
+
+        if (!IsUserInExchange(userId.Value, oldMeeting.Exchange.Match)) return Forbid();
 
         try
         {

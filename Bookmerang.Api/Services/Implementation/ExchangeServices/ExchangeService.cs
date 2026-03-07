@@ -14,14 +14,23 @@ public class ExchangeService(AppDbContext db): IExchangeService
     {
         return await _db.Exchanges.FirstOrDefaultAsync(e => e.ExchangeId == exchangeId);
     }
+
+    public async Task<Exchange?> GetExchangeWithMatch(int exchangeId)
+    {
+        return await _db.Exchanges
+            .Include(e => e.Match)
+            .FirstOrDefaultAsync(e => e.ExchangeId == exchangeId);
+    }
+    
     public async Task<Exchange?> GetExchangeByChatId(int chatId)
     {
         return await _db.Exchanges.FirstOrDefaultAsync(e => e.ChatId == chatId);
-    }
+    }    
     public async Task<List<Exchange>> GetAllExchanges()
     {
         return await _db.Exchanges.ToListAsync();
     }
+
     public async Task<Exchange> CreateExchange(int chatId, int matchId)
     {
         await ValidateChatAndMatchExist(chatId, matchId);
@@ -75,6 +84,10 @@ public class ExchangeService(AppDbContext db): IExchangeService
         var exchange = await _db.Exchanges.FirstOrDefaultAsync(e => e.ExchangeId == exchangeId);
         if (exchange == null)
             throw new InvalidOperationException($"Exchange con id {exchangeId} no encontrado");
+        if(exchange.Status == ExchangeStatus.REJECTED)
+        {
+            throw new InvalidOperationException("No se puede modificar un intercambio ya rechazado");
+        }
 
         exchange.Status = newStatus;
 

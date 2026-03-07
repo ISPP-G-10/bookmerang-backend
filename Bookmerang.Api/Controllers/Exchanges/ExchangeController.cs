@@ -16,12 +16,14 @@ namespace Bookmerang.Api.Controllers.Exchanges;
 public class ExchangeController : ControllerBase
 {
     private readonly IExchangeService _service;
+    private readonly IExchangeMeetingService _EMService;
     private readonly AppDbContext _db;
 
-    public ExchangeController (IExchangeService service, AppDbContext db)
+    public ExchangeController (IExchangeService service, AppDbContext db, IExchangeMeetingService EMService)
     {
         _service = service;
         _db = db;
+        _EMService = EMService;
     }
 
     /// Obtiene el Guid del usuario autenticado
@@ -105,12 +107,21 @@ public class ExchangeController : ControllerBase
         }
     }
 
-    [HttpPatch("{exchangeId}/complete")]
-    public async Task<ActionResult> CompleteExchange(int exchangeId)
+    [HttpPatch("{exchangeId}/reject")]
+    public async Task<ActionResult> RejectExchange(int exchangeId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
-        var newStatus = ExchangeStatus.COMPLETED;
+        
+        var meeting = await _EMService.GetMeetingByExchangeId(exchangeId);
+
+        if (meeting != null)
+        {
+            return BadRequest("Para rechazar un intercambio, no debe tener encuentros programados");
+        }
+
+        var newStatus = ExchangeStatus.REJECTED;
+        
         try
         {
             var updated = await _service.UpdateExchangeStatus(exchangeId, newStatus);

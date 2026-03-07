@@ -18,6 +18,14 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         return await _db.ExchangeMeetings.Include(m => m.Proposer).FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
     }
 
+    public async Task<ExchangeMeeting?> GetExchangeMeetingWithRelations(int meetingId)
+    {
+        return await _db.ExchangeMeetings
+            .Include(m => m.Exchange)
+                .ThenInclude(e => e.Match)
+            .FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
+    }
+
     // en teoría no hace falta poner los include según el diseño del modelo (navigation property)
     public async Task<List<ExchangeMeeting>> GetMeetingsByUserId(Guid proposerId)
     {
@@ -32,6 +40,10 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         return await _db.ExchangeMeetings.Include(m => m.Proposer).ToListAsync();
     }
 
+    public async Task<ExchangeMeeting?> GetMeetingByExchangeId(int exchangeId)
+    {
+        return await _db.ExchangeMeetings.FirstOrDefaultAsync(m => m.ExchangeId == exchangeId);
+    }
 
     // se supone que no da fallo los valores opcionales
     public async Task<ExchangeMeeting> CreateExchangeMeeting(int exchangeId, ExchangeMode exchangeMode, Guid proposerId, int? bookspotId, DateTime? scheduledAt, Point customLocation)
