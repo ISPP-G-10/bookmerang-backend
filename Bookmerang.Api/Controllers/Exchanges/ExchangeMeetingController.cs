@@ -48,17 +48,6 @@ public class ExchangeMeetingController : ControllerBase
         return Ok(meeting.ToDto());
     }
 
-    /// GET /api/exchangemeeting
-    [HttpGet]
-    public async Task<IActionResult> GetAllExchangeMeetings()
-    {
-        var userId = await GetCurrentUserId();
-        if (userId == null) return Unauthorized();
-
-        var meetings = await _meetingService.GetAllExchangeMeetings();
-        return Ok(meetings.Select(m => m.ToDto()));
-    }
-
     /// GET /api/exchangemeeting/byUser/{proposerId}
     [HttpGet("byUser/{proposerId:guid}")]
     public async Task<IActionResult> GetMeetingsByUserId(Guid proposerId)
@@ -67,8 +56,27 @@ public class ExchangeMeetingController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var meetings = await _meetingService.GetMeetingsByUserId(proposerId);
-        if (meetings == null || meetings.Count == 0) return NotFound($"No se encontraron ExchangeMeetings para el usuario con id: {proposerId}");
-        return Ok(meetings);
+        if (meetings == null || meetings.Count == 0)
+            return NotFound($"No se encontraron ExchangeMeetings para el usuario con id: {proposerId}");
+
+        // Convert entities to DTOs to prevent JSON serialization errors from NetTopologySuite
+        var meetingsConverted = meetings.Select(m => m.ToDto()).ToList();
+        return Ok(meetingsConverted);
+    }
+
+    /// GET /api/exchangemeeting/all
+    [HttpGet("all")]
+    public async Task<IActionResult> GetAllExchangeMeetings()
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var meetings = await _meetingService.GetAllExchangeMeetings();
+        if (meetings == null || meetings.Count == 0)
+            return NotFound($"No se encontraron ExchangeMeetings");
+
+        var meetingsConverted = meetings.Select(m => m.ToDto()).ToList();
+        return Ok(meetingsConverted);
     }
 
     /// POST /api/exchangemeeting
@@ -90,7 +98,11 @@ public class ExchangeMeetingController : ControllerBase
             location = new Point(0, 0) { SRID = 4326 };
         var meeting = await _meetingService.CreateExchangeMeeting(dto.ExchangeId.Value, dto.ExchangeMode.Value, userId.Value, dto.BookspotId, dto.ScheduledAt, location);
 
-        return CreatedAtAction(nameof(GetExchangeMeeting), meeting.ToDto());
+        // Se asigna el id para que se pueda buscar el exchange meeting para devolverlo
+        return CreatedAtAction(
+            nameof(GetExchangeMeeting),
+            new { meetingId = meeting.ExchangeMeetingId },
+            meeting.ToDto());
     }
 
     /// PUT /api/exchangemeeting/{meetingId}
@@ -103,7 +115,13 @@ public class ExchangeMeetingController : ControllerBase
         var oldMeeting = await _meetingService.GetExchangeMeeting(meetingId);
         if (oldMeeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
 
-        if(!IsUserAuthorizedToMarkAsCompleted(oldMeeting.ProposerId, userId.Value, dto.MarkAsCompletedByUser1.HasValue, dto.MarkAsCompletedByUser2.HasValue))
+        if(!IsUserAuthorizedToMarkAsCompleted(oldMeeting.ProposerId, userId.Value, dto.MarkAsCompletedByUser1 == true, dto.MarkAsCompletedByUser2 == true))
+        {
+            return Forbid();
+        }
+
+        //Desde este update el usuario no debería poder cambiar el estado del meeting
+        if (dto.MeetingStatus.HasValue && dto.MeetingStatus != oldMeeting.MeetingStatus)
         {
             return Forbid();
         }
@@ -119,13 +137,11 @@ public class ExchangeMeetingController : ControllerBase
         }
     }
 
-    private bool IsUserAuthorizedToMarkAsCompleted(Guid proposerId, Guid userId, bool marked1, bool marked2)
+    private static bool IsUserAuthorizedToMarkAsCompleted(Guid proposerId, Guid userId, bool marked1, bool marked2)
     {
         // Solo el proposer del meeting puede marcarlo como aceptado
-        if (userId == proposerId && marked2)
-            return false;
-        else if (userId != proposerId && marked1)
-            return false;
+        if (marked1 && userId != proposerId) return false;
+        if (marked2 && userId == proposerId) return false;
         
         return true;
     }
@@ -162,6 +178,26 @@ public class ExchangeMeetingController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
+
+    [HttpPut("{meetingId}/refuse")]
+    public async Task<IActionResult> RefuseMeting(int meetingId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var newStatus = ExchangeMeetingStatus.REFUSED;
+        UpdateExchangeMeetingDto dto = new(null, null, null, null, newStatus, null, null);
+        try
+        {
+            var updated = await _meetingService.UpdateExchangeMeeting(meetingId, dto);
+            return Ok(updated.ToDto());
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
 
     /// DELETE /api/exchangemeeting/{meetingId}
     [HttpDelete("{meetingId}")]

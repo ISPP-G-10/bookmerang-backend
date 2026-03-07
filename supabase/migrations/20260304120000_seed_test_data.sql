@@ -197,7 +197,7 @@ ON CONFLICT (id) DO NOTHING;
 -- 15. EXCHANGE_MEETING
 -- ──────────────────────────────────────────────────────────────
 INSERT INTO exchange_meetings (id, exchange_id, mode, custom_location, proposer_id, status, scheduled_at) VALUES
-  (1, 1, 'BOOKSPOT', ST_MakePoint(-5.9845, 37.3891)::geography, alice_id, 'PROPOSAL', now_ts + INTERVAL '1 day')
+  (1, 1, 'CUSTOM', ST_MakePoint(-5.9845, 37.3891)::geography, alice_id, 'PROPOSAL', now_ts + INTERVAL '1 day')
 ON CONFLICT (id) DO NOTHING;
 
 

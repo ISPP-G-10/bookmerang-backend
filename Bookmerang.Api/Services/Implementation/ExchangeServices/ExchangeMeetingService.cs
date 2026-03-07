@@ -15,32 +15,36 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
 
     public async Task<ExchangeMeeting?> GetExchangeMeeting(int meetingId)
     {
-        return await _db.ExchangeMeetings.FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
+        return await _db.ExchangeMeetings.Include(m => m.Proposer).FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
     }
 
     // en teoría no hace falta poner los include según el diseño del modelo (navigation property)
     public async Task<List<ExchangeMeeting>> GetMeetingsByUserId(Guid proposerId)
     {
         return await _db.ExchangeMeetings
-            // .Include(m => m.Bookspot)
-            // .Include(m => m.User)
+            .Include(m => m.Proposer)
             .Where(m => m.ProposerId == proposerId)
             .ToListAsync();
     }
 
     public async Task<List<ExchangeMeeting>> GetAllExchangeMeetings()
     {
-        return await _db.ExchangeMeetings.ToListAsync();
+        return await _db.ExchangeMeetings.Include(m => m.Proposer).ToListAsync();
     }
 
-    public async Task<List<ExchangeMeeting>> GetAllExchangeMeetingsByUser(Guid userId)
-    {
-        return await _db.ExchangeMeetings.Where(m => m.ProposerId == userId).ToListAsync();
-    }
 
     // se supone que no da fallo los valores opcionales
     public async Task<ExchangeMeeting> CreateExchangeMeeting(int exchangeId, ExchangeMode exchangeMode, Guid proposerId, int? bookspotId, DateTime? scheduledAt, Point customLocation)
     {
+
+        if(scheduledAt != null && scheduledAt < DateTime.UtcNow.AddMinutes(5))
+        {
+            throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próximo a ella");
+        }
+        if(exchangeMode == ExchangeMode.BOOKSPOT && bookspotId == null)
+        {
+            throw new ArgumentException("Se debe indicar el bookspot en el que se va a producir el encuentro");
+        }
         var meeting = new ExchangeMeeting
         {
             ExchangeId = exchangeId,
@@ -64,12 +68,22 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
             throw new InvalidOperationException($"Meeting con id {meetingId} no encontrado");
         
         var exchange = await _exchange_service.GetExchangeById(meeting.ExchangeId);
+        var oldStatus = exchange!.Status;
         
         if (exchange == null)
             throw new InvalidOperationException($"Exchange con id {meeting.ExchangeId} no encontrado");
 
         if (IsAllNull(dto)) 
-            throw new InvalidOperationException("Al menos un parámetro debe tener un valor");        
+            throw new InvalidOperationException("Al menos un parámetro debe tener un valor");
+
+        if(dto.ScheduledAt != null && dto.ScheduledAt < DateTime.UtcNow.AddMinutes(5))
+        {
+            throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próximo a ella");
+        }
+        if(dto.ExchangeMode == ExchangeMode.BOOKSPOT && dto.BookspotId == null)
+        {
+            throw new ArgumentException("Se debe indicar el bookspot en el que se va a producir el encuentro");
+        }        
 
         if (dto.ExchangeMode.HasValue)
             meeting.ExchangeMode = dto.ExchangeMode.Value;
@@ -77,11 +91,15 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         if (dto.BookspotId.HasValue)
             meeting.BookspotId = dto.BookspotId.Value;
 
-        if (dto.CustomLocation != null)
-            meeting.CustomLocation = dto.CustomLocation;
+        if (dto.CustomLocation != null && dto.CustomLocation.Length >= 2)
+            meeting.CustomLocation = new Point(dto.CustomLocation[0], dto.CustomLocation[1]) { SRID = 4326 };
 
         if (dto.ScheduledAt.HasValue)
-            meeting.ScheduledAt = dto.ScheduledAt.Value;
+            meeting.ScheduledAt = DateTime.SpecifyKind(dto.ScheduledAt.Value, DateTimeKind.Utc); //Conversión explicita a utc
+
+        meeting.ScheduledAt = meeting.ScheduledAt.HasValue //Si no se entra en el if anterior, la fecha puede quedar como unspecified, eso da fallos en el update
+        ? DateTime.SpecifyKind(meeting.ScheduledAt.Value, DateTimeKind.Utc)
+        : null;
 
         if (dto.MarkAsCompletedByUser1.HasValue)
             meeting.MarkAsCompletedByUser1 = dto.MarkAsCompletedByUser1.Value;
@@ -92,22 +110,23 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         if (IsCompleted(dto)) {
             exchange.Status = ExchangeStatus.COMPLETED;
         }
-        else if (IsRefused(dto)) // estaria bien si por defecto fuesen null los campos de marcar como completado
-        {
-            exchange.Status = ExchangeStatus.REJECTED;
-        }
         else
         {
             if (dto.MeetingStatus.HasValue)
                 meeting.MeetingStatus = dto.MeetingStatus.Value;
         }
 
-        // ensure the exchange's timestamps have UTC kind before saving
-        exchange.CreatedAt = DateTime.SpecifyKind(exchange.CreatedAt, DateTimeKind.Utc);
-        exchange.UpdatedAt = DateTime.UtcNow;
+        if(exchange.Status != oldStatus)
+        {
+            // ensure the exchange's timestamps have UTC kind before saving
+            exchange.CreatedAt = DateTime.SpecifyKind(exchange.CreatedAt, DateTimeKind.Utc);
+            exchange.UpdatedAt = DateTime.UtcNow;
+            _db.Exchanges.Update(exchange);
+        }
 
+        
+        
         _db.ExchangeMeetings.Update(meeting);
-        _db.Exchanges.Update(exchange);
         
         await _db.SaveChangesAsync();
 
@@ -122,9 +141,6 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
 
     private bool IsCompleted(UpdateExchangeMeetingDto dto)
     => dto.MarkAsCompletedByUser1 == true && dto.MarkAsCompletedByUser2 == true;
-
-    private bool IsRefused(UpdateExchangeMeetingDto dto)
-    => dto.MarkAsCompletedByUser1 == false && dto.MarkAsCompletedByUser2 == false;
 
     public async Task<bool> DeleteExchangeMeeting(int meetingId)
     {
