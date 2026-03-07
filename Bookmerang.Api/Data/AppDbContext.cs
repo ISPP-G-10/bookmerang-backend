@@ -27,6 +27,7 @@ public class AppDbContext : DbContext
     public DbSet<BookLanguage> BookLanguages => Set<BookLanguage>();
     public DbSet<Swipe> Swipes => Set<Swipe>();
     public DbSet<Match> Matches => Set<Match>();
+    public DbSet<TypingIndicator> TypingIndicators => Set<TypingIndicator>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -296,6 +297,28 @@ public class AppDbContext : DbContext
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
             e.HasIndex(x => x.ChatId).IsUnique();
+        });
+
+        // ===== TYPING_INDICATORS =====
+        modelBuilder.Entity<TypingIndicator>(e =>
+        {
+            e.ToTable("typing_indicators");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ChatId).HasColumnName("chat_id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.StartedAt).HasColumnName("started_at");
+
+            e.HasIndex(x => new { x.ChatId, x.UserId }).IsUnique();
+
+            e.HasOne(x => x.Chat)
+                .WithMany()
+                .HasForeignKey(x => x.ChatId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

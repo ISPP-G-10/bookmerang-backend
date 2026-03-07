@@ -159,6 +159,71 @@ public class ChatService(AppDbContext db) : IChatService
             .AnyAsync(cp => cp.ChatId == chatId && cp.UserId == userId);
     }
 
+    public async Task<bool> StartTyping(int chatId, Guid userId)
+    {
+        if (!await IsParticipant(chatId, userId))
+            return false;
+
+        // Verificar si ya existe un registro de typing
+        var existingTyping = await _db.TypingIndicators
+            .FirstOrDefaultAsync(t => t.ChatId == chatId && t.UserId == userId);
+
+        if (existingTyping != null)
+        {
+            // Actualizar el timestamp
+            existingTyping.StartedAt = DateTime.UtcNow;
+            _db.TypingIndicators.Update(existingTyping);
+        }
+        else
+        {
+            // Crear nuevo registro
+            var typing = new TypingIndicator
+            {
+                ChatId = chatId,
+                UserId = userId,
+                StartedAt = DateTime.UtcNow
+            };
+            _db.TypingIndicators.Add(typing);
+        }
+
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> StopTyping(int chatId, Guid userId)
+    {
+        var typingIndicator = await _db.TypingIndicators
+            .FirstOrDefaultAsync(t => t.ChatId == chatId && t.UserId == userId);
+
+        if (typingIndicator == null)
+            return false;
+
+        _db.TypingIndicators.Remove(typingIndicator);
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<List<TypingUserDto>> GetTypingUsers(int chatId, Guid userId)
+    {
+        if (!await IsParticipant(chatId, userId))
+            return new List<TypingUserDto>();
+
+        // Obtener usuarios que están escribiendo (excluyendo al usuario actual)
+        // También filtrar indicadores antiguos (más de 5 segundos)
+        var timeoutThreshold = DateTime.UtcNow.AddSeconds(-5);
+
+        var typingUsers = await _db.TypingIndicators
+            .Include(t => t.User)
+                .ThenInclude(u => u.BaseUser)
+            .Where(t => t.ChatId == chatId 
+                && t.UserId != userId 
+                && t.StartedAt > timeoutThreshold)
+            .Select(t => t.ToDto())
+            .ToListAsync();
+
+        return typingUsers;
+    }
+
     private async Task<ChatDto?> GetChatByIdInternal(int chatId)
     {
         var chat = await _db.Chats

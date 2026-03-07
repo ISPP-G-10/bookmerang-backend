@@ -24,4 +24,13 @@ public interface IChatService
 
     /// Verifica si un usuario es participante de un chat.
     Task<bool> IsParticipant(int chatId, Guid userId);
+
+    /// Marca que un usuario está escribiendo en un chat.
+    Task<bool> StartTyping(int chatId, Guid userId);
+
+    /// Marca que un usuario dejó de escribir en un chat.
+    Task<bool> StopTyping(int chatId, Guid userId);
+
+    /// Obtiene la lista de usuarios que están escribiendo en un chat.
+    Task<List<TypingUserDto>> GetTypingUsers(int chatId, Guid userId);
 }
