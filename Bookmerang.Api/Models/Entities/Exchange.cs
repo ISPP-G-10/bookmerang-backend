@@ -5,18 +5,13 @@ using Bookmerang.Api.Models.Enums;
 
 namespace Bookmerang.Api.Models.Entities;
 
-[Table("exchange")]
+[Table("exchanges")]
 public class Exchange {
     //id int [pk, increment]
     [Key]
-    [Column("exchange_id")]
+    [Column("id")]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int ExchangeId { get; set; }
-
-    // Atributo de Supabase NO QUITAR
-    // [Required]
-    // [Column("supabase_id")]
-    // public string SupabaseId { get; set; } = string.Empty;
 
     //chat_id int [not null, unique, note: '1 chat = 1 exchange']
     [Required]
@@ -35,7 +30,7 @@ public class Exchange {
 
     //status exchange_status [not null]
     [Required]
-    [Column("exchange_status")]
+    [Column("status")]
     public ExchangeStatus Status { get; set; } = ExchangeStatus.NEGOTIATING;
 
     // created_at timestamp [not null]
