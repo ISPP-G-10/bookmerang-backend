@@ -14,9 +14,9 @@ public class Exchange {
     public int ExchangeId { get; set; }
 
     // Atributo de Supabase NO QUITAR
-    [Required]
-    [Column("supabase_id")]
-    public string SupabaseId { get; set; } = string.Empty;
+    // [Required]
+    // [Column("supabase_id")]
+    // public string SupabaseId { get; set; } = string.Empty;
 
     //chat_id int [not null, unique, note: '1 chat = 1 exchange']
     [Required]

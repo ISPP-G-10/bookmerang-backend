@@ -50,13 +50,13 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Exchange>(entity =>
         {
-            entity.HasIndex(e => e.SupabaseId).IsUnique();
+            // entity.HasIndex(e => e.SupabaseId).IsUnique();
             entity.HasIndex(e => e.ChatId).IsUnique();
         });
 
         modelBuilder.Entity<ExchangeMeeting>(entity =>
         {
-            entity.HasIndex(em => em.SupabaseId).IsUnique();
+            // entity.HasIndex(em => em.SupabaseId).IsUnique();
             entity.HasIndex(em => em.ExchangeId).IsUnique();
         });
 
@@ -299,7 +299,23 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.ChatId).IsUnique();
         });
 
-        // ===== TYPING_INDICATORS =====
+        modelBuilder.Entity<ExchangeMeeting>(e =>
+        {
+            e.ToTable("exchange_meetings");
+            e.Property(x => x.ExchangeMeetingId).HasColumnName("id");
+            e.Property(x => x.ExchangeId).HasColumnName("exchange_id");
+            e.Property(x => x.ExchangeMode).HasColumnName("mode");
+            e.Property(x => x.BookspotId).HasColumnName("bookspot_id");
+            e.Property(x => x.CustomLocation).HasColumnName("custom_location");
+            e.Property(x => x.ScheduledAt).HasColumnName("scheduled_at");
+            e.Property(x => x.ProposerId).HasColumnName("proposer_id");
+            e.Property(x => x.MeetingStatus).HasColumnName("status");
+            e.Property(x => x.MarkAsCompletedByUser1).HasColumnName("mark_as_completed_by_user1");
+            e.Property(x => x.MarkAsCompletedByUser2).HasColumnName("mark_as_completed_by_user2");
+
+            e.HasIndex(x => x.ExchangeId).IsUnique();
+        });
+
         modelBuilder.Entity<TypingIndicator>(e =>
         {
             e.ToTable("typing_indicators");
