@@ -50,13 +50,11 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Exchange>(entity =>
         {
-            // entity.HasIndex(e => e.SupabaseId).IsUnique();
             entity.HasIndex(e => e.ChatId).IsUnique();
         });
 
         modelBuilder.Entity<ExchangeMeeting>(entity =>
         {
-            // entity.HasIndex(em => em.SupabaseId).IsUnique();
             entity.HasIndex(em => em.ExchangeId).IsUnique();
         });
 

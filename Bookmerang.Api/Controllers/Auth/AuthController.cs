@@ -116,11 +116,15 @@ public class AuthController : ControllerBase
         try
         {
             var usuario = await _authService.DeletePerfil(supabaseId);
+            if (usuario == null)
+            {
+                return Ok(new { message = "La cuenta ha sido borrada en Supabase. No se encontró perfil local." });
+            }
             return Ok(usuario.ToDto());
         }
         catch (Exception ex)
         {
-            return NotFound(ex.Message);
+            return BadRequest(ex.Message);
         }
     }
     
