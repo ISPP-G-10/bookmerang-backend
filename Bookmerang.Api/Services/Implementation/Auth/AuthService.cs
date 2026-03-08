@@ -155,65 +155,148 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
     return (user, null);
 }
 
-    public async Task<BaseUser> DeletePerfil(string supabaseId)
-{
-    var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
-    if (user == null)
-        throw new Exception("Usuario no encontrado.");
-
-    var userId = user.Id;
-
-    // 1. Borrar entidades dependientes para evitar FK violations
-    var messages = await _db.Messages.Where(m => m.SenderId == userId).ToListAsync();
-    if (messages.Any()) _db.Messages.RemoveRange(messages);
-
-    var participants = await _db.ChatParticipants.Where(cp => cp.UserId == userId).ToListAsync();
-    if (participants.Any()) _db.ChatParticipants.RemoveRange(participants);
-
-    var userProgress = await _db.UserProgresses.FirstOrDefaultAsync(p => p.UserId == userId);
-    if (userProgress != null) _db.UserProgresses.Remove(userProgress);
-
-    var preferences = await _db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
-    if (preferences != null)
+    public async Task<BaseUser?> DeletePerfil(string supabaseId)
     {
-        var prefGenres = await _db.UserPreferenceGenres
-            .Where(pg => pg.PreferencesId == preferences.Id)
-            .ToListAsync();
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+        
+        if (user == null)
+        {
+            // El usuario no está en la base de datos local, pero intentamos limpiarlo de Supabase por si acaso
+            await DeleteFromSupabaseAuth(supabaseId);
+            return null;
+        }
 
-        if (prefGenres.Any()) _db.UserPreferenceGenres.RemoveRange(prefGenres);
-        _db.UserPreferences.Remove(preferences);
+        var userId = user.Id;
+
+        // 1. Validar intercambios activos (Cualquiera que no sea COMPLETED o REJECTED)
+        var hasActiveExchanges = await _db.Exchanges
+            .Include(e => e.Match)
+            .AnyAsync(e => (e.Match.User1Id == userId || e.Match.User2Id == userId) && 
+                           e.Status != ExchangeStatus.COMPLETED && 
+                           e.Status != ExchangeStatus.REJECTED);
+
+        if (hasActiveExchanges)
+        {
+            throw new Exception("No puedes borrar tu cuenta porque tienes intercambios en proceso.");
+        }
+
+        // 2. Borrar de Supabase Auth PRIMERO para evitar inconsistencias si falla la conexión
+        await DeleteFromSupabaseAuth(supabaseId);
+
+        // 3. Borrado en cascada local manual (ya que EF tiene Restrict/NoAction en muchas de estas)
+
+        // TypingIndicators
+        var typingIndicators = await _db.TypingIndicators.Where(t => t.UserId == userId).ToListAsync();
+        if (typingIndicators.Any()) _db.TypingIndicators.RemoveRange(typingIndicators);
+
+        // Messages
+        var messages = await _db.Messages.Where(m => m.SenderId == userId).ToListAsync();
+        if (messages.Any()) _db.Messages.RemoveRange(messages);
+
+        // ChatPart
+        // icipants
+        var participants = await _db.ChatParticipants.Where(cp => cp.UserId == userId).ToListAsync();
+        if (participants
+        .Any()) _db.ChatParticipants.RemoveRange(participants);
+
+        // Matches, Exchanges, ExchangeMeetings
+        var userMatches = await _db.Matches.Where(m => m.User1Id == userId || m.User2Id == userId).ToListAsync();
+        var matchIds = userMatches.Select(m => m.Id).ToList();
+
+        var exchanges = await _db.Exchanges.Where(e => matchIds.Contains(e.MatchId)).ToListAsync();
+        var exchangeIds = exchanges.Select(e => e.ExchangeId).ToList();
+        var chatIds = exchanges.Select(e => e.ChatId).ToList();
+
+        var exchangeMeetings = await _db.ExchangeMeetings.Where(em => exchangeIds.Contains(em.ExchangeId)).ToListAsync();
+        if (exchangeMeetings.Any()) _db.ExchangeMeetings.RemoveRange(exchangeMeetings);
+
+        if (exchanges.Any()) _db.Exchanges.RemoveRange(exchanges);
+        if (userMatches.Any()) _db.Matches.RemoveRange(userMatches);
+
+        // Delete chats linked to exchanges
+        var chats = await _db.Chats.Where(c => chatIds.Contains(c.Id)).ToListAsync();
+        if (chats.Any())
+        {
+            // Also remove remaining messages & participants of these chats from the other user
+            var otherMessages = await _db.Messages.Where(m => chatIds.Contains(m.ChatId)).ToListAsync();
+            if (otherMessages.Any()) _db.Messages.RemoveRange(otherMessages);
+            var otherParticipants = await _db.ChatParticipants.Where(cp => chatIds.Contains(cp.ChatId)).ToListAsync();
+            if (otherParticipants.Any()) _db.ChatParticipants.RemoveRange(otherParticipants);
+            var otherTyping = await _db.TypingIndicators.Where(t => chatIds.Contains(t.ChatId)).ToListAsync();
+            if (otherTyping.Any()) _db.TypingIndicators.RemoveRange(otherTyping);
+
+            _db.Chats.RemoveRange(chats);
+        }
+
+        // Swipes hechos por el usuario
+        var userSwipes = await _db.Swipes.Where(s => s.SwiperId == userId).ToListAsync();
+        if (userSwipes.Any()) _db.Swipes.RemoveRange(userSwipes);
+
+        // Libros y sus dependencias
+        var userBooks = await _db.Books.Where(b => b.OwnerId == userId).ToListAsync();
+        if (userBooks.Any())
+        {
+            var bookIds = userBooks.Select(b => b.Id).ToList();
+
+            var bookPhotos = await _db.BookPhotos.Where(bp => bookIds.Contains(bp.BookId)).ToListAsync();
+            if (bookPhotos.Any()) _db.BookPhotos.RemoveRange(bookPhotos);
+
+            var bookGenres = await _db.BookGenres.Where(bg => bookIds.Contains(bg.BookId)).ToListAsync();
+            if (bookGenres.Any()) _db.BookGenres.RemoveRange(bookGenres);
+
+            var bookLanguages = await _db.BookLanguages.Where(bl => bookIds.Contains(bl.BookId)).ToListAsync();
+            if (bookLanguages.Any()) _db.BookLanguages.RemoveRange(bookLanguages);
+
+            // Swipes recibidos hacia los libros del usuario
+            var swipesToUserBooks = await _db.Swipes.Where(s => bookIds.Contains(s.BookId)).ToListAsync();
+            if (swipesToUserBooks.Any()) _db.Swipes.RemoveRange(swipesToUserBooks);
+
+            _db.Books.RemoveRange(userBooks);
+        }
+
+        // Progreso y Preferencias
+        var userProgress = await _db.UserProgresses.FirstOrDefaultAsync(p => p.UserId == userId);
+        if (userProgress != null) _db.UserProgresses.Remove(userProgress);
+
+        var preferences = await _db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
+        if (preferences != null)
+        {
+            var prefGenres = await _db.UserPreferenceGenres.Where(pg => pg.PreferencesId == preferences.Id).ToListAsync();
+            if (prefGenres.Any()) _db.UserPreferenceGenres.RemoveRange(prefGenres);
+            _db.UserPreferences.Remove(preferences);
+        }
+
+        // Finalmente, el usuario base
+        var regularUser = await _db.RegularUsers.FindAsync(userId);
+        if (regularUser != null) _db.RegularUsers.Remove(regularUser);
+
+        _db.Users.Remove(user);
+
+        await _db.SaveChangesAsync();
+
+        return user;
     }
 
-    var regularUser = await _db.RegularUsers.FindAsync(userId);
-    if (regularUser != null) _db.RegularUsers.Remove(regularUser);
-
-    await _db.SaveChangesAsync();
-
-    // 2. Borrar usuario en tu DB
-    _db.Users.Remove(user);
-    await _db.SaveChangesAsync();
-
-    // 3. Borrar usuario en Supabase Auth
-    var supabaseUrl = _config["SUPABASE_URL"];
-    var serviceRoleKey = _config["SUPABASE_SERVICE_ROLE_KEY"];
-
-    if (string.IsNullOrWhiteSpace(supabaseUrl) || string.IsNullOrWhiteSpace(serviceRoleKey))
-        throw new InvalidOperationException("Supabase configuration missing: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.");
-
-    using var http = new HttpClient();
-    http.BaseAddress = new Uri(supabaseUrl);
-    http.DefaultRequestHeaders.Authorization =
-        new AuthenticationHeaderValue("Bearer", serviceRoleKey);
-
-    var response = await http.DeleteAsync($"/auth/v1/admin/users/{supabaseId}");
-
-    if (!response.IsSuccessStatusCode)
+    private async Task DeleteFromSupabaseAuth(string supabaseId)
     {
-        var error = await response.Content.ReadAsStringAsync();
-        throw new Exception($"Error borrando usuario en Supabase Auth: {error}");
-    }
+        var supabaseUrl = _config["Supabase:Url"] ?? _config["SUPABASE_URL"];
+        var serviceRoleKey = _config["Supabase:ServiceRoleKey"] ?? _config["SUPABASE_SERVICE_ROLE_KEY"];
 
-    return user;
-}
+        if (string.IsNullOrWhiteSpace(supabaseUrl) || string.IsNullOrWhiteSpace(serviceRoleKey))
+            throw new InvalidOperationException("Supabase configuration missing: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.");
+
+        using var http = new HttpClient();
+        http.BaseAddress = new Uri(supabaseUrl);
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", serviceRoleKey);
+        http.DefaultRequestHeaders.Add("apikey", serviceRoleKey);
+
+        var response = await http.DeleteAsync($"/auth/v1/admin/users/{supabaseId}");
+
+        if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw new Exception($"Error borrando usuario en Supabase Auth: {error}");
+        }
+    }
 
 }

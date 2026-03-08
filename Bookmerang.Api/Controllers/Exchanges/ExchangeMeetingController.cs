@@ -78,7 +78,7 @@ public class ExchangeMeetingController : ControllerBase
             location = new Point(0, 0) { SRID = 4326 };
         var meeting = await _meetingService.CreateExchangeMeeting(dto.ExchangeId.Value, dto.ExchangeMode.Value, userId.Value, dto.BookspotId, dto.ScheduledAt, location);
 
-        return CreatedAtAction(nameof(GetExchangeMeeting), new { supabaseId = meeting.SupabaseId }, meeting.ToDto());
+        return CreatedAtAction(nameof(GetExchangeMeeting), new { meetingId = meeting.ExchangeMeetingId }, meeting.ToDto());
     }
 
     /// PUT /api/exchangemeeting/{meetingId}

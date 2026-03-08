@@ -10,14 +10,9 @@ namespace Bookmerang.Api.Models.Entities;
 public class ExchangeMeeting {
     //id int [pk, increment]
     [Key]
-    [Column("exchange_meeting_id")]
+    [Column("id")]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int ExchangeMeetingId { get; set; }
-
-    // Atributo de Supabase NO QUITAR
-    [Required]
-    [Column("supabase_id")]
-    public string SupabaseId { get; set; } = string.Empty;
 
     //exchange_id int [not null, unique, ref: > exchange.id]
     [Required]
@@ -30,14 +25,14 @@ public class ExchangeMeeting {
     [Required]
     [Column("mode")]
     public ExchangeMode ExchangeMode { get; set; } = ExchangeMode.BOOKSPOT;
-    
+
     // bookspot_id int [ref: > bookspots.id]
     [Column("bookspot_id")]
     public int? BookspotId { get; set; }
     // [ForeignKey(nameof(BookspotId))]
     // public Bookspot Bookspot { get; set; } = null!;
-    
-    
+
+
     // custom_location geography(Point, 4326) [not null]
     [Required]
     [Column("custom_location", TypeName = "geography (point, 4326)")]
@@ -53,7 +48,7 @@ public class ExchangeMeeting {
     public Guid ProposerId { get; set; } //Esta sí es Guid, pq la PK en User es UUID
     [ForeignKey(nameof(ProposerId))]
     public User Proposer { get; set; } = null!;  // Navigation property
-    
+
     // status column in DB is simply 'status'
     [Required]
     [Column("status")]
