@@ -3,17 +3,19 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
+using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Api.Services.Interfaces.Matcher;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Bookmerang.Api.Services.Implementation.Matcher;
 
-public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings, ILogger<MatcherService> logger) : IMatcherService
+public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings, ILogger<MatcherService> logger, IChatService chatService) : IMatcherService
 {
     private readonly AppDbContext _db = db;
     private readonly MatcherSettings _settings = settings.Value;
     private readonly ILogger<MatcherService> _logger = logger;
+    private readonly IChatService _chatService = chatService;
 
     public async Task<List<FeedBookDto>> GetFeedAsync(Guid userId, int page, int pageSize)
     {
@@ -156,16 +158,11 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         var match = CreateMatch(minId, maxId, user1Book, user2Book, now);
         await _db.SaveChangesAsync();
 
-        // Persistimos el Chat primero para obtener su ID real
-        // antes de crear los participantes que lo referencian
-        var chat = CreateChat(now);
+        var chatDto = await _chatService.CreateChat(ChatType.EXCHANGE, [userId, otherUserId]) ?? throw new InvalidOperationException("No se pudo crear el chat para el match.");
+        CreateExchange(chatDto.Id, match.Id, now);
         await _db.SaveChangesAsync();
 
-        CreateChatParticipants(chat.Id, userId, otherUserId, now);
-        CreateExchange(chat.Id, match.Id, now);
-        await _db.SaveChangesAsync();
-
-        return await BuildMatchCreatedDto(match, chat.Id, otherUserId);
+        return await BuildMatchCreatedDto(match, chatDto.Id, otherUserId);
     }
 
     private Match CreateMatch(Guid user1Id, Guid user2Id, int book1Id, int book2Id, DateTime now)
@@ -181,35 +178,6 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         };
         _db.Matches.Add(match);
         return match;
-    }
-
-    // TODO: Reemplazar por el método de creación del módulo de chats cuando esté implementado
-    private Chat CreateChat(DateTime now)
-    {
-        var chat = new Chat
-        {
-            Type = ChatType.EXCHANGE,
-            CreatedAt = now
-        };
-        _db.Chats.Add(chat);
-        return chat;
-    }
-
-    // TODO: Reemplazar por el método de creación del módulo de chats cuando esté implementado
-    private void CreateChatParticipants(int chatId, Guid userId, Guid otherUserId, DateTime now)
-    {
-        _db.ChatParticipants.Add(new ChatParticipant
-        {
-            ChatId = chatId,
-            UserId = userId,
-            JoinedAt = now
-        });
-        _db.ChatParticipants.Add(new ChatParticipant
-        {
-            ChatId = chatId,
-            UserId = otherUserId,
-            JoinedAt = now
-        });
     }
 
     // TODO: Reemplazar por el método de creación del módulo de exchanges cuando esté implementado
