@@ -84,6 +84,12 @@ public class PostgresMatcherFixture : IAsyncLifetime
             new Mock<ILogger<MatcherService>>().Object,
             new Mock<IChatService>().Object);
 
+    public MatcherService CreateServiceWithChat(AppDbContext db, IChatService chatService) =>
+        new(db,
+            Options.Create(Settings),
+            new Mock<ILogger<MatcherService>>().Object,
+            chatService);
+
     // Construcción del NpgsqlDataSource
 
     private static NpgsqlDataSource BuildDataSource(string connectionString)
