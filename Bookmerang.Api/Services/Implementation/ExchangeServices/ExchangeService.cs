@@ -14,6 +14,13 @@ public class ExchangeService(AppDbContext db): IExchangeService
     {
         return await _db.Exchanges.FirstOrDefaultAsync(e => e.ExchangeId == exchangeId);
     }
+    
+    public async Task<Exchange?> GetExchangeByChatIdWithMatch(int chatId)
+    {
+        return await _db.Exchanges
+            .Include(e => e.Match)
+            .FirstOrDefaultAsync(e => e.ChatId == chatId);
+    }
 
     public async Task<Exchange?> GetExchangeWithMatch(int exchangeId)
     {
@@ -21,11 +28,7 @@ public class ExchangeService(AppDbContext db): IExchangeService
             .Include(e => e.Match)
             .FirstOrDefaultAsync(e => e.ExchangeId == exchangeId);
     }
-    
-    public async Task<Exchange?> GetExchangeByChatId(int chatId)
-    {
-        return await _db.Exchanges.FirstOrDefaultAsync(e => e.ChatId == chatId);
-    }    
+     
     public async Task<List<Exchange>> GetAllExchanges()
     {
         return await _db.Exchanges.ToListAsync();
