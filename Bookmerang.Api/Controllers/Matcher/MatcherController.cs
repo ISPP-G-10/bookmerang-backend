@@ -3,6 +3,7 @@ using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Interfaces.Matcher;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -32,8 +33,12 @@ public class MatcherController(IMatcherService matcherService, IAuthService auth
         if (usuario == null) return NotFound(new { message = "Usuario no encontrado en el sistema." });
 
         // Validar parámetros de paginación
-        if (page < 0 || size <= 0)
-            return BadRequest(new { message = "Los parámetros page y size deben ser >= 0 y > 0 respectivamente." });
+        const int maxSize = 100;
+        const int maxPage = 1000;
+        if (page < 0 || size <= 0 || size > maxSize)
+            return BadRequest(new { message = $"size debe estar entre 1 y {maxSize}." });
+        if (page > maxPage)
+            return BadRequest(new { message = $"El número de página no puede superar {maxPage}." });
 
         try
         {
@@ -53,6 +58,7 @@ public class MatcherController(IMatcherService matcherService, IAuthService auth
     /// Si es RIGHT y hay match bilateral, crea Match + Chat + Exchange.
     /// </summary>
     [HttpPost("swipe")]
+    [EnableRateLimiting("swipe")]
     public async Task<IActionResult> Swipe(
         [FromBody] SwipeRequestDto request)
     {
@@ -83,5 +89,26 @@ public class MatcherController(IMatcherService matcherService, IAuthService auth
         {
             return Conflict(new { message = "Ya has realizado un swipe sobre este libro." });
         }
+    }
+
+    /// <summary>
+    /// POST /api/matcher/undo — Deshace el último swipe del usuario.
+    /// Solo funciona si el swipe no generó un match.
+    /// </summary>
+    [HttpPost("undo")]
+    [EnableRateLimiting("swipe")]
+    public async Task<IActionResult> UndoLastSwipe()
+    {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var usuario = await _authService.GetPerfil(supabaseId);
+        if (usuario == null) return NotFound(new { message = "Usuario no encontrado en el sistema." });
+
+        var undone = await _matcherService.UndoLastSwipeAsync(usuario.Id);
+
+        return undone
+            ? Ok(new { message = "Último swipe deshecho correctamente." })
+            : BadRequest(new { message = "No se puede deshacer: no hay swipes o el último generó un match." });
     }
 }

@@ -17,4 +17,5 @@ public class FeedBookDto
     public List<string> Photos { get; set; } = [];
     public double Score { get; set; }
     public bool IsPriority { get; set; } // P1 vs P2
+    public double DistanceKm { get; set; } // Distancia real en km al owner del libro
 }
