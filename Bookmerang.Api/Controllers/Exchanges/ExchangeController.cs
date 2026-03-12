@@ -49,17 +49,17 @@ public class ExchangeController : ControllerBase
         return Ok(exchange.ToDto());
     }
 
-    /// GET /api/exchange/byChat/{chatId}
-    [HttpGet("byChat/{chatId:int}")]
-    public async Task<IActionResult> GetExchangeByChatId(int chatId)
+    /// GET /api/exchange/byChat/{chatId}/withMatch
+    [HttpGet("byChat/{chatId:int}/withMatch")]
+    public async Task<IActionResult> GetExchangeByChatIdWithMatchDetails(int chatId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var exchange = await _service.GetExchangeByChatId(chatId);
-        if (exchange == null) return NotFound($"El intercambio correspondiente al chat con id {chatId} no se ha encontrado.");
+        var exchange = await _service.GetExchangeByChatIdWithMatch(chatId);
+        if (exchange == null) return NotFound($"Intercambio con id {chatId} no encontrado.");
 
-        return Ok(exchange.ToDto());
+        return Ok(exchange.ToWithMatchDto());
     }
 
     /// GET /api/exchange
@@ -94,8 +94,34 @@ public class ExchangeController : ControllerBase
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
+        var exchange = await _service.GetExchangeWithMatch(exchangeId);
+        var exchangeWithMatch = exchange!.ToWithMatchDto();
 
-        var newStatus = ExchangeStatus.ACCEPTED;
+        ExchangeStatus newStatus = new();
+
+        if ((exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_1 && exchangeWithMatch.User1Id == userId) 
+        || (exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_2 && exchangeWithMatch.User2Id == userId))
+        {
+            return new ObjectResult(new { message = "No tienes permiso para aceptar este intercambio." })
+            {
+                StatusCode = StatusCodes.Status403Forbidden
+            };
+        }
+        
+        if(exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_1 || exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_2)
+        {
+            newStatus = ExchangeStatus.ACCEPTED;
+        }
+        
+        if(exchangeWithMatch.User1Id == userId && exchangeWithMatch.Status == ExchangeStatus.NEGOTIATING)
+        {
+            newStatus = ExchangeStatus.ACCEPTED_BY_1;
+        }
+        else if(exchangeWithMatch.User2Id == userId && exchangeWithMatch.Status == ExchangeStatus.NEGOTIATING)
+        {
+            newStatus = ExchangeStatus.ACCEPTED_BY_2;
+        }
+        
         try
         {
             var updated = await _service.UpdateExchangeStatus(exchangeId, newStatus);
