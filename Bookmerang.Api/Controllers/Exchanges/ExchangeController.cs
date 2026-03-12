@@ -97,17 +97,27 @@ public class ExchangeController : ControllerBase
         var exchange = await _service.GetExchangeWithMatch(exchangeId);
         var exchangeWithMatch = exchange!.ToWithMatchDto();
 
-        ExchangeStatus newStatus;
+        ExchangeStatus newStatus = new();
+
+        if ((exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_1 && exchangeWithMatch.User1Id == userId) 
+        || (exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_2 && exchangeWithMatch.User2Id == userId))
+        {
+            return new ObjectResult(new { message = "No tienes permiso para aceptar este intercambio." })
+            {
+                StatusCode = StatusCodes.Status403Forbidden
+            };
+        }
         
         if(exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_1 || exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_2)
         {
             newStatus = ExchangeStatus.ACCEPTED;
-        } 
-        else if(exchangeWithMatch.User1Id == userId)
+        }
+        
+        if(exchangeWithMatch.User1Id == userId && exchangeWithMatch.Status == ExchangeStatus.NEGOTIATING)
         {
             newStatus = ExchangeStatus.ACCEPTED_BY_1;
         }
-        else
+        else if(exchangeWithMatch.User2Id == userId && exchangeWithMatch.Status == ExchangeStatus.NEGOTIATING)
         {
             newStatus = ExchangeStatus.ACCEPTED_BY_2;
         }
