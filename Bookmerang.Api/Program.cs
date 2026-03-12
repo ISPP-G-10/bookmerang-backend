@@ -16,9 +16,12 @@ using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using Npgsql.NameTranslation;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
 
 //DotNetEnv.Env.Load();
 DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
@@ -54,6 +57,25 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ===== CONFIGURACIÓN =====
 builder.Services.Configure<MatcherSettings>(
     builder.Configuration.GetSection(MatcherSettings.SectionName));
+
+// ===== RATE LIMITING =====
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("swipe", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(
+            "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier") ?? "anon";
+        return RateLimitPartition.GetSlidingWindowLimiter(userId, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 30,          // 30 swipes
+            Window = TimeSpan.FromMinutes(1), // por minuto
+            SegmentsPerWindow = 6,     // ventanas de 10 s
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+});
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
@@ -178,6 +200,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseCors();
+app.UseRateLimiter();
 app.UseMiddleware<ExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
