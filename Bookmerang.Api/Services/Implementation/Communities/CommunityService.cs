@@ -155,6 +155,8 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
 
         try
         {
+            var memberCountBeforeJoin = community.Members.Count;
+
             var member = new CommunityMember
             {
                 CommunityId = communityId,
@@ -164,7 +166,7 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
             };
             _db.CommunityMembers.Add(member);
 
-            if (community.Members.Count + 1 >= 3 && community.Status == CommunityStatus.CREATED)
+            if (memberCountBeforeJoin + 1 >= 3 && community.Status == CommunityStatus.CREATED)
             {
                 community.Status = CommunityStatus.ACTIVE;
             }
@@ -192,7 +194,7 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
                 CreatorId = community.CreatorId,
                 CreatedAt = community.CreatedAt,
                 ChatId = community.CommunityChat?.ChatId,
-                MemberCount = community.Members.Count + 1
+                MemberCount = memberCountBeforeJoin + 1
             };
         }
         catch

@@ -154,6 +154,44 @@ public class CommunityServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task JoinCommunity_FromOneMemberToTwo_KeepsCreatedAndReturnsMemberCountTwo()
+    {
+        // Arrange
+        var creatorId = Guid.NewGuid();
+        var joinerId = Guid.NewGuid();
+        SeedUser(creatorId, "creator2@test.com", PricingPlan.PREMIUM);
+        SeedUser(joinerId, "joiner@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(1, MakePoint(-5.98, 37.38));
+        var comm = new Community
+        {
+            Name = "CommCreated",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.CREATED,
+            CreatorId = creatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = creatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        // Act
+        var result = await _service.JoinCommunityAsync(joinerId, comm.Id);
+
+        // Assert
+        Assert.Equal(2, result.MemberCount);
+        Assert.Equal(CommunityStatus.CREATED, result.Status);
+    }
+
+    [Fact]
     public async Task CreateCommunity_FreeUser_MaxOneActiveCommunity_ThrowsForbidden()
     {
         var userId = Guid.NewGuid();
