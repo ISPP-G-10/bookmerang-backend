@@ -167,7 +167,6 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
             if (community.Members.Count + 1 >= 3 && community.Status == CommunityStatus.CREATED)
             {
                 community.Status = CommunityStatus.ACTIVE;
-                _db.Communities.Update(community);
             }
 
             if (community.CommunityChat != null)
