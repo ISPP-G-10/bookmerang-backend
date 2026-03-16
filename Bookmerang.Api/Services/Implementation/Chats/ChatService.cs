@@ -118,7 +118,7 @@ public class ChatService(AppDbContext db) : IChatService
 
     public async Task<ChatDto?> CreateChat(ChatType type, List<Guid> participantIds)
     {
-        if (participantIds.Count < 2)
+        if (type != ChatType.COMMUNITY && participantIds.Count < 2)
             return null;
 
         // Verificar que todos los usuarios existen

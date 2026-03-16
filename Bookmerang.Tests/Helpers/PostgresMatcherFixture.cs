@@ -109,6 +109,12 @@ public class PostgresMatcherFixture : IAsyncLifetime
         builder.MapEnum<ExchangeStatus>     ("exchange_status",        t);
         builder.MapEnum<ExchangeMode>       ("exchange_mode",          t);
         builder.MapEnum<ExchangeMeetingStatus>("exchange_meeting_status", t);
+        builder.MapEnum<CommunityStatus>("community_status", t);
+        builder.MapEnum<CommunityRole>("community_role", t);
+        builder.MapEnum<MeetupStatus>("meetup_status", t);
+        builder.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
+        builder.MapEnum<BookspotStatus>("bookspot_status", t);
+        builder.MapEnum<PricingPlan>("pricing_plan", t);
 
         return builder.Build();
     }

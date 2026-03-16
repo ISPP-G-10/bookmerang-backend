@@ -18,6 +18,10 @@ public class User
     [Column("finished_exchanges")]
     public int FinishedExchanges { get; set; } = 0;
 
+    [Required]
+    [Column("plan")]
+    public Enums.PricingPlan Plan { get; set; } = Enums.PricingPlan.FREE;
+
     // Navigation properties
     [ForeignKey("Id")]
     public BaseUser BaseUser { get; set; } = null!;

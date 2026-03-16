@@ -14,6 +14,8 @@ using Bookmerang.Api.Services.Interfaces.Matcher;
 using Bookmerang.Api.Services.Implementation.Matcher;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
+using Bookmerang.Api.Services.Interfaces.Communities;
+using Bookmerang.Api.Services.Implementation.Communities;
 using Bookmerang.Api.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -46,6 +48,12 @@ Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MatchStatus>("match_status", ne
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeStatus>("exchange_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeMode>("exchange_mode", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeMeetingStatus>("exchange_meeting_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<CommunityStatus>("community_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<CommunityRole>("community_role", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupStatus>("meetup_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookspotStatus>("bookspot_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", new NpgsqlNullNameTranslator());
 #pragma warning restore CS0618
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -136,6 +144,11 @@ builder.Services.AddScoped<IGenreService, GenreService>();
 builder.Services.AddScoped<IMatcherService, MatcherService>();
 builder.Services.AddScoped<IExchangeService, ExchangeService>();
 builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
+
+// Communities
+builder.Services.AddScoped<ICommunityService, CommunityService>();
+builder.Services.AddScoped<IMeetupService, MeetupService>();
+builder.Services.AddScoped<ICommunityLibraryService, CommunityLibraryService>();
 
 // Books
 builder.Services.AddScoped<IBookService, BookService>();
