@@ -97,7 +97,7 @@ public class CommunityServiceTests : IAsyncLifetime
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() => _service.JoinCommunityAsync(userId, comm2.Id));
-        Assert.Contains("solo pueden pertenecer a una comunidad activa", ex.Message);
+        Assert.Contains("solo pueden pertenecer a una comunidad no archivada", ex.Message);
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public class CommunityServiceTests : IAsyncLifetime
         var request = new CreateCommunityRequest { Name = "New Community", ReferenceBookspotId = bs.Id };
 
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() => _service.CreateCommunityAsync(userId, request));
-        Assert.Contains("solo pueden pertenecer a una comunidad activa", ex.Message);
+        Assert.Contains("solo pueden pertenecer a una comunidad no archivada", ex.Message);
     }
 
     [Fact]

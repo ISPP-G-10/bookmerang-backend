@@ -22,6 +22,7 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
         var communities = await _db.Communities
             .Include(c => c.ReferenceBookspot)
             .Include(c => c.Members)
+            .Include(c => c.CommunityChat)
             .Where(c => c.Status == CommunityStatus.ACTIVE || c.Status == CommunityStatus.CREATED)
             .Where(c => c.ReferenceBookspot.Location.IsWithinDistance(location, radiusKm * 1000.0))
             .ToListAsync();
@@ -34,6 +35,7 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
             Status = c.Status,
             CreatorId = c.CreatorId,
             CreatedAt = c.CreatedAt,
+            ChatId = c.CommunityChat?.ChatId,
             MemberCount = c.Members.Count
         }).ToList();
     }
@@ -53,7 +55,7 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
             
             if (activeCommunities >= 1)
             {
-                throw new ForbiddenException("Los usuarios con plan gratuito solo pueden pertenecer a una comunidad activa.");
+                throw new ForbiddenException("Los usuarios con plan gratuito solo pueden pertenecer a una comunidad no archivada.");
             }
         }
 
@@ -145,7 +147,7 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
             
             if (activeCommunities >= 1)
             {
-                throw new ForbiddenException("Los usuarios con plan gratuito solo pueden pertenecer a una comunidad activa. Abandona tu comunidad actual para unirte a otra.");
+                throw new ForbiddenException("Los usuarios con plan gratuito solo pueden pertenecer a una comunidad no archivada. Abandona tu comunidad actual para unirte a otra.");
             }
         }
 
