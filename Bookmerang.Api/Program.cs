@@ -22,6 +22,9 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql.NameTranslation;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Bookmerang.Api.Services.Interfaces.Bookspots;
+using Bookmerang.Api.Services.Implementation.Bookspots;
+using Bookmerang.Api.Models.Entities;
 
 //DotNetEnv.Env.Load();
 DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
@@ -46,6 +49,7 @@ Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MatchStatus>("match_status", ne
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeStatus>("exchange_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeMode>("exchange_mode", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeMeetingStatus>("exchange_meeting_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookspotStatus>("bookspot_status", new NpgsqlNullNameTranslator());
 #pragma warning restore CS0618
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -142,6 +146,10 @@ builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
 builder.Services.AddScoped<IGenreRepository, GenreRepository>();
 builder.Services.AddScoped<ILanguageRepository, LanguageRepository>();
+
+// Bookspots
+builder.Services.AddScoped<IBookspotRepository, BookspotRepository>();
+builder.Services.AddScoped<IBookspotService, BookspotService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers()

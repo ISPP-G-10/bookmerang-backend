@@ -28,6 +28,8 @@ public class AppDbContext : DbContext
     public DbSet<Swipe> Swipes => Set<Swipe>();
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<TypingIndicator> TypingIndicators => Set<TypingIndicator>();
+    public DbSet<Bookspot> Bookspots => Set<Bookspot>();
+    public DbSet<BookspotValidation> BookspotValidations => Set<BookspotValidation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +43,7 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<MatchStatus>();
         modelBuilder.HasPostgresEnum<ChatType>("public", "chat_type", new NpgsqlNullNameTranslator());
         modelBuilder.HasPostgresEnum<ExchangeStatus>();
+        modelBuilder.HasPostgresEnum<BookspotStatus>();
 
         modelBuilder.Entity<BaseUser>(entity =>
         {
@@ -333,6 +336,28 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ===== BOOKSPOTS =====
+        modelBuilder.Entity<Bookspot>(e =>
+        {
+            e.ToTable("bookspots");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Nombre).HasColumnName("nombre");
+            e.Property(x => x.AddressText).HasColumnName("address_text");
+            e.Property(x => x.Location).HasColumnName("location").HasColumnType("geography(Point,4326)");
+            e.Property(x => x.IsBookdrop).HasColumnName("is_bookdrop");
+            e.Property(x => x.CreatedByUserId).HasColumnName("created_by_user_id");
+            e.Property(x => x.OwnerId).HasColumnName("owner_id");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        // ===== BOOKSPOT_VALIDATIONS =====
+        modelBuilder.Entity<BookspotValidation>(e =>
+        {
+            e.ToTable("bookspot_validations");
         });
     }
 }
