@@ -21,11 +21,8 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
             .Where(b => b.Status == BookspotStatus.PENDING)
             .ToListAsync(ct);
 
-    public async Task<List<Bookspot>> GetNearbyActiveAsync(
-    double latitude,
-    double longitude,
-    double radiusKm,
-    CancellationToken ct = default)
+    public async Task<List<(Bookspot bookspot, double distanceMeters)>> GetNearbyActiveAsync(
+    double latitude, double longitude, double radiusKm, CancellationToken ct = default)
     {
         var userLocation = new Point(longitude, latitude) { SRID = 4326 };
         var radiusMeters = radiusKm * 1000;
@@ -33,7 +30,11 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
         return await db.Bookspots
             .Where(b => b.Status == BookspotStatus.ACTIVE
                      && b.Location.IsWithinDistance(userLocation, radiusMeters))
-            .ToListAsync(ct);
+            .Select(b => new { Bookspot = b, Distance = b.Location.Distance(userLocation) })
+            .ToListAsync(ct)
+            .ContinueWith(t => t.Result
+                .Select(x => (x.Bookspot, x.Distance))
+                .ToList(), ct);
     }
 
     public async Task<Bookspot> CreateAsync(Bookspot bookspot, CancellationToken ct = default)

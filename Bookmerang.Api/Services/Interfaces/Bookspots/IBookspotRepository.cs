@@ -10,7 +10,7 @@ public interface IBookspotRepository
 
     Task<List<Bookspot>> GetPendingAsync(CancellationToken ct = default);
 
-    Task<List<Bookspot>> GetNearbyActiveAsync(double latitude, double longitude, double radiusKm, CancellationToken ct = default);
+    Task<List<(Bookspot bookspot, double distanceMeters)>> GetNearbyActiveAsync(double latitude, double longitude, double radiusKm, CancellationToken ct = default);
 
     Task<Bookspot> CreateAsync(Bookspot bookspot, CancellationToken ct = default);
 

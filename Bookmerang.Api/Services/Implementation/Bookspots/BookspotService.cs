@@ -31,19 +31,15 @@ public class BookspotService(
     }
 
     public async Task<List<BookspotNearbyDTO>> GetNearbyActiveAsync(
-        double latitude,
-        double longitude,
-        double radiusKm,
-        CancellationToken ct = default)
+    double latitude, double longitude, double radiusKm, CancellationToken ct = default)
     {
         if (radiusKm > MaxRadiusKm)
             throw new ValidationException($"El radio máximo permitido es {MaxRadiusKm} km.");
 
         var bookspots = await bookspotRepo.GetNearbyActiveAsync(latitude, longitude, radiusKm, ct);
-        var userLocation = new Point(longitude, latitude) { SRID = 4326 };
 
         return bookspots
-            .Select(b => MapToNearbyDTO(b, userLocation))
+            .Select(x => MapToNearbyDTO(x.bookspot, x.distanceMeters))
             .OrderBy(b => b.DistanceKm)
             .ToList();
     }
@@ -109,7 +105,7 @@ public class BookspotService(
         Status = b.Status
     };
 
-    private static BookspotNearbyDTO MapToNearbyDTO(Bookspot b, Point userLocation) => new()
+    private static BookspotNearbyDTO MapToNearbyDTO(Bookspot b, double distanceMeters) => new()
     {
         Id = b.Id,
         Nombre = b.Nombre,
@@ -117,6 +113,6 @@ public class BookspotService(
         Latitude = b.Location.Y,
         Longitude = b.Location.X,
         IsBookdrop = b.IsBookdrop,
-        DistanceKm = Math.Round(b.Location.Distance(userLocation) / 1000, 2)
+        DistanceKm = Math.Round(distanceMeters / 1000, 2)
     };
 }
