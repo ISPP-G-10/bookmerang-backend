@@ -14,4 +14,6 @@ public interface IBookspotService
     Task<BookspotDTO> CreateAsync(string supabaseId, CreateBookspotRequest request, CancellationToken ct = default);
 
     Task<BookspotDTO?> GetByIdAsync(int bookspotId, CancellationToken ct = default);
+
+    Task<BookspotDTO?> GetRandomPendingNearbyAsync(double latitude, double longitude, double radiusKm, CancellationToken ct = default);
 }

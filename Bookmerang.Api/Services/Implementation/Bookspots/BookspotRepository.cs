@@ -74,4 +74,24 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
         bookspot.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
     }
+
+    public async Task<List<(Bookspot bookspot, int validationCount)>> GetNearbyPendingAsync(
+    double latitude, double longitude, double radiusKm, CancellationToken ct = default)
+    {
+        var userLocation = new Point(longitude, latitude) { SRID = 4326 };
+        var radiusMeters = radiusKm * 1000;
+
+        return await db.Bookspots
+            .Where(b => b.Status == BookspotStatus.PENDING
+                     && b.Location.IsWithinDistance(userLocation, radiusMeters))
+            .Select(b => new
+            {
+                Bookspot = b,
+                ValidationCount = db.BookspotValidations.Count(v => v.BookspotId == b.Id)
+            })
+            .ToListAsync(ct)
+            .ContinueWith(t => t.Result
+                .Select(x => (x.Bookspot, x.ValidationCount))
+                .ToList(), ct);
+    }
 }

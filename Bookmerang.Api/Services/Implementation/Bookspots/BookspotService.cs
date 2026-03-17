@@ -94,6 +94,26 @@ public class BookspotService(
         return bookspot is null ? null : MapToDTO(bookspot);
     }
 
+    public async Task<BookspotDTO?> GetRandomPendingNearbyAsync(
+    double latitude, double longitude, double radiusKm, CancellationToken ct = default)
+    {
+        if (radiusKm > MaxRadiusKm)
+            throw new ValidationException($"El radio máximo permitido es {MaxRadiusKm} km.");
+
+        var candidates = await bookspotRepo.GetNearbyPendingAsync(latitude, longitude, radiusKm, ct);
+
+        if (!candidates.Any()) return null;
+
+        // Cogemos solo los que tienen menos validaciones y elegimos uno al azar
+        var minValidations = candidates.Min(x => x.validationCount);
+        var leastValidated = candidates
+            .Where(x => x.validationCount == minValidations)
+            .ToList();
+
+        var random = leastValidated[Random.Shared.Next(leastValidated.Count)];
+        return MapToDTO(random.bookspot);
+    }
+
     private static BookspotDTO MapToDTO(Bookspot b) => new()
     {
         Id = b.Id,

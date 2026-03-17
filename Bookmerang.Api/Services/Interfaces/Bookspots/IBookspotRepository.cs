@@ -19,4 +19,6 @@ public interface IBookspotRepository
     Task<bool> ExistsNearbyAsync(double latitude, double longitude, double radiusMeters, CancellationToken ct = default);
 
     Task UpdateStatusAsync(int bookspotId, BookspotStatus status, CancellationToken ct = default);
+
+    Task<List<(Bookspot bookspot, int validationCount)>> GetNearbyPendingAsync(double latitude, double longitude, double radiusKm, CancellationToken ct = default);
 }

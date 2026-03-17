@@ -66,4 +66,19 @@ public class BookspotsController(IBookspotService bookspotService) : ControllerB
         if (bookspot is null) return NotFound();
         return Ok(bookspot);
     }
+
+    // GET /api/bookspots/pending/random?latitude=37.38&longitude=-5.99&radiusKm=10
+    [HttpGet("pending/random")]
+    [SwaggerResponse(200, "Bookspot pending aleatorio cercano", typeof(BookspotDTO))]
+    [SwaggerResponse(204, "No hay bookspots pending en el radio indicado")]
+    public async Task<ActionResult<BookspotDTO>> GetRandomPendingNearbyAsync(
+        [FromQuery] double latitude,
+        [FromQuery] double longitude,
+        [FromQuery] double radiusKm,
+        CancellationToken ct)
+    {
+        var bookspot = await bookspotService.GetRandomPendingNearbyAsync(latitude, longitude, radiusKm, ct);
+        if (bookspot is null) return NoContent();
+        return Ok(bookspot);
+    }
 }
