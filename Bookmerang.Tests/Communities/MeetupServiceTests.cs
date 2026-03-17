@@ -151,4 +151,29 @@ public class MeetupServiceTests : IAsyncLifetime
         var attendance = await _db.MeetupAttendances.FirstOrDefaultAsync(ma => ma.MeetupId == meetup.Id && ma.UserId == userId);
         Assert.NotNull(attendance);
     }
+
+    [Fact]
+    public async Task CancelAttendance_UserNotCommunityMember_ThrowsForbiddenException()
+    {
+        var userId = Guid.NewGuid();
+        SeedUser(userId);
+
+        var creatorId = Guid.NewGuid();
+        SeedUser(creatorId);
+
+        var comm = SeedCommunity(3, creatorId);
+        var meetup = new Meetup
+        {
+            Id = 30,
+            CommunityId = comm.Id,
+            Title = "Meetup",
+            ScheduledAt = DateTime.UtcNow.AddDays(2),
+            Status = MeetupStatus.SCHEDULED
+        };
+        _db.Meetups.Add(meetup);
+        await _db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() => _service.CancelAttendanceAsync(userId, meetup.Id));
+        Assert.Contains("Debes ser miembro de la comunidad", ex.Message);
+    }
 }

@@ -126,6 +126,12 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
 
     public async Task CancelAttendanceAsync(Guid userId, int meetupId)
     {
+        var meetup = await _db.Meetups.FindAsync(meetupId);
+        if (meetup == null) throw new NotFoundException("Quedada no encontrada.");
+
+        var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == meetup.CommunityId && cm.UserId == userId);
+        if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para asistir a la quedada.");
+
         var attendance = await _db.MeetupAttendances.FirstOrDefaultAsync(ma => ma.MeetupId == meetupId && ma.UserId == userId);
         if (attendance == null) throw new NotFoundException("No estás apuntado a esta quedada.");
 
