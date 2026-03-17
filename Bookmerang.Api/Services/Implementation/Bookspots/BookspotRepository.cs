@@ -16,6 +16,11 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
             .Where(b => b.Status == BookspotStatus.ACTIVE)
             .ToListAsync(ct);
 
+    public async Task<List<Bookspot>> GetPendingAsync(CancellationToken ct = default)
+        => await db.Bookspots
+            .Where(b => b.Status == BookspotStatus.PENDING)
+            .ToListAsync(ct);
+
     public async Task<List<Bookspot>> GetNearbyActiveAsync(
     double latitude,
     double longitude,
@@ -57,5 +62,15 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
 
         return await db.Bookspots
             .AnyAsync(b => b.Location.IsWithinDistance(point, radiusMeters), ct);
+    }
+
+    public async Task UpdateStatusAsync(int bookspotId, BookspotStatus status, CancellationToken ct = default)
+    {
+        var bookspot = await db.Bookspots.FirstOrDefaultAsync(b => b.Id == bookspotId, ct);
+        if (bookspot is null) return;
+
+        bookspot.Status = status;
+        bookspot.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
     }
 }

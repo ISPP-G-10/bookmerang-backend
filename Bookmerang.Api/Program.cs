@@ -150,6 +150,8 @@ builder.Services.AddScoped<ILanguageRepository, LanguageRepository>();
 // Bookspots
 builder.Services.AddScoped<IBookspotRepository, BookspotRepository>();
 builder.Services.AddScoped<IBookspotService, BookspotService>();
+builder.Services.AddScoped<IBookspotValidationRepository, BookspotValidationRepository>();
+builder.Services.AddScoped<IBookspotValidationService, BookspotValidationService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers()

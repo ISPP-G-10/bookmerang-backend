@@ -16,15 +16,15 @@ public class BookspotValidation
 
     [Required]
     [Column("validator_user_id")]
-    public string Validator_user_id { get; set; } = string.Empty;
+    public Guid ValidatorUserId { get; set; }
 
     [Required]
     [Column("knows_place")]
-    public bool Knows_place { get; set; }
+    public bool KnowsPlace { get; set; }
 
     [Required]
     [Column("safe_for_exchange")]
-    public bool Safe_for_exchange { get; set; }
+    public bool SafeForExchange { get; set; }
 
     [Column("created_at")]
     public DateTime Created_at { get; set; } = DateTime.UtcNow;
