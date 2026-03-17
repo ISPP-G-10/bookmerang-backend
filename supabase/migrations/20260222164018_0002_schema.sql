@@ -279,7 +279,7 @@ CREATE TABLE "bookspots" (
   "owner_id" UUID,
   "status" bookspot_status NOT NULL,
   "created_at" timestamp NOT NULL,
-  "updated_at" timestamp NOT NULL
+  "updated_at" timestamp NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE "bookspot_validations" (
