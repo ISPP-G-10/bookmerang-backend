@@ -4,6 +4,7 @@ using Bookmerang.Api.Models.DTOs.Communities;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.Communities;
+using Bookmerang.Api.Validators.Communities;
 using Bookmerang.Tests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -19,7 +20,7 @@ public class MeetupServiceTests : IAsyncLifetime
     public Task InitializeAsync()
     {
         _db = DbContextFactory.CreateInMemory();
-        _service = new MeetupService(_db);
+        _service = new MeetupService(_db, new CreateMeetupRequestValidator());
         return Task.CompletedTask;
     }
 
@@ -74,6 +75,42 @@ public class MeetupServiceTests : IAsyncLifetime
         var request = new CreateMeetupRequest { Title = "Test Meetup", ScheduledAt = DateTime.UtcNow.AddDays(2) };
 
         await Assert.ThrowsAsync<ForbiddenException>(() => _service.CreateMeetupAsync(userId, commId, request));
+    }
+
+    [Fact]
+    public async Task CreateMeetup_EmptyTitle_ThrowsValidationException()
+    {
+        var userId = Guid.NewGuid();
+        SeedUser(userId);
+        var comm = SeedCommunity(1, userId);
+        await _db.SaveChangesAsync();
+
+        var request = new CreateMeetupRequest
+        {
+            Title = "",
+            ScheduledAt = DateTime.UtcNow.AddDays(2)
+        };
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => _service.CreateMeetupAsync(userId, comm.Id, request));
+        Assert.Contains("título", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateMeetup_DefaultDate_ThrowsValidationException()
+    {
+        var userId = Guid.NewGuid();
+        SeedUser(userId);
+        var comm = SeedCommunity(2, userId);
+        await _db.SaveChangesAsync();
+
+        var request = new CreateMeetupRequest
+        {
+            Title = "Quedada válida",
+            ScheduledAt = default
+        };
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => _service.CreateMeetupAsync(userId, comm.Id, request));
+        Assert.Contains("fecha y hora", ex.Message);
     }
 
     [Fact]

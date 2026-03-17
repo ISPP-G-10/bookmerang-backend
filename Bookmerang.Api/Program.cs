@@ -16,7 +16,9 @@ using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Services.Interfaces.Communities;
 using Bookmerang.Api.Services.Implementation.Communities;
+using Bookmerang.Api.Validators.Communities;
 using Bookmerang.Api.Middleware;
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -149,6 +151,7 @@ builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
 builder.Services.AddScoped<ICommunityService, CommunityService>();
 builder.Services.AddScoped<IMeetupService, MeetupService>();
 builder.Services.AddScoped<ICommunityLibraryService, CommunityLibraryService>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateMeetupRequestValidator>();
 
 // Books
 builder.Services.AddScoped<IBookService, BookService>();

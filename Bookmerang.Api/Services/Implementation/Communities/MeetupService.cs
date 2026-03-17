@@ -4,14 +4,17 @@ using Bookmerang.Api.Models.DTOs.Communities;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Communities;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
+using AppValidationException = Bookmerang.Api.Exceptions.ValidationException;
 
 namespace Bookmerang.Api.Services.Implementation.Communities;
 
-public class MeetupService(AppDbContext db) : IMeetupService
+public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> createMeetupRequestValidator) : IMeetupService
 {
     private readonly AppDbContext _db = db;
+    private readonly IValidator<CreateMeetupRequest> _createMeetupRequestValidator = createMeetupRequestValidator;
 
     public async Task<MeetupDto> CreateMeetupAsync(Guid creatorId, int communityId, CreateMeetupRequest request)
     {
@@ -21,8 +24,12 @@ public class MeetupService(AppDbContext db) : IMeetupService
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == communityId && cm.UserId == creatorId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para crear una quedada.");
 
+        var validationResult = await _createMeetupRequestValidator.ValidateAsync(request);
+        if (!validationResult.IsValid)
+            throw new AppValidationException(string.Join(" ", validationResult.Errors.Select(e => e.ErrorMessage)));
+
         Point? otherLocation = null;
-        if (request.OtherLocation != null && request.OtherLocation.Length >= 2)
+        if (request.OtherLocation != null)
         {
             var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
             otherLocation = factory.CreatePoint(new Coordinate(request.OtherLocation[0], request.OtherLocation[1]));
@@ -64,7 +71,7 @@ public class MeetupService(AppDbContext db) : IMeetupService
         if (meetup == null) throw new NotFoundException("Quedada no encontrada.");
 
         if (meetup.Status != MeetupStatus.SCHEDULED)
-            throw new ValidationException("No te puedes unir a una quedada que ya no está programada.");
+            throw new AppValidationException("No te puedes unir a una quedada que ya no está programada.");
 
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == meetup.CommunityId && cm.UserId == userId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para asistir a la quedada.");
@@ -73,7 +80,7 @@ public class MeetupService(AppDbContext db) : IMeetupService
         if (book == null) throw new NotFoundException("El libro seleccionado no se encuentra en tu biblioteca.");
         
         if (book.Status != BookStatus.PUBLISHED)
-            throw new ValidationException("El libro seleccionado debe estar publicado para poder llevarlo a un intercambio.");
+            throw new AppValidationException("El libro seleccionado debe estar publicado para poder llevarlo a un intercambio.");
 
         var existingAttendance = await _db.MeetupAttendances.FirstOrDefaultAsync(ma => ma.MeetupId == meetupId && ma.UserId == userId);
         if (existingAttendance != null)
@@ -86,7 +93,7 @@ public class MeetupService(AppDbContext db) : IMeetupService
             }
             else
             {
-                throw new ValidationException("Ya estás apuntado a esta quedada.");
+                throw new AppValidationException("Ya estás apuntado a esta quedada.");
             }
         }
         else
