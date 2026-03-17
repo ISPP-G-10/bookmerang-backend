@@ -5,6 +5,7 @@ using Bookmerang.Api.Models.DTOs.Communities;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.Communities;
+using Bookmerang.Api.Validators.Communities;
 using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Tests.Helpers;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +25,7 @@ public class CommunityServiceTests : IAsyncLifetime
     {
         _db = DbContextFactory.CreateInMemory();
         _chatServiceMock = new Mock<IChatService>();
-        _service = new CommunityService(_db, _chatServiceMock.Object);
+        _service = new CommunityService(_db, _chatServiceMock.Object, new CreateCommunityRequestValidator());
         return Task.CompletedTask;
     }
 
@@ -219,6 +220,34 @@ public class CommunityServiceTests : IAsyncLifetime
         // Act & Assert
         var ex = await Assert.ThrowsAsync<ValidationException>(() => _service.CreateCommunityAsync(userId, request));
         Assert.Contains("Ya existe una comunidad con ese nombre en esta zona", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateCommunity_EmptyName_ThrowsValidationException()
+    {
+        var userId = Guid.NewGuid();
+        SeedUser(userId, "empty-name@test.com", PricingPlan.PREMIUM);
+        var bs = SeedBookspot(30, MakePoint(0, 0));
+        await _db.SaveChangesAsync();
+
+        var request = new CreateCommunityRequest { Name = "", ReferenceBookspotId = bs.Id };
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => _service.CreateCommunityAsync(userId, request));
+        Assert.Contains("nombre de la comunidad es obligatorio", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateCommunity_NameTooShort_ThrowsValidationException()
+    {
+        var userId = Guid.NewGuid();
+        SeedUser(userId, "short-name@test.com", PricingPlan.PREMIUM);
+        var bs = SeedBookspot(31, MakePoint(0, 0));
+        await _db.SaveChangesAsync();
+
+        var request = new CreateCommunityRequest { Name = "ab", ReferenceBookspotId = bs.Id };
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => _service.CreateCommunityAsync(userId, request));
+        Assert.Contains("al menos 3", ex.Message);
     }
 
     [Fact]

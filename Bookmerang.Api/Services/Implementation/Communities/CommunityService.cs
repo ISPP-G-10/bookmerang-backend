@@ -5,14 +5,20 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Api.Services.Interfaces.Communities;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using AppValidationException = Bookmerang.Api.Exceptions.ValidationException;
 
 namespace Bookmerang.Api.Services.Implementation.Communities;
 
-public class CommunityService(AppDbContext db, IChatService chatService) : ICommunityService
+public class CommunityService(
+    AppDbContext db,
+    IChatService chatService,
+    IValidator<CreateCommunityRequest> createCommunityRequestValidator) : ICommunityService
 {
     private readonly AppDbContext _db = db;
     private readonly IChatService _chatService = chatService;
+    private readonly IValidator<CreateCommunityRequest> _createCommunityRequestValidator = createCommunityRequestValidator;
 
     public async Task<List<CommunityDto>> ExploreCommunitiesAsync(Guid userId, double latitude, double longitude, int radiusKm = 50)
     {
@@ -42,6 +48,10 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
 
     public async Task<CommunityDto> CreateCommunityAsync(Guid creatorId, CreateCommunityRequest request)
     {
+        var validationResult = await _createCommunityRequestValidator.ValidateAsync(request);
+        if (!validationResult.IsValid)
+            throw new AppValidationException(string.Join(" ", validationResult.Errors.Select(e => e.ErrorMessage)));
+
         var user = await _db.RegularUsers.Include(u => u.BaseUser).FirstOrDefaultAsync(u => u.Id == creatorId);
         if (user == null) throw new NotFoundException("Usuario no encontrado.");
 
@@ -74,7 +84,7 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
 
         if (nameExistsNearby)
         {
-            throw new ValidationException("Ya existe una comunidad con ese nombre en esta zona.");
+            throw new AppValidationException("Ya existe una comunidad con ese nombre en esta zona.");
         }
 
         using var transaction = await _db.Database.BeginTransactionAsync();
@@ -145,10 +155,10 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
         if (community == null) throw new NotFoundException("Comunidad no encontrada.");
         
         if (community.Members.Any(m => m.UserId == userId))
-            throw new ValidationException("Ya perteneces a esta comunidad.");
+            throw new AppValidationException("Ya perteneces a esta comunidad.");
 
         if (community.Members.Count >= 10)
-            throw new ValidationException("La comunidad está llena (máximo 10 miembros).");
+            throw new AppValidationException("La comunidad está llena (máximo 10 miembros).");
 
         var user = await _db.RegularUsers.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null) throw new NotFoundException("Usuario no encontrado.");
