@@ -7,6 +7,8 @@ public interface IBookspotService
 {
     Task<List<BookspotDTO>> GetActiveAsync(CancellationToken ct = default);
 
+    Task<List<BookspotDTO>> GetPendingAsync(CancellationToken ct = default);
+
     Task<List<BookspotNearbyDTO>> GetNearbyActiveAsync(double latitude, double longitude, double radiusKm, CancellationToken ct = default);
 
     Task<BookspotDTO> CreateAsync(string supabaseId, CreateBookspotRequest request, CancellationToken ct = default);

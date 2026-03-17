@@ -24,6 +24,12 @@ public class BookspotService(
         return bookspots.Select(MapToDTO).ToList();
     }
 
+    public async Task<List<BookspotDTO>> GetPendingAsync(CancellationToken ct = default)
+    {
+        var pending = await bookspotRepo.GetPendingAsync(ct);
+        return pending.Select(MapToDTO).ToList();
+    }
+
     public async Task<List<BookspotNearbyDTO>> GetNearbyActiveAsync(
         double latitude,
         double longitude,
