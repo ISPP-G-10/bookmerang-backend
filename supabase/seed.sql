@@ -495,7 +495,27 @@ INSERT INTO bookspots (id, nombre, address_text, location, is_bookdrop, created_
   (12, 'Librería Palas (Nervión)',                    'C. Nervión, 5, 41005 Sevilla',                  ST_MakePoint(-5.9712, 37.3835)::geography, false, u02, 'ACTIVE', now_ts - INTERVAL '50 days'),
   (13, 'Plaza del Altozano (frente al museo)',        'Plaza del Altozano, 41010 Sevilla',             ST_MakePoint(-6.0008, 37.3795)::geography, false, u05, 'ACTIVE', now_ts - INTERVAL '45 days'),
   (14, 'MegaBiblio Universidad de Sevilla',           'C. San Fernando, 4, 41004 Sevilla',             ST_MakePoint(-5.9895, 37.3866)::geography, false, u07, 'ACTIVE', now_ts - INTERVAL '40 days'),
-  (15, 'Bookdrop Parque de María Luisa',              'Glorieta de la Infanta, 41013 Sevilla',         ST_MakePoint(-5.9850, 37.3765)::geography, true,  u09, 'ACTIVE', now_ts - INTERVAL '35 days')
+  (15, 'Bookdrop Parque de María Luisa',              'Glorieta de la Infanta, 41013 Sevilla',         ST_MakePoint(-5.9850, 37.3765)::geography, true,  u09, 'ACTIVE', now_ts - INTERVAL '35 days'),
+  (16, 'Biblioteca Pública Municipal de Dos Hermanas','C. Huerta Palacios, s/n, 41701 Dos Hermanas',ST_MakePoint(-5.9225, 37.2851)::geography,false, u04, 'ACTIVE', now_ts - INTERVAL '58 days'),
+  (17, 'Living Book Café','C. Ntra. Sra. de Valme, 39, 41701 Dos Hermanas',ST_MakePoint(-5.9235, 37.2854)::geography, false, u06, 'ACTIVE', now_ts - INTERVAL '52 days'),
+  (18, 'Librería Valme','C. Ntra. Sra. de Valme, 2, 41701 Dos Hermanas',ST_MakePoint(-5.9221, 37.2840)::geography, false, u08, 'ACTIVE', now_ts - INTERVAL '47 days'),
+  (19, 'Papelería El Quijote','C. Dr. Fleming, 34, 41701 Dos Hermanas',ST_MakePoint(-5.9326, 37.2834)::geography, false, u02, 'ACTIVE', now_ts - INTERVAL '43 days'),
+  (20, 'Centro Cultural y Biblioteca de Montequinto','C. Venecia, 22, 41089 Montequinto, Sevilla',ST_MakePoint(-5.9309, 37.3376)::geography,false, u05, 'ACTIVE', now_ts - INTERVAL '38 days'),
+  (21, 'Casa del Libro Sevilla','C. Velázquez, 8, 41001 Sevilla',ST_MakePoint(-5.9955, 37.3916)::geography, false, u01, 'ACTIVE', now_ts - INTERVAL '33 days'),
+  (22, 'Librería Botica de Lectores','C. Asunción, 15, 41011 Sevilla', ST_MakePoint(-5.9976, 37.3782)::geography, false, u03, 'ACTIVE', now_ts - INTERVAL '28 days'),
+  (23, 'Vicentina Café y Libros', 'Av. de Emilio Lemos, 11, local 3, 41020 Sevilla', ST_MakePoint(-5.9249, 37.4018)::geography, false, u07, 'ACTIVE', now_ts - INTERVAL '22 days'),
+  (24, 'Biblioteca Pública Felipe González Márquez', 'C. Torneo, s/n, 41002 Sevilla', ST_MakePoint(-6.0020, 37.3973)::geography,false, u09, 'ACTIVE', now_ts - INTERVAL '18 days'),
+  (25, 'Biblioteca Capitular y Colombina','C. Alemanes, s/n, 41001 Sevilla', ST_MakePoint(-5.9927, 37.3866)::geography, false, u02, 'ACTIVE', now_ts - INTERVAL '12 days'),
+  (26, 'Biblioteca Municipal Pedro Laín Entralgo', 'Plaza de la Constitución, 1, 41701 Dos Hermanas', ST_MakePoint(-5.9238, 37.2828)::geography, false, u01, 'ACTIVE', now_ts - INTERVAL '10 days'),
+  (27, 'Centro Social y Deportivo Vistazul', 'C. Nelson Mandela, s/n, 41703 Dos Hermanas', ST_MakePoint(-5.9345, 37.2805)::geography, false, u03, 'ACTIVE', now_ts - INTERVAL '9 days'),
+  (28, 'Bookdrop Parque de la Alquería', 'C. 28 de Febrero, s/n (Entrada Principal), 41702 Dos Hermanas', ST_MakePoint(-5.9268, 37.2865)::geography, true, u05, 'ACTIVE', now_ts - INTERVAL '8 days'),
+  (29, 'Cafetería de la Estación de Renfe', 'Plaza de la Estación, s/n, 41701 Dos Hermanas', ST_MakePoint(-5.9212, 37.2831)::geography, false, u02, 'ACTIVE', now_ts - INTERVAL '7 days'),
+  (30, 'Librería Anteo', 'C. Santa María Magdalena, 76, 41701 Dos Hermanas', ST_MakePoint(-5.9255, 37.2818)::geography, false, u07, 'ACTIVE', now_ts - INTERVAL '6 days'),
+  (31, 'Mercado de Abastos de Dos Hermanas', 'Plaza del Emigrante, s/n, 41701 Dos Hermanas', ST_MakePoint(-5.9248, 37.2842)::geography, false, u09, 'ACTIVE', now_ts - INTERVAL '5 days'),
+  (32, 'Centro Cultural La Almona', 'C. Real, 3, 41701 Dos Hermanas', ST_MakePoint(-5.9232, 37.2836)::geography, false, u04, 'ACTIVE', now_ts - INTERVAL '4 days'),
+  (33, 'Bookdrop Plaza de Menéndez y Pelayo', 'Plaza Menéndez y Pelayo, 41701 Dos Hermanas', ST_MakePoint(-5.9242, 37.2824)::geography, true, u06, 'ACTIVE', now_ts - INTERVAL '3 days'),
+  (34, 'Kiosko de Prensa Parque Gines de los Ríos', 'Av. de la Libertad, 41703 Dos Hermanas', ST_MakePoint(-5.9312, 37.2798)::geography, false, u08, 'ACTIVE', now_ts - INTERVAL '2 days'),
+  (35, 'Papelería Valme (Zona Arco Norte)', 'Av. Adolfo Suárez, 24, 41704 Dos Hermanas', ST_MakePoint(-5.9388, 37.2945)::geography, false, u10, 'ACTIVE', now_ts - INTERVAL '1 day')
 ON CONFLICT (id) DO NOTHING;
 
 -- ==============================================================
