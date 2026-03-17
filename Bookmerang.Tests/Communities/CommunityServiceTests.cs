@@ -320,4 +320,163 @@ public class CommunityServiceTests : IAsyncLifetime
         Assert.Empty(await _db.CommunityLibraryLikes.Where(l => l.UserId == userId && l.CommunityId == comm.Id).ToListAsync());
         Assert.Empty(await _db.MeetupAttendances.Where(ma => ma.UserId == userId && ma.MeetupId == meetup.Id).ToListAsync());
     }
+
+    [Fact]
+    public async Task LeaveCommunity_CreatorLeavesWithRemainingMembers_TransfersCreatorAndModerator()
+    {
+        var creatorId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+        SeedUser(creatorId, "creator-leave@test.com", PricingPlan.PREMIUM);
+        SeedUser(memberId, "member-leave@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(2, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "TransferComm",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = creatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = creatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = memberId,
+            Role = CommunityRole.MEMBER,
+            JoinedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        await _service.LeaveCommunityAsync(creatorId, comm.Id);
+
+        var updatedCommunity = await _db.Communities.FirstOrDefaultAsync(c => c.Id == comm.Id);
+        Assert.NotNull(updatedCommunity);
+        Assert.Equal(memberId, updatedCommunity!.CreatorId);
+
+        var member = await _db.CommunityMembers.FirstOrDefaultAsync(m => m.CommunityId == comm.Id && m.UserId == memberId);
+        Assert.NotNull(member);
+        Assert.Equal(CommunityRole.MODERATOR, member!.Role);
+    }
+
+    [Fact]
+    public async Task LeaveCommunity_CreatorIsOnlyMember_DeletesCommunity()
+    {
+        var creatorId = Guid.NewGuid();
+        SeedUser(creatorId, "solo-creator@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(3, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "DeleteComm",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.CREATED,
+            CreatorId = creatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+
+        var chat = new Chat { Type = ChatType.COMMUNITY };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityChats.Add(new CommunityChat { CommunityId = comm.Id, ChatId = chat.Id });
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = creatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        _db.ChatParticipants.Add(new ChatParticipant { ChatId = chat.Id, UserId = creatorId, JoinedAt = DateTime.UtcNow });
+        await _db.SaveChangesAsync();
+
+        await _service.LeaveCommunityAsync(creatorId, comm.Id);
+
+        Assert.Null(await _db.Communities.FirstOrDefaultAsync(c => c.Id == comm.Id));
+        Assert.Empty(await _db.CommunityMembers.Where(m => m.CommunityId == comm.Id).ToListAsync());
+        Assert.Empty(await _db.CommunityChats.Where(cc => cc.CommunityId == comm.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task DeleteCommunity_Moderator_Succeeds()
+    {
+        var moderatorId = Guid.NewGuid();
+        SeedUser(moderatorId, "moderator@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(4, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "DeleteByModerator",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = moderatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = moderatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        await _service.DeleteCommunityAsync(moderatorId, comm.Id);
+
+        Assert.Null(await _db.Communities.FirstOrDefaultAsync(c => c.Id == comm.Id));
+        Assert.Empty(await _db.CommunityMembers.Where(m => m.CommunityId == comm.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task DeleteCommunity_MemberWithoutModeratorRole_ThrowsForbidden()
+    {
+        var creatorId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+        SeedUser(creatorId, "creator-del@test.com", PricingPlan.PREMIUM);
+        SeedUser(memberId, "member-del@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(5, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "DeleteForbidden",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = creatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = creatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = memberId,
+            Role = CommunityRole.MEMBER,
+            JoinedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() => _service.DeleteCommunityAsync(memberId, comm.Id));
+        Assert.Contains("Solo los moderadores", ex.Message);
+    }
 }

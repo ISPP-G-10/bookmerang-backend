@@ -88,6 +88,16 @@ public class CommunitiesController(
         return NoContent();
     }
 
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteCommunity(int id)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        await _communityService.DeleteCommunityAsync(userId.Value, id);
+        return NoContent();
+    }
+
     // --- LIBRARY ---
 
     [HttpGet("{id}/library")]
