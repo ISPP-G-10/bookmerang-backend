@@ -62,6 +62,21 @@ public class CommunityService(AppDbContext db, IChatService chatService) : IComm
         var bookspot = await _db.Bookspots.FindAsync(request.ReferenceBookspotId);
         if (bookspot == null) throw new NotFoundException("BookSpot no encontrado.");
 
+        // Check if community with same name exists in a nearby radius
+        // Note: InMemory uses degrees, PostGIS geography uses meters. 0.05 degrees ~ 5km.
+        double distanceLimit = _db.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory" ? 0.05 : 5000.0;
+
+        var nameExistsNearby = await _db.Communities
+            .Include(c => c.ReferenceBookspot)
+            .AnyAsync(c => c.Name.ToLower() == request.Name.ToLower() 
+                && c.Status != CommunityStatus.ARCHIVED
+                && c.ReferenceBookspot.Location.IsWithinDistance(bookspot.Location, distanceLimit));
+
+        if (nameExistsNearby)
+        {
+            throw new ValidationException("Ya existe una comunidad con ese nombre en esta zona.");
+        }
+
         using var transaction = await _db.Database.BeginTransactionAsync();
 
         try

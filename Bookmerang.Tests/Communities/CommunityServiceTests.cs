@@ -192,20 +192,69 @@ public class CommunityServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CreateCommunity_FreeUser_MaxOneActiveCommunity_ThrowsForbidden()
+    public async Task CreateCommunity_DuplicateNameNearby_ThrowsValidationException()
     {
+        // Arrange
         var userId = Guid.NewGuid();
-        SeedUser(userId, "free2@test.com", PricingPlan.FREE);
-        var bs = SeedBookspot(1, MakePoint(0, 0));
-        var comm = new Community { Name = "Existing", ReferenceBookspotId = bs.Id, Status = CommunityStatus.ACTIVE };
-        _db.Communities.Add(comm);
-        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = userId, Role = CommunityRole.MEMBER });
+        SeedUser(userId, "test@test.com", PricingPlan.PREMIUM);
+
+        var bs1 = SeedBookspot(10, MakePoint(-5.98, 37.38));
+        var bs2 = SeedBookspot(11, MakePoint(-5.981, 37.381)); // Very close to bs1
+
+        var existingComm = new Community 
+        { 
+            Name = "Duplicate Name", 
+            ReferenceBookspotId = bs1.Id, 
+            Status = CommunityStatus.ACTIVE 
+        };
+        _db.Communities.Add(existingComm);
         await _db.SaveChangesAsync();
 
-        var request = new CreateCommunityRequest { Name = "New Community", ReferenceBookspotId = bs.Id };
+        var request = new CreateCommunityRequest 
+        { 
+            Name = "DUPLICATE NAME", 
+            ReferenceBookspotId = bs2.Id 
+        };
 
-        var ex = await Assert.ThrowsAsync<ForbiddenException>(() => _service.CreateCommunityAsync(userId, request));
-        Assert.Contains("solo pueden pertenecer a una comunidad no archivada", ex.Message);
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => _service.CreateCommunityAsync(userId, request));
+        Assert.Contains("Ya existe una comunidad con ese nombre en esta zona", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateCommunity_DuplicateNameFarAway_Succeeds()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        SeedUser(userId, "test2@test.com", PricingPlan.PREMIUM);
+
+        var bs1 = SeedBookspot(20, MakePoint(-5.98, 37.38)); // Sevilla
+        var bs2 = SeedBookspot(21, MakePoint(-3.70, 40.41)); // Madrid (Far away)
+
+        var existingComm = new Community 
+        { 
+            Name = "Common Name", 
+            ReferenceBookspotId = bs1.Id, 
+            Status = CommunityStatus.ACTIVE 
+        };
+        _db.Communities.Add(existingComm);
+        await _db.SaveChangesAsync();
+
+        var request = new CreateCommunityRequest 
+        { 
+            Name = "Common Name", 
+            ReferenceBookspotId = bs2.Id 
+        };
+
+        _chatServiceMock.Setup(c => c.CreateChat(ChatType.COMMUNITY, It.IsAny<List<Guid>>()))
+            .ReturnsAsync(new ChatDto(1, "COMMUNITY", DateTime.UtcNow, new List<ChatParticipantDto>(), null));
+
+        // Act
+        var result = await _service.CreateCommunityAsync(userId, request);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("Common Name", result.Name);
     }
 
     [Fact]
