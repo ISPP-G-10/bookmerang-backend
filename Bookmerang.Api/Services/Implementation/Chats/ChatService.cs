@@ -149,6 +149,18 @@ public class ChatService(AppDbContext db) : IChatService
         _db.ChatParticipants.AddRange(participants);
         await _db.SaveChangesAsync();
 
+        // Send automatic presentation message for each user
+        var initialMessages = participantIds.Select(uid => new Message
+        {
+            ChatId = chat.Id,
+            SenderId = uid,
+            Body = "Hola, me ha interesado tu libro",
+            SentAt = DateTime.UtcNow
+        }).ToList();
+
+        _db.Messages.AddRange(initialMessages);
+        await _db.SaveChangesAsync();
+
         // Recargar con datos completos
         return await GetChatByIdInternal(chat.Id);
     }
