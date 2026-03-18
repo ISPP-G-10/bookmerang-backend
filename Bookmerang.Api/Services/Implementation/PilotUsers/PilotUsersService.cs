@@ -18,6 +18,8 @@ namespace Bookmerang.Api.Services.Implementation.PilotUsers
             var templateId = Environment.GetEnvironmentVariable("SENDGRID_TEMPLATE_ID");
             var client = new SendGridClient(apiKey);
             var from = new EmailAddress("bookmerangproject@gmail.com", "Bookmerang Team");
+            var appUrl = Environment.GetEnvironmentVariable("APP_URL");
+            var feedbackUrl = Environment.GetEnvironmentVariable("FEEDBACK_URL");
 
             var recipients = toEmails
                 .Where(email => !string.IsNullOrWhiteSpace(email))
@@ -33,8 +35,8 @@ namespace Bookmerang.Api.Services.Implementation.PilotUsers
 
             var dynamicTemplateData = new
             {
-                app_url = "google.com",
-                feedback_url = "google.com"
+                app_url = appUrl,
+                feedback_url = feedbackUrl
             };
 
             var msg = MailHelper.CreateSingleTemplateEmailToMultipleRecipients(from, recipients, templateId, dynamicTemplateData);
