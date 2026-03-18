@@ -71,7 +71,7 @@ public class BookService(
 
         if (request.Photos.Count < RequiredPhotosToPublish || request.Photos.Count > MaxPhotosToPublish)
             throw new ValidationException(
-                $"Un libro debe tener entre {RequiredPhotosToPublish} y {MaxPhotosToPublish} fotos. Se han enviado {request.Photos.Count}.");
+                $"Un libro debe tener exactamente 1 foto. Se han enviado {request.Photos.Count}.");
 
         if (request.Photos.Any(p => string.IsNullOrWhiteSpace(p.Url)))
             throw new ValidationException("Todas las fotos deben incluir una URL válida.");
@@ -154,7 +154,7 @@ public class BookService(
         var errors = new List<string>();
         if (book.Photos.Count < RequiredPhotosToPublish || book.Photos.Count > MaxPhotosToPublish)
             errors.Add(
-                $"Debes subir entre {RequiredPhotosToPublish} y {MaxPhotosToPublish} fotos para publicar. Actualmente hay {book.Photos.Count}.");
+                $"Debes subir exactamente 1 foto para publicar. Actualmente hay {book.Photos.Count}.");
         if (string.IsNullOrWhiteSpace(book.Isbn))
             errors.Add("El ISBN es obligatorio para publicar.");
         if (string.IsNullOrWhiteSpace(book.Titulo))
