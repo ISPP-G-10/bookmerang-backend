@@ -1,6 +1,8 @@
 using Bookmerang.Api.Data;
 using Microsoft.EntityFrameworkCore;
 
+using Microsoft.EntityFrameworkCore.Diagnostics;
+
 namespace Bookmerang.Tests.Helpers;
 
 /// <summary>
@@ -14,6 +16,7 @@ public static class DbContextFactory
         dbName ??= Guid.NewGuid().ToString();
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(dbName)
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         return new AppDbContext(options);
     }
