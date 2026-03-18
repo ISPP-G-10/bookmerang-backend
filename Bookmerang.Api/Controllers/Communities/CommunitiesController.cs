@@ -101,12 +101,12 @@ public class CommunitiesController(
     // --- LIBRARY ---
 
     [HttpGet("{id}/library")]
-    public async Task<IActionResult> GetLibrary(int id)
+    public async Task<IActionResult> GetLibrary(int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var result = await _libraryService.GetCommunityLibraryAsync(userId.Value, id);
+        var result = await _libraryService.GetCommunityLibraryAsync(userId.Value, id, page, pageSize);
         return Ok(result);
     }
 

@@ -55,6 +55,17 @@ public class CommunityLibraryServiceTests : IAsyncLifetime
         return book;
     }
 
+    private void SeedLike(int communityId, Guid userId, int bookId)
+    {
+        _db.CommunityLibraryLikes.Add(new CommunityLibraryLike
+        {
+            CommunityId = communityId,
+            UserId = userId,
+            BookId = bookId,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+
     [Fact]
     public async Task GetCommunityLibrary_FreeUser_ThrowsForbidden()
     {
@@ -115,5 +126,70 @@ public class CommunityLibraryServiceTests : IAsyncLifetime
         library = await _service.GetCommunityLibraryAsync(userId, comm.Id);
         Assert.Equal(0, library[0].LikesCount);
         Assert.False(library[0].LikedByMe);
+    }
+
+    [Fact]
+    public async Task GetCommunityLibrary_Pagination_ReturnsExpectedPage()
+    {
+        var viewerId = Guid.NewGuid();
+        SeedUser(viewerId, PricingPlan.PREMIUM);
+
+        var comm = SeedCommunity(1);
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = viewerId, Role = CommunityRole.MEMBER });
+
+        var ownerA = Guid.NewGuid();
+        var ownerB = Guid.NewGuid();
+        var ownerC = Guid.NewGuid();
+        var ownerD = Guid.NewGuid();
+        var ownerE = Guid.NewGuid();
+
+        SeedUser(ownerA, PricingPlan.PREMIUM);
+        SeedUser(ownerB, PricingPlan.PREMIUM);
+        SeedUser(ownerC, PricingPlan.PREMIUM);
+        SeedUser(ownerD, PricingPlan.PREMIUM);
+        SeedUser(ownerE, PricingPlan.PREMIUM);
+
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = ownerA, Role = CommunityRole.MEMBER });
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = ownerB, Role = CommunityRole.MEMBER });
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = ownerC, Role = CommunityRole.MEMBER });
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = ownerD, Role = CommunityRole.MEMBER });
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = ownerE, Role = CommunityRole.MEMBER });
+
+        var bookA = SeedBook(1, ownerA, BookStatus.PUBLISHED);
+        var bookB = SeedBook(2, ownerB, BookStatus.PUBLISHED);
+        var bookC = SeedBook(3, ownerC, BookStatus.PUBLISHED);
+        var bookD = SeedBook(4, ownerD, BookStatus.PUBLISHED);
+        var bookE = SeedBook(5, ownerE, BookStatus.PUBLISHED);
+
+        SeedLike(comm.Id, viewerId, bookA.Id); // 1 like
+        SeedLike(comm.Id, viewerId, bookB.Id); // 1 like
+        var likeUser1 = Guid.NewGuid();
+        var likeUser2 = Guid.NewGuid();
+        var likeUser3 = Guid.NewGuid();
+        var likeUser4 = Guid.NewGuid();
+        SeedUser(likeUser1, PricingPlan.PREMIUM);
+        SeedUser(likeUser2, PricingPlan.PREMIUM);
+        SeedUser(likeUser3, PricingPlan.PREMIUM);
+        SeedUser(likeUser4, PricingPlan.PREMIUM);
+        SeedLike(comm.Id, likeUser1, bookC.Id);
+        SeedLike(comm.Id, likeUser2, bookC.Id); // 2 likes
+        SeedLike(comm.Id, likeUser1, bookD.Id);
+        SeedLike(comm.Id, likeUser2, bookD.Id);
+        SeedLike(comm.Id, likeUser3, bookD.Id); // 3 likes
+        SeedLike(comm.Id, likeUser1, bookE.Id);
+        SeedLike(comm.Id, likeUser2, bookE.Id);
+        SeedLike(comm.Id, likeUser3, bookE.Id);
+        SeedLike(comm.Id, likeUser4, bookE.Id); // 4 likes
+
+        await _db.SaveChangesAsync();
+
+        var page1 = await _service.GetCommunityLibraryAsync(viewerId, comm.Id, page: 1, pageSize: 2);
+        Assert.Equal(2, page1.Count);
+        Assert.Equal(bookE.Id, page1[0].BookId);
+        Assert.Equal(bookD.Id, page1[1].BookId);
+
+        var page2 = await _service.GetCommunityLibraryAsync(viewerId, comm.Id, page: 2, pageSize: 2);
+        Assert.Equal(2, page2.Count);
+        Assert.Equal(bookC.Id, page2[0].BookId);
     }
 }

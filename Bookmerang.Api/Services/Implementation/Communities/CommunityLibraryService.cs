@@ -12,8 +12,12 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
 {
     private readonly AppDbContext _db = db;
 
-    public async Task<List<CommunityLibraryBookDto>> GetCommunityLibraryAsync(Guid userId, int communityId)
+    public async Task<List<CommunityLibraryBookDto>> GetCommunityLibraryAsync(Guid userId, int communityId, int page = 1, int pageSize = 20)
     {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 1;
+        if (pageSize > 100) pageSize = 100;
+
         var community = await _db.Communities.FindAsync(communityId);
         if (community == null) throw new NotFoundException("Comunidad no encontrada.");
 
@@ -62,7 +66,11 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
             ThumbnailUrl = b.Photos.OrderBy(p => p.Orden).FirstOrDefault()?.Url,
             LikesCount = likes.Count(l => l.BookId == b.Id),
             LikedByMe = likes.Any(l => l.BookId == b.Id && l.UserId == userId)
-        }).OrderByDescending(dto => dto.LikesCount).ToList();
+        })
+        .OrderByDescending(dto => dto.LikesCount)
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .ToList();
     }
 
     public async Task ToggleLikeAsync(Guid userId, int communityId, int bookId)
