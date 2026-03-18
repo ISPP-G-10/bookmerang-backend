@@ -134,6 +134,7 @@ builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<IGenreService, GenreService>();
 builder.Services.AddScoped<IMatcherService, MatcherService>();
+builder.Services.AddHostedService<SwipeCleanupHostedService>();
 builder.Services.AddScoped<IExchangeService, ExchangeService>();
 builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
 
