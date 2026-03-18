@@ -136,9 +136,12 @@ builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<IGenreService, GenreService>();
 builder.Services.AddScoped<IPilotUsersService, PilotUsersService>();
+builder.Services.AddScoped<IWeeklyFeedbackMailService, WeeklyFeedbackMailService>();
 builder.Services.AddScoped<IMatcherService, MatcherService>();
 builder.Services.AddScoped<IExchangeService, ExchangeService>();
 builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
+
+builder.Services.AddHostedService<WeeklyFeedbackMailService>();
 
 // Books
 builder.Services.AddScoped<IBookService, BookService>();
