@@ -6,6 +6,8 @@ using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Api.Services.Implementation.Chats;
 using Bookmerang.Api.Services.Interfaces.Genres;
 using Bookmerang.Api.Services.Implementation.Genres;
+using Bookmerang.Api.Services.Interfaces.PilotUsers;
+using Bookmerang.Api.Services.Implementation.PilotUsers;
 using Bookmerang.Api.Services.Interfaces.Books;
 using Bookmerang.Api.Services.Implementation.Books;
 using Bookmerang.Api.Models;
@@ -143,11 +145,14 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<IGenreService, GenreService>();
+builder.Services.AddScoped<IPilotUsersService, PilotUsersService>();
+builder.Services.AddScoped<IWeeklyFeedbackMailService, WeeklyFeedbackMailService>();
 builder.Services.AddScoped<IMatcherService, MatcherService>();
 builder.Services.AddHostedService<SwipeCleanupHostedService>();
 builder.Services.AddScoped<IExchangeService, ExchangeService>();
 builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
 
+builder.Services.AddHostedService<WeeklyFeedbackMailService>();
 // Communities
 builder.Services.AddScoped<ICommunityService, CommunityService>();
 builder.Services.AddScoped<IMeetupService, MeetupService>();
