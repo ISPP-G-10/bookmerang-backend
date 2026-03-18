@@ -18,7 +18,7 @@ public class BookService(
 ) : IBookService
 {
     private const int RequiredPhotosToPublish = 1;
-    private const int MaxPhotosToPublish = 5;
+    private const int MaxPhotosToPublish = 1;
 
     // CREAR BORRADOR
     public async Task<BookDetailDTO> CreateDraftAsync(
