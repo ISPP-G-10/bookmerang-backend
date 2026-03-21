@@ -94,4 +94,30 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
                 .Select(x => (x.Bookspot, x.ValidationCount))
                 .ToList(), ct);
     }
+
+    public async Task<List<(Bookspot bookspot, int validationCount)>> GetUserPendingAsync(
+        Guid userId, CancellationToken ct = default)
+    {
+        return await db.Bookspots
+            .Where(b => b.CreatedByUserId == userId
+                     && b.Status == BookspotStatus.PENDING)
+            .Select(b => new
+            {
+                Bookspot = b,
+                ValidationCount = db.BookspotValidations.Count(v => v.BookspotId == b.Id)
+            })
+            .ToListAsync(ct)
+            .ContinueWith(t => t.Result
+                .Select(x => (x.Bookspot, x.ValidationCount))
+                .ToList(), ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task DeleteAsync(int bookspotId, CancellationToken ct = default)
+    {
+        var bookspot = await db.Bookspots.FirstOrDefaultAsync(b => b.Id == bookspotId, ct);
+        if (bookspot is null) return;
+        db.Bookspots.Remove(bookspot);
+        await db.SaveChangesAsync(ct);
+    }
 }

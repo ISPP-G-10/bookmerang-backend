@@ -81,4 +81,24 @@ public class BookspotsController(IBookspotService bookspotService) : ControllerB
         if (bookspot is null) return NoContent();
         return Ok(bookspot);
     }
+
+    // GET /api/bookspots/user/pending
+    [HttpGet("user/pending")]
+    [SwaggerResponse(200, "Bookspots pendientes del usuario", typeof(List<BookspotDTO>))]
+    public async Task<ActionResult<List<BookspotDTO>>> GetUserPendingAsync(CancellationToken ct = default)
+    {
+        var bookspots = await bookspotService.GetUserPendingWithValidationCountAsync(SupabaseId, ct);
+        return Ok(bookspots);
+    }
+
+    // DELETE /api/bookspots/{id}
+    [HttpDelete("{id:int}")]
+    [SwaggerResponse(204, "Bookspot eliminado")]
+    [SwaggerResponse(403, "No tienes permiso para eliminar este bookspot")]
+    [SwaggerResponse(404, "Bookspot no encontrado")]
+    public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
+    {
+        await bookspotService.DeleteAsync(SupabaseId, id, ct);
+        return NoContent();
+    }
 }

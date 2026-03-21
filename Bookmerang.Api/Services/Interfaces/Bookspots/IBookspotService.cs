@@ -16,4 +16,8 @@ public interface IBookspotService
     Task<BookspotDTO?> GetByIdAsync(int bookspotId, CancellationToken ct = default);
 
     Task<BookspotDTO?> GetRandomPendingNearbyAsync(double latitude, double longitude, double radiusKm, CancellationToken ct = default);
+
+    Task<List<BookspotDTO>> GetUserPendingWithValidationCountAsync(string supabaseId, CancellationToken ct = default);
+
+    Task DeleteAsync(string supabaseId, int bookspotId, CancellationToken ct = default);
 }

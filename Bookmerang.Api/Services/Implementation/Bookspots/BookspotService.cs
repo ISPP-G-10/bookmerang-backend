@@ -21,13 +21,13 @@ public class BookspotService(
     public async Task<List<BookspotDTO>> GetActiveAsync(CancellationToken ct = default)
     {
         var bookspots = await bookspotRepo.GetActiveAsync(ct);
-        return bookspots.Select(MapToDTO).ToList();
+        return bookspots.Select(b => MapToDTO(b)).ToList();
     }
 
     public async Task<List<BookspotDTO>> GetPendingAsync(CancellationToken ct = default)
     {
         var pending = await bookspotRepo.GetPendingAsync(ct);
-        return pending.Select(MapToDTO).ToList();
+        return pending.Select(b => MapToDTO(b)).ToList();
     }
 
     public async Task<List<BookspotNearbyDTO>> GetNearbyActiveAsync(
@@ -114,6 +114,18 @@ public class BookspotService(
         return MapToDTO(random.bookspot);
     }
 
+    public async Task<List<BookspotDTO>> GetUserPendingWithValidationCountAsync(
+        string supabaseId, CancellationToken ct = default)
+    {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
+        
+        var pending = await bookspotRepo.GetUserPendingAsync(ownerId, ct);
+        
+        return pending
+            .Select(x => MapToDTO(x.bookspot, x.validationCount))
+            .ToList();
+    }
+
     private static BookspotDTO MapToDTO(Bookspot b) => new()
     {
         Id = b.Id,
@@ -122,7 +134,24 @@ public class BookspotService(
         Latitude = b.Location.Y,
         Longitude = b.Location.X,
         IsBookdrop = b.IsBookdrop,
-        Status = b.Status
+        Status = b.Status,
+        ValidationCount = 0,
+        RequiredValidations = 5,
+        CreatedAt = b.CreatedAt
+    };
+
+    private static BookspotDTO MapToDTO(Bookspot b, int validationCount) => new()
+    {
+        Id = b.Id,
+        Nombre = b.Nombre,
+        AddressText = b.AddressText,
+        Latitude = b.Location.Y,
+        Longitude = b.Location.X,
+        IsBookdrop = b.IsBookdrop,
+        Status = b.Status,
+        ValidationCount = validationCount,
+        RequiredValidations = 5,
+        CreatedAt = b.CreatedAt
     };
 
     private static BookspotNearbyDTO MapToNearbyDTO(Bookspot b, double distanceMeters) => new()
@@ -135,4 +164,13 @@ public class BookspotService(
         IsBookdrop = b.IsBookdrop,
         DistanceKm = Math.Round(distanceMeters / 1000, 2)
     };
+
+    public async Task DeleteAsync(string supabaseId, int bookspotId, CancellationToken ct = default)
+    {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
+        var bookspot = await bookspotRepo.GetByIdAsync(bookspotId, ct);
+        if (bookspot is null) throw new NotFoundException("Bookspot no encontrado.");
+        if (bookspot.CreatedByUserId != ownerId) throw new ValidationException("No tienes permiso.");
+        await bookspotRepo.DeleteAsync(bookspotId, ct);
+    }
 }

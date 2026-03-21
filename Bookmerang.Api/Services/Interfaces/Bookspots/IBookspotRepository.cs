@@ -21,4 +21,8 @@ public interface IBookspotRepository
     Task UpdateStatusAsync(int bookspotId, BookspotStatus status, CancellationToken ct = default);
 
     Task<List<(Bookspot bookspot, int validationCount)>> GetNearbyPendingAsync(double latitude, double longitude, double radiusKm, CancellationToken ct = default);
+
+    Task<List<(Bookspot bookspot, int validationCount)>> GetUserPendingAsync(Guid userId, CancellationToken ct = default);
+
+    Task DeleteAsync(int bookspotId, CancellationToken ct = default);
 }
