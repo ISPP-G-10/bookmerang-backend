@@ -88,6 +88,18 @@ public class BooksControllerTests
         service.Verify(s => s.DeleteAsync(55, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task Publish_Exito_DevuelveOkObjectResult()
+    {
+        var service = new Mock<IBookService>();
+        var controller = CreateController(service);
+
+        var result = await controller.Publish(55, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(200, ok.StatusCode);
+    }
+
     private static BooksController CreateController(Mock<IBookService> service)
     {
         var controller = new BooksController(service.Object);
