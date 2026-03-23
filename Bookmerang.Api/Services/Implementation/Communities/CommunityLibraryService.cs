@@ -41,6 +41,7 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
         // Get all published books from these members
         var books = await _db.Books
             .Include(b => b.Photos)
+            .Include(b => b.BookGenres).ThenInclude(bg => bg.Genre)
             .Where(b => memberIds.Contains(b.OwnerId) && b.Status == BookStatus.PUBLISHED)
             .ToListAsync();
 
@@ -64,6 +65,7 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
             Titulo = b.Titulo ?? "Sin título",
             Autor = b.Autor ?? "Autor desconocido",
             ThumbnailUrl = b.Photos.OrderBy(p => p.Orden).FirstOrDefault()?.Url,
+            Genres = b.BookGenres.Select(bg => bg.Genre.Name).ToList(),
             LikesCount = likes.Count(l => l.BookId == b.Id),
             LikedByMe = likes.Any(l => l.BookId == b.Id && l.UserId == userId)
         })
