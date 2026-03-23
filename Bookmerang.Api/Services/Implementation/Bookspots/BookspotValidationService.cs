@@ -100,14 +100,16 @@ public class BookspotValidationService(
 
     private async Task<Guid> ResolveUserIdAsync(string supabaseId, CancellationToken ct)
     {
-        var user = await db.Users
-            .FirstOrDefaultAsync(u => u.SupabaseId == supabaseId, ct);
+        var userId = await db.Users
+            .Where(u => u.SupabaseId == supabaseId)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync(ct);
 
-        if (user is null)
+        if (userId is null)
             throw new NotFoundException(
                 $"No se encontró ningún usuario con supabaseId '{supabaseId}'.");
 
-        return user.Id;
+        return userId.Value;
     }
 
     private BookspotValidationDTO MapToDTO(BookspotValidation validation)

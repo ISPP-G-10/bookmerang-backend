@@ -78,14 +78,16 @@ public class BookspotService(
 
     private async Task<Guid> ResolveOwnerIdAsync(string supabaseId, CancellationToken ct)
     {
-        var user = await db.Users
-            .FirstOrDefaultAsync(u => u.SupabaseId == supabaseId, ct);
+        var userId = await db.Users
+            .Where(u => u.SupabaseId == supabaseId)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync(ct);
 
-        if (user is null)
+        if (userId is null)
             throw new NotFoundException(
                 $"No se encontró ningún usuario con supabaseId '{supabaseId}'.");
 
-        return user.Id;
+        return userId.Value;
     }
 
     public async Task<BookspotDTO?> GetByIdAsync(int bookspotId, CancellationToken ct = default)
@@ -118,9 +120,9 @@ public class BookspotService(
         string supabaseId, CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        
+
         var pending = await bookspotRepo.GetUserPendingAsync(ownerId, ct);
-        
+
         return pending
             .Select(x => MapToDTO(x.bookspot, x.validationCount))
             .ToList();
