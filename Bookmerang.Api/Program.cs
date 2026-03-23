@@ -38,6 +38,10 @@ builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEn
 builder.Configuration["Supabase:JwtSecret"] = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET");
 builder.Configuration["Supabase:Url"] = Environment.GetEnvironmentVariable("SUPABASE_URL");
 builder.Configuration["Supabase:ServiceRoleKey"] = Environment.GetEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY");
+builder.Configuration["Auth:JwtSecret"] = Environment.GetEnvironmentVariable("JWT_SECRET");
+builder.Configuration["Auth:JwtIssuer"] = Environment.GetEnvironmentVariable("JWT_ISSUER");
+builder.Configuration["Auth:JwtAudience"] = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+builder.Configuration["Auth:JwtAccessTokenMinutes"] = Environment.GetEnvironmentVariable("JWT_ACCESS_TOKEN_MINUTES");
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -105,12 +109,16 @@ builder.Services.AddCors(options =>
 });
 
 // ===== JWT =====
-var supabaseUrl = builder.Configuration["Supabase:Url"];
+var jwtSecret = builder.Configuration["Auth:JwtSecret"] ?? "";
+var jwtIssuer = builder.Configuration["Auth:JwtIssuer"] ?? "bookmerang-api";
+var jwtAudience = builder.Configuration["Auth:JwtAudience"] ?? "bookmerang-client";
 
-var httpClient = new HttpClient();
-var jwksJson = httpClient.GetStringAsync($"{supabaseUrl}/auth/v1/.well-known/jwks.json").Result;
-var jwks = new JsonWebKeySet(jwksJson);
-var signingKeys = jwks.GetSigningKeys();
+if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
+{
+    throw new InvalidOperationException("JWT_SECRET debe estar configurado y tener al menos 32 caracteres.");
+}
+
+var jwtKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtSecret));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -118,13 +126,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKeys = signingKeys,
+            IssuerSigningKey = jwtKey,
             ValidateIssuer = true,
-            ValidIssuer = $"{supabaseUrl}/auth/v1",
+            ValidIssuer = jwtIssuer,
             ValidateAudience = true,
-            ValidAudience = "authenticated",
+            ValidAudience = jwtAudience,
             ValidateLifetime = true,
-            ValidAlgorithms = new[] { "ES256" }
+            ClockSkew = TimeSpan.FromMinutes(1)
         };
         options.Events = new JwtBearerEvents
         {
@@ -206,6 +214,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.ExecuteSqlRaw("ALTER TABLE base_users ADD COLUMN IF NOT EXISTS password_hash text;");
     var sequences = new[]
     {
         "SELECT setval('books_id_seq',            COALESCE((SELECT MAX(id) FROM books), 0) + 1, false)",

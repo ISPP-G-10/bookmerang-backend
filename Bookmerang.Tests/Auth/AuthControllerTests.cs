@@ -52,7 +52,7 @@ public class AuthControllerTests
     {
         // Arrange
         SetupControllerContext(null, "test@test.com");
-        var request = new RegisterRequest("newuser", "New User", "photo.jpg", BaseUserType.USER, 0, 0);
+        var request = new RegisterRequest("newuser@test.com", "123456", "newuser", "New User", "photo.jpg", BaseUserType.USER, 0, 0);
 
         // Act
         var result = await _authController.Register(request);
@@ -69,7 +69,7 @@ public class AuthControllerTests
         var email = "new@example.com";
         SetupControllerContext(supabaseId, email);
 
-        var request = new RegisterRequest("newuser", "New User", "photo.jpg", BaseUserType.USER, 0, 0);
+        var request = new RegisterRequest("newuser@test.com", "123456", "newuser", "New User", "photo.jpg", BaseUserType.USER, 0, 0);
 
         var user = new ProfileDto { Id = Guid.NewGuid(), Username = request.Username };
         _mockAuthService.Setup(s => s.Register(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<BaseUserType>(), It.IsAny<Point>()))
@@ -93,7 +93,7 @@ public class AuthControllerTests
         var email = "existing@example.com";
         SetupControllerContext(supabaseId, email);
 
-        var request = new RegisterRequest("existinguser", "Existing User", null, BaseUserType.USER, 0, 0);
+        var request = new RegisterRequest("existing@test.com", "123456", "existinguser", "Existing User", "", BaseUserType.USER, 0, 0);
 
         _mockAuthService.Setup(s => s.Register(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<BaseUserType>(), It.IsAny<Point>()))
             .ReturnsAsync(((BaseUser?)null, true));
@@ -195,7 +195,7 @@ public class AuthControllerTests
         // Arrange
         var supabaseId = "user-patching-email";
         SetupControllerContext(supabaseId, "test@test.com");
-        var request = new PatchEmailRequest("new@email.com");
+        var request = new PatchEmailRequest("new@email.com", "123456");
         var errorMessage = "Email already in use.";
         _mockAuthService.Setup(s => s.PatchEmail(supabaseId, request.NewEmail)).ReturnsAsync(((BaseUser?)null, errorMessage));
 
