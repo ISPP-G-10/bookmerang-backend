@@ -20,6 +20,8 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
     {
         var community = await _db.Communities.FindAsync(communityId);
         if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para crear quedadas.");
 
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == communityId && cm.UserId == creatorId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para crear una quedada.");
@@ -57,6 +59,11 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
 
     public async Task<List<MeetupDto>> GetMeetupsByCommunityAsync(int communityId)
     {
+        var community = await _db.Communities.FindAsync(communityId);
+        if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para ver quedadas.");
+
         var meetups = await _db.Meetups
             .Where(m => m.CommunityId == communityId && m.Status == MeetupStatus.SCHEDULED)
             .OrderBy(m => m.ScheduledAt)
@@ -69,6 +76,11 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
     {
         var meetup = await _db.Meetups.FindAsync(meetupId);
         if (meetup == null) throw new NotFoundException("Quedada no encontrada.");
+
+        var community = await _db.Communities.FindAsync(meetup.CommunityId);
+        if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para asistir a quedadas.");
 
         if (meetup.Status != MeetupStatus.SCHEDULED)
             throw new AppValidationException("No te puedes unir a una quedada que ya no está programada.");
@@ -128,6 +140,11 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
     {
         var meetup = await _db.Meetups.FindAsync(meetupId);
         if (meetup == null) throw new NotFoundException("Quedada no encontrada.");
+
+        var community = await _db.Communities.FindAsync(meetup.CommunityId);
+        if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para modificar asistencias.");
 
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == meetup.CommunityId && cm.UserId == userId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para asistir a la quedada.");

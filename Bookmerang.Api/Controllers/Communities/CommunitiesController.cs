@@ -105,7 +105,6 @@ public class CommunitiesController(
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
-
         var result = await _libraryService.GetCommunityLibraryAsync(userId.Value, id, page, pageSize);
         return Ok(result);
     }

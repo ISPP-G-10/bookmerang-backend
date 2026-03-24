@@ -8,6 +8,7 @@ public class CommunityLibraryBookDto
     public string Titulo { get; set; } = string.Empty;
     public string Autor { get; set; } = string.Empty;
     public string? ThumbnailUrl { get; set; }
+    public List<string> Genres { get; set; } = [];
     public int LikesCount { get; set; }
     public bool LikedByMe { get; set; }
 }

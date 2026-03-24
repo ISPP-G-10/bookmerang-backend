@@ -20,6 +20,8 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
 
         var community = await _db.Communities.FindAsync(communityId);
         if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para acceder a la biblioteca.");
 
         var user = await _db.RegularUsers.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null) throw new NotFoundException("Usuario no encontrado.");
@@ -32,15 +34,21 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para ver su biblioteca.");
 
-        // Get all active members' IDs
+        // Get IDs of premium members only (free users don't participate in the shared library)
         var memberIds = await _db.CommunityMembers
             .Where(cm => cm.CommunityId == communityId)
-            .Select(cm => cm.UserId)
+            .Join(_db.RegularUsers,
+                cm => cm.UserId,
+                u => u.Id,
+                (cm, u) => new { cm.UserId, u.Plan })
+            .Where(x => x.Plan != PricingPlan.FREE)
+            .Select(x => x.UserId)
             .ToListAsync();
 
         // Get all published books from these members
         var books = await _db.Books
             .Include(b => b.Photos)
+            .Include(b => b.BookGenres).ThenInclude(bg => bg.Genre)
             .Where(b => memberIds.Contains(b.OwnerId) && b.Status == BookStatus.PUBLISHED)
             .ToListAsync();
 
@@ -64,6 +72,7 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
             Titulo = b.Titulo ?? "Sin título",
             Autor = b.Autor ?? "Autor desconocido",
             ThumbnailUrl = b.Photos.OrderBy(p => p.Orden).FirstOrDefault()?.Url,
+            Genres = b.BookGenres.Select(bg => bg.Genre.Name).ToList(),
             LikesCount = likes.Count(l => l.BookId == b.Id),
             LikedByMe = likes.Any(l => l.BookId == b.Id && l.UserId == userId)
         })
@@ -77,6 +86,8 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
     {
         var community = await _db.Communities.FindAsync(communityId);
         if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para interactuar con la biblioteca.");
 
         var user = await _db.RegularUsers.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null) throw new NotFoundException("Usuario no encontrado.");
@@ -119,6 +130,11 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
 
     public async Task<List<CommunityLibraryBookDto>> GetSuggestedBooksForMeetupAsync(Guid userId, int communityId)
     {
+        var community = await _db.Communities.FindAsync(communityId);
+        if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para obtener sugerencias.");
+
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad.");
 

@@ -146,14 +146,17 @@ public class ExchangeController : ControllerBase
             return BadRequest("Para rechazar un intercambio, no debe tener encuentros programados");
         }
 
-        var newStatus = ExchangeStatus.REJECTED;
-        
         try
         {
-            var updated = await _service.UpdateExchangeStatus(exchangeId, newStatus);
-            return Ok(updated.ToDto());
+            var exchange = await _service.GetExchangeById(exchangeId);
+            if (exchange == null) return NotFound("Intercambio no encontrado");
+
+            var dto = exchange.ToDto() with { Status = ExchangeStatus.REJECTED };
+
+            await _service.DeleteExchange(exchangeId);
+            return Ok(dto);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             return BadRequest(ex.Message);
         }
