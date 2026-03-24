@@ -169,23 +169,49 @@ public class AuthServiceTests
         var supabaseId = "user-to-update-partial";
         var originalUsername = "originaluser";
         var originalName = "Original Name";
+        var originalPhoto = "original.jpg";
         db.Users.Add(new BaseUser
         {
             SupabaseId = supabaseId,
             Email = "original@test.com",
             Username = originalUsername,
             Name = originalName,
+            ProfilePhoto = originalPhoto,
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 }
+        });
+        await db.SaveChangesAsync();
+
+        var updatedUser = await service.UpdatePerfil(supabaseId, " ", null, null);
+
+        Assert.NotNull(updatedUser);
+        Assert.Equal(originalUsername, updatedUser.Username);
+        Assert.Equal(originalName, updatedUser.Name);
+        Assert.Equal(originalPhoto, updatedUser.ProfilePhoto);
+    }
+
+    [Fact]
+    public async Task UpdatePerfil_ShouldClearProfilePhoto_WhenEmptyStringIsProvided()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var supabaseId = "user-to-clear-photo";
+        db.Users.Add(new BaseUser
+        {
+            SupabaseId = supabaseId,
+            Email = "photo@test.com",
+            Username = "photouser",
+            Name = "Photo User",
             ProfilePhoto = "original.jpg",
             UserType = BaseUserType.USER,
             Location = new Point(0, 0) { SRID = 4326 }
         });
         await db.SaveChangesAsync();
 
-        var updatedUser = await service.UpdatePerfil(supabaseId, " ", null, "");
+        var updatedUser = await service.UpdatePerfil(supabaseId, null, null, "");
 
         Assert.NotNull(updatedUser);
-        Assert.Equal(originalUsername, updatedUser.Username);
-        Assert.Equal(originalName, updatedUser.Name);
+        Assert.Equal(string.Empty, updatedUser.ProfilePhoto);
     }
 
     [Fact]
