@@ -32,10 +32,15 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para ver su biblioteca.");
 
-        // Get all active members' IDs
+        // Get IDs of premium members only (free users don't participate in the shared library)
         var memberIds = await _db.CommunityMembers
             .Where(cm => cm.CommunityId == communityId)
-            .Select(cm => cm.UserId)
+            .Join(_db.RegularUsers,
+                cm => cm.UserId,
+                u => u.Id,
+                (cm, u) => new { cm.UserId, u.Plan })
+            .Where(x => x.Plan != PricingPlan.FREE)
+            .Select(x => x.UserId)
             .ToListAsync();
 
         // Get all published books from these members
