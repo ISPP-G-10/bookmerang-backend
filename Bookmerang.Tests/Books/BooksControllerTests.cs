@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Bookmerang.Api.Controllers.Books;
+using Bookmerang.Api.Exceptions;
 using Bookmerang.Api.Models.DTOs.Books.Queries;
 using Bookmerang.Api.Models.DTOs.Books.Requests;
 using Bookmerang.Api.Models.DTOs.Books.Responses;
@@ -86,6 +87,34 @@ public class BooksControllerTests
         var noContent = Assert.IsType<NoContentResult>(result);
         Assert.Equal(204, noContent.StatusCode);
         service.Verify(s => s.DeleteAsync(55, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Publish_Exito_DevuelveOkObjectResult()
+    {
+        var service = new Mock<IBookService>();
+        var controller = CreateController(service);
+
+        var result = await controller.Publish(55, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(200, ok.StatusCode);
+        service.Setup(s => s.PublishAsync(55, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+       .ReturnsAsync(new BookDetailDTO { Id = 55 });
+    }
+
+    [Fact]
+    public async Task Publish_ServicioLanzaException_LaPropaga()
+    {
+        var service = new Mock<IBookService>();
+
+        service.Setup(s => s.PublishAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+               .ThrowsAsync(new ValidationException("error"));
+
+        var controller = CreateController(service);
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            controller.Publish(1, CancellationToken.None));
     }
 
     private static BooksController CreateController(Mock<IBookService> service)

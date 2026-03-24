@@ -48,12 +48,11 @@ public class AuthControllerTests
     }
 
     [Fact]
-    public async Task Register_ShouldReturnBadRequest_WhenServiceReturnsError()
+    public async Task Register_ShouldReturnBadRequest_WhenRegisterServiceReturnsError()
     {
         // Arrange
         SetupControllerContext(null, "test@test.com");
         var request = new RegisterRequest("newuser@test.com", "123456", "newuser", "New User", "photo.jpg", BaseUserType.USER, 0, 0);
-        var errorMessage = "El email ya está registrado.";
         _mockAuthService
             .Setup(s => s.RegisterWithCredentials(
                 request.Email,
@@ -63,14 +62,14 @@ public class AuthControllerTests
                 request.ProfilePhoto,
                 request.UserType,
                 It.IsAny<Point>()))
-            .ReturnsAsync(((BaseUser?)null, false, errorMessage));
+            .ReturnsAsync(((BaseUser?)null, false, "Error en registro"));
 
         // Act
         var result = await _authController.Register(request);
 
         // Assert
         var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Equal(errorMessage, badRequestResult.Value);
+        Assert.Equal("Error en registro", badRequestResult.Value);
     }
 
     [Fact]
@@ -83,10 +82,10 @@ public class AuthControllerTests
 
         var request = new RegisterRequest("newuser@test.com", "123456", "newuser", "New User", "photo.jpg", BaseUserType.USER, 0, 0);
 
-        var createdUser = new BaseUser
+        var user = new BaseUser
         {
             Id = Guid.NewGuid(),
-            SupabaseId = "supabase-id",
+            SupabaseId = "supabase-new",
             Email = request.Email,
             Username = request.Username,
             Name = request.Name,
@@ -94,8 +93,8 @@ public class AuthControllerTests
             UserType = request.UserType,
             Location = new Point(0, 0) { SRID = 4326 }
         };
-        var token = "fake-jwt-token";
-        _mockAuthService.Setup(s => s.RegisterWithCredentials(
+        _mockAuthService
+            .Setup(s => s.RegisterWithCredentials(
                 request.Email,
                 request.Password,
                 request.Username,
@@ -103,9 +102,10 @@ public class AuthControllerTests
                 request.ProfilePhoto,
                 request.UserType,
                 It.IsAny<Point>()))
-            .ReturnsAsync((createdUser, false, null));
-        _mockAuthService.Setup(s => s.Login(request.Email, request.Password))
-            .ReturnsAsync((createdUser, token, null));
+            .ReturnsAsync((user, false, (string?)null));
+        _mockAuthService
+            .Setup(s => s.Login(request.Email, request.Password))
+            .ReturnsAsync((user, "token-123", (string?)null));
 
         // Act
         var result = await _authController.Register(request);
@@ -113,9 +113,9 @@ public class AuthControllerTests
         // Assert
         var createdAtActionResult = Assert.IsType<CreatedAtActionResult>(result);
         Assert.Equal(nameof(AuthController.GetPerfil), createdAtActionResult.ActionName);
-        var authResponse = Assert.IsType<AuthResponse>(createdAtActionResult.Value);
-        Assert.Equal(token, authResponse.AccessToken);
-        Assert.Equal(createdUser.Id, authResponse.User.Id);
+        var response = Assert.IsType<AuthResponse>(createdAtActionResult.Value);
+        Assert.Equal("token-123", response.AccessToken);
+        Assert.Equal(user.Id, response.User.Id);
     }
 
     [Fact]
@@ -128,7 +128,8 @@ public class AuthControllerTests
 
         var request = new RegisterRequest("existing@test.com", "123456", "existinguser", "Existing User", "", BaseUserType.USER, 0, 0);
 
-        _mockAuthService.Setup(s => s.RegisterWithCredentials(
+        _mockAuthService
+            .Setup(s => s.RegisterWithCredentials(
                 request.Email,
                 request.Password,
                 request.Username,
@@ -136,7 +137,7 @@ public class AuthControllerTests
                 request.ProfilePhoto,
                 request.UserType,
                 It.IsAny<Point>()))
-            .ReturnsAsync(((BaseUser?)null, true, null));
+            .ReturnsAsync(((BaseUser?)null, true, (string?)null));
 
         // Act
         var result = await _authController.Register(request);
@@ -237,7 +238,9 @@ public class AuthControllerTests
         SetupControllerContext(supabaseId, "test@test.com");
         var request = new PatchEmailRequest("new@email.com", "123456");
         var errorMessage = "Email already in use.";
-        _mockAuthService.Setup(s => s.PatchEmail(supabaseId, request.NewEmail, request.CurrentPassword)).ReturnsAsync(((BaseUser?)null, errorMessage));
+        _mockAuthService
+            .Setup(s => s.PatchEmail(supabaseId, request.NewEmail, request.CurrentPassword))
+            .ReturnsAsync(((BaseUser?)null, errorMessage));
 
         // Act
         var result = await _authController.PatchEmail(request);
@@ -290,6 +293,110 @@ public class AuthControllerTests
         // Assert
         var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Equal(exceptionMessage, badRequestResult.Value);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnUnauthorized_WhenSupabaseIdMissing()
+    {
+        // Arrange
+        SetupControllerContext(null, null);
+
+        // Act
+        var result = await _authController.PatchPassword(new PatchPasswordRequest("any", "newpass123"));
+
+        // Assert
+        Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnBadRequest_WhenServiceReturnsError_CurrentEmpty()
+    {
+        // Arrange
+        var supabaseId = "user-pw-1";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("", "NewPass123!");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync("La contraseña actual es obligatoria.");
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("La contraseña actual es obligatoria.", bad.Value);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnBadRequest_WhenUserNotFound()
+    {
+        // Arrange
+        var supabaseId = "user-pw-2";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("current", "NewPass123!");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync("Usuario no encontrado.");
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Usuario no encontrado.", bad.Value);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnBadRequest_WhenCurrentIncorrect()
+    {
+        // Arrange
+        var supabaseId = "user-pw-3";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("wrong", "BrandNew123!");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync("Contraseña actual incorrecta.");
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Contraseña actual incorrecta.", bad.Value);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnBadRequest_WhenNewPasswordTooShort()
+    {
+        // Arrange
+        var supabaseId = "user-pw-4";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("Correct1!", "short");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync("La nueva contraseña debe tener al menos 8 caracteres.");
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("La nueva contraseña debe tener al menos 8 caracteres.", bad.Value);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnOk_WhenPasswordUpdatedSuccessfully()
+    {
+        // Arrange
+        var supabaseId = "user-pw-5";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("Correct123!", "BrandNew123!");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync((string?)null);
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var ok = Assert.IsType<OkObjectResult>(result);
+        dynamic val = ok.Value!;
+        Assert.Equal("Contraseña actualizada correctamente.", (string)val.message);
     }
 
 }
