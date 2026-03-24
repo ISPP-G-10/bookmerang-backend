@@ -10,7 +10,8 @@ public record ChatDto(
     string Type,
     DateTime CreatedAt,
     List<ChatParticipantDto> Participants,
-    MessageDto? LastMessage
+    MessageDto? LastMessage,
+    string? Name = null
 );
 
 public record ChatParticipantDto(
@@ -44,12 +45,13 @@ public record CreateChatRequest(
 
 public static class ChatExtensions
 {
-    public static ChatDto ToDto(this Chat chat, Message? lastMessage = null) => new(
+    public static ChatDto ToDto(this Chat chat, Message? lastMessage = null, string? name = null) => new(
         chat.Id,
         chat.Type.ToString(),
         chat.CreatedAt,
         chat.Participants.Select(p => p.ToDto()).ToList(),
-        lastMessage?.ToDto()
+        lastMessage?.ToDto(),
+        name
     );
 
     public static ChatParticipantDto ToDto(this ChatParticipant participant) => new(
