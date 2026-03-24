@@ -316,4 +316,94 @@ public class BookServiceTests : IAsyncLifetime
 
         bookRepo.Verify(x => x.GetDraftsPagedAsync(ownerId, query, It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task PublishAsync_DrafCompleto()
+    {
+        var ownerId = Guid.NewGuid();
+        SeedUser(ownerId, "supabase-ok");
+        await _db.SaveChangesAsync();
+
+        var draft = new Book
+        {
+            Id = 10,
+            OwnerId = ownerId,
+            Status = BookStatus.DRAFT,
+            Isbn = "ISBN 978-84-123456-7-0",
+            Titulo = "Titulo de prueba",
+            Autor = "Autor de prueba",
+            Editorial = "Editorial de prueba",
+            Cover = CoverType.HARDCOVER,
+            NumPaginas = 333,
+            Condition = BookCondition.LIKE_NEW,
+            Observaciones = "Observaciones de prueba",
+            Photos = new List<BookPhoto> { new() { Url = "https://img/1.jpg", Orden = 0 } },
+            BookGenres = new List<BookGenre> { new() { Book=null, BookId= 10, GenreId = 1, Genre = new Genre { Id = 1, Name = "Ficción" } } },
+            BookLanguages = new List<BookLanguage> { new() { Book = null, BookId = 10, LanguageId = 1, Language = new Language { Id = 1, LanguageName = "Español" } } }
+        };
+
+        var bookRepo = new Mock<IBookRepository>();
+        var genreRepo = new Mock<IGenreRepository>();
+        var languageRepo = new Mock<ILanguageRepository>();
+
+        bookRepo.Setup(x => x.GetByIdAsync(10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(draft);
+
+        var sut = CreateSut(bookRepo, genreRepo, languageRepo);
+        
+        var result = await sut.PublishAsync(10, "supabase-ok", CancellationToken.None);
+
+        Assert.Equal(BookStatus.PUBLISHED, draft.Status);
+        Assert.Equal("ISBN 978-84-123456-7-0", draft.Isbn);
+        bookRepo.Verify(x => x.UpdateAsync(It.IsAny<Book>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_NoEsOwner_LanzaUnauthorizedAccessException()
+    {
+        var ownerId = Guid.NewGuid();
+        var otroOwnerId = Guid.NewGuid();
+
+        SeedUser(ownerId, "supabase-ok");
+        await _db.SaveChangesAsync();
+
+        var draft = new Book
+        {
+            Id = 10,
+            OwnerId = otroOwnerId,
+            Status = BookStatus.DRAFT,
+            Isbn = "123",
+            Titulo = "Titulo",
+            Autor = "Autor",
+            Cover = CoverType.HARDCOVER,
+            NumPaginas = 10,
+            Condition = BookCondition.LIKE_NEW,
+            Photos = new List<BookPhoto> { new() },
+            BookGenres = new List<BookGenre> { new() },
+            BookLanguages = new List<BookLanguage> { new() }
+        };
+
+        var bookRepo = new Mock<IBookRepository>();
+        bookRepo.Setup(x => x.GetByIdAsync(10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(draft);
+
+        var sut = CreateSut(bookRepo, new Mock<IGenreRepository>(), new Mock<ILanguageRepository>());
+
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
+            sut.PublishAsync(10, "supabase-ok", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PublishAsync_LibroNoExiste_LanzaNotFoundException()
+    {
+        var bookRepo = new Mock<IBookRepository>();
+
+        bookRepo.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Book)null);
+
+        var sut = CreateSut(bookRepo, new Mock<IGenreRepository>(), new Mock<ILanguageRepository>());
+
+        await Assert.ThrowsAsync<NotFoundException>(() => // usa tu NotFoundException real
+            sut.PublishAsync(10, "supabase-ok", CancellationToken.None));
+    }
 }

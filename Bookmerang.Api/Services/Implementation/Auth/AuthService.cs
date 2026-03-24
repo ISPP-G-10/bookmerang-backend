@@ -181,8 +181,8 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         if (!string.IsNullOrWhiteSpace(name))
             user.Name = name;
 
-        if (!string.IsNullOrWhiteSpace(profilePhoto))
-            user.ProfilePhoto = profilePhoto;
+        if (profilePhoto != null)
+            user.ProfilePhoto = string.IsNullOrWhiteSpace(profilePhoto) ? string.Empty : profilePhoto;
 
         user.UpdatedAt = DateTime.UtcNow;
 
