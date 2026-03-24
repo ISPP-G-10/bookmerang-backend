@@ -109,8 +109,23 @@ public class ExchangeService(AppDbContext db): IExchangeService
         
         // Eliminar primero los ExchangeMeetings asociados para evitar restricciones de clave foránea
         var exchangeMeetings = await _db.ExchangeMeetings.Where(em => em.ExchangeId == exchangeId).ToListAsync();
-        _db.ExchangeMeetings.RemoveRange(exchangeMeetings);
+        if (exchangeMeetings.Any())
+            _db.ExchangeMeetings.RemoveRange(exchangeMeetings);
         
+        // Eliminar dependencias del chat asociado
+        var chatId = exchange.ChatId;
+        var messages = await _db.Messages.Where(m => m.ChatId == chatId).ToListAsync();
+        if (messages.Any()) _db.Messages.RemoveRange(messages);
+
+        var participants = await _db.ChatParticipants.Where(cp => cp.ChatId == chatId).ToListAsync();
+        if (participants.Any()) _db.ChatParticipants.RemoveRange(participants);
+
+        var typingIndicators = await _db.TypingIndicators.Where(t => t.ChatId == chatId).ToListAsync();
+        if (typingIndicators.Any()) _db.TypingIndicators.RemoveRange(typingIndicators);
+
+        var chat = await _db.Chats.FindAsync(chatId);
+        if (chat != null) _db.Chats.Remove(chat);
+
         _db.Exchanges.Remove(exchange);
         await _db.SaveChangesAsync();
         
