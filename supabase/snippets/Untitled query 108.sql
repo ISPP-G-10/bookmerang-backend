@@ -1,1 +1,0 @@
-INSERT INTO users (id) VALUES ('9b3a2249-d674-47f1-86df-27229158c90c');
