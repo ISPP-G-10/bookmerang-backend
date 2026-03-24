@@ -88,7 +88,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(100))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 100,
 				ChatId = 1,
@@ -108,7 +108,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.UpdateExchangeStatus(100, ExchangeStatus.ACCEPTED_BY_1))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 100,
 				ChatId = 1,
@@ -141,7 +141,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(200))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 200,
 				ChatId = 1,
@@ -161,7 +161,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.UpdateExchangeStatus(200, ExchangeStatus.ACCEPTED))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 200,
 				ChatId = 1,
@@ -184,7 +184,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(300))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 300,
 				ChatId = 1,
@@ -218,7 +218,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeById(50))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 50,
 				ChatId = 5,
@@ -242,7 +242,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeById(9999))
-			.ReturnsAsync((Api.Models.Entities.Exchange?)null);
+			.ReturnsAsync((Exchange?)null);
 
 		var result = await controller.GetExchange(9999);
 
@@ -272,7 +272,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeByChatIdWithMatch(60))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 60,
 				ChatId = 60,
@@ -305,7 +305,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeByChatIdWithMatch(9999))
-			.ReturnsAsync((Api.Models.Entities.Exchange?)null);
+			.ReturnsAsync((Exchange?)null);
 
 		var result = await controller.GetExchangeByChatIdWithMatchDetails(9999);
 
@@ -321,7 +321,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetAllExchanges())
-			.ReturnsAsync(new List<Api.Models.Entities.Exchange>
+			.ReturnsAsync(new List<Exchange>
 			{
 				new() { ExchangeId = 70, ChatId = 70, MatchId = 70, Status = ExchangeStatus.NEGOTIATING, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
 				new() { ExchangeId = 71, ChatId = 71, MatchId = 71, Status = ExchangeStatus.NEGOTIATING, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
@@ -340,7 +340,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetAllExchanges())
-			.ReturnsAsync(new List<Api.Models.Entities.Exchange>());
+			.ReturnsAsync(new List<Exchange>());
 
 		var result = await controller.GetAllExchanges();
 
@@ -371,7 +371,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.CreateExchange(100, 100))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 100,
 				ChatId = 100,
@@ -437,8 +437,8 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync((ExchangeMeeting?)null);
 
 		_exchangeService
-			.Setup(s => s.UpdateExchangeStatus(110, ExchangeStatus.REJECTED))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.Setup(s => s.GetExchangeById(110))
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 110,
 				ChatId = 110,
@@ -447,6 +447,10 @@ public class ExchangeControllerTests : IAsyncLifetime
 				CreatedAt = DateTime.UtcNow,
 				UpdatedAt = DateTime.UtcNow
 			});
+
+		_exchangeService
+			.Setup(s => s.DeleteExchange(110))
+			.ReturnsAsync(true);
 
 		var result = await controller.RejectExchange(110);
 
@@ -488,7 +492,19 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync((ExchangeMeeting?)null);
 
 		_exchangeService
-			.Setup(s => s.UpdateExchangeStatus(112, ExchangeStatus.REJECTED))
+			.Setup(s => s.GetExchangeById(112))
+			.ReturnsAsync(new Exchange
+			{
+				ExchangeId = 112,
+				ChatId = 112,
+				MatchId = 112,
+				Status = ExchangeStatus.NEGOTIATING,
+				CreatedAt = DateTime.UtcNow,
+				UpdatedAt = DateTime.UtcNow
+			});
+
+		_exchangeService
+			.Setup(s => s.DeleteExchange(112))
 			.ThrowsAsync(new InvalidOperationException("Exchange not found"));
 
 		var result = await controller.RejectExchange(112);
@@ -519,7 +535,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.UpdateExchangeStatus(120, ExchangeStatus.INCIDENT))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 120,
 				ChatId = 120,
@@ -634,7 +650,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(400))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 400,
 				ChatId = 1,
@@ -654,7 +670,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.UpdateExchangeStatus(400, ExchangeStatus.ACCEPTED_BY_2))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 400,
 				ChatId = 1,
@@ -677,7 +693,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(401))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 401,
 				ChatId = 1,
@@ -710,7 +726,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(402))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 402,
 				ChatId = 1,
@@ -730,7 +746,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.UpdateExchangeStatus(402, ExchangeStatus.ACCEPTED))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 402,
 				ChatId = 1,
@@ -753,7 +769,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(403))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 403,
 				ChatId = 1,
@@ -773,7 +789,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 
 		_exchangeService
 			.Setup(s => s.UpdateExchangeStatus(403, ExchangeStatus.ACCEPTED))
-			.ReturnsAsync(new Api.Models.Entities.Exchange
+			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 403,
 				ChatId = 1,
