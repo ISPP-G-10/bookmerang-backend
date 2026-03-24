@@ -314,7 +314,6 @@ public class AuthServiceTests
         var userId = Guid.NewGuid();
         var supabaseId = "user-to-delete-success";
 
-        // Create user + regular user + progress
         db.Users.Add(new BaseUser
         {
             Id = userId,
@@ -330,7 +329,6 @@ public class AuthServiceTests
         db.RegularUsers.Add(new User { Id = userId });
         db.UserProgresses.Add(new UserProgress { UserId = userId, XpTotal = 10, StreakWeeks = 1, UpdatedAt = DateTime.UtcNow });
 
-        // User preferences and genres
         db.UserPreferences.Add(new UserPreference
         {
             Id = 1,
@@ -343,25 +341,21 @@ public class AuthServiceTests
         });
         db.UserPreferenceGenres.Add(new UserPreferenceGenre { PreferencesId = 1, GenreId = 2 });
 
-        // Book owned by user and its deps
         var bookId = 123;
         db.Books.Add(new Book { Id = bookId, OwnerId = userId, Titulo = "B", Status = BookStatus.PUBLISHED });
         db.BookPhotos.Add(new BookPhoto { Id = 1, BookId = bookId, Url = "p.jpg", Orden = 0 });
         db.BookGenres.Add(new BookGenre { BookId = bookId, GenreId = 5 });
         db.BookLanguages.Add(new BookLanguage { BookId = bookId, LanguageId = 2 });
 
-        // Swipes by user and swipes to user's book
         db.Swipes.Add(new Swipe { Id = 1, SwiperId = userId, BookId = 999, Direction = Bookmerang.Api.Models.Enums.SwipeDirection.RIGHT, CreatedAt = DateTime.UtcNow });
         db.Swipes.Add(new Swipe { Id = 2, SwiperId = Guid.NewGuid(), BookId = bookId, Direction = Bookmerang.Api.Models.Enums.SwipeDirection.LEFT, CreatedAt = DateTime.UtcNow });
 
-        // Chat, messages, participants, typing indicators (not linked to active exchanges)
         var chatId = 777;
         db.Chats.Add(new Chat { Id = chatId, Type = Bookmerang.Api.Models.Enums.ChatType.EXCHANGE });
         db.Messages.Add(new Message { Id = 1, ChatId = chatId, SenderId = userId, Body = "hi", SentAt = DateTime.UtcNow });
         db.ChatParticipants.Add(new ChatParticipant { ChatId = chatId, UserId = userId, JoinedAt = DateTime.UtcNow });
         db.TypingIndicators.Add(new TypingIndicator { Id = 1, ChatId = chatId, UserId = userId, StartedAt = DateTime.UtcNow });
 
-        // Match and completed exchange (should allow deletion)
         var matchId = 10;
         db.Matches.Add(new Match { Id = matchId, User1Id = userId, User2Id = Guid.NewGuid(), Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow });
         db.Exchanges.Add(new Exchange { ExchangeId = 200, ChatId = chatId, MatchId = matchId, Status = ExchangeStatus.COMPLETED, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
@@ -372,7 +366,6 @@ public class AuthServiceTests
 
         Assert.NotNull(deleted);
 
-        // Verify removals
         Assert.False(await db.Users.AnyAsync(u => u.SupabaseId == supabaseId));
         Assert.False(await db.RegularUsers.AnyAsync(r => r.Id == userId));
         Assert.False(await db.UserProgresses.AnyAsync(p => p.UserId == userId));
@@ -425,7 +418,7 @@ public class AuthServiceTests
 
         var userId = Guid.NewGuid();
         var supabaseId = "supabase-1";
-        var location = new Point(2.5, 41.4) { SRID = 4326 }; // X=long, Y=lat
+        var location = new Point(2.5, 41.4) { SRID = 4326 };
 
         db.Users.Add(new BaseUser {
             Id = userId,
@@ -478,7 +471,6 @@ public class AuthServiceTests
         });
         await db.SaveChangesAsync();
         var before = DateTime.UtcNow;
-        // perform update
         var updated = await service.UpdatePerfil(supabaseId, "newuser", "New Name", "newphoto.jpg");
 
         var updatedAt = (await db.Users.FirstAsync()).UpdatedAt;
@@ -744,7 +736,7 @@ public class AuthServiceTests
         var service = CreateService(db);
         var supabaseId = "user-newpass-8-hash";
         var current = "Correct123!";
-        var newPassword = "NewP4ss!"; // 8 chars
+        var newPassword = "NewP4ss!";
         db.Users.Add(new BaseUser
         {
             SupabaseId = supabaseId,
@@ -772,7 +764,7 @@ public class AuthServiceTests
         var service = CreateService(db);
         var supabaseId = "user-newpass-8-legacy";
         var current = "legacyPass1";
-        var newPassword = "LegacY88"; // 8 chars
+        var newPassword = "LegacY88";
         db.Users.Add(new BaseUser
         {
             SupabaseId = supabaseId,
@@ -957,8 +949,8 @@ public class AuthServiceTests
 
         var userId = Guid.NewGuid();
         var supabaseId = "user-gamification";
-        var xp = 123456; // a large XP to exercise many branches
-        var streak = 10; // should cap bonus at 20 (10*4 -> 40 -> min 20)
+        var xp = 123456;
+        var streak = 10;
 
         db.Users.Add(new BaseUser
         {
@@ -996,7 +988,6 @@ public class AuthServiceTests
         Assert.Equal(expectedMonthlyInkDrops, dto.MonthlyInkDrops);
         Assert.Equal(expectedDaysUntilReset, dto.DaysUntilReset);
 
-        // Tier should correspond to level; for a very high level expect DIAMANTE
         Assert.Equal("DIAMANTE", dto.Tier);
     }
 
@@ -1017,7 +1008,7 @@ public class AuthServiceTests
             var service = CreateService(db);
             var userId = Guid.NewGuid();
             var supabaseId = $"tier-{level}";
-            var xp = (level - 1) * 1000; // ensures exact level
+            var xp = (level - 1) * 1000;
 
             db.Users.Add(new BaseUser
             {
