@@ -355,6 +355,55 @@ public class BookServiceTests : IAsyncLifetime
 
         Assert.Equal(BookStatus.PUBLISHED, draft.Status);
         Assert.Equal("ISBN 978-84-123456-7-0", draft.Isbn);
-        Assert.True(sut.GetByIdAsync(10, "supabase-ok", CancellationToken.None) != null);
+        bookRepo.Verify(x => x.UpdateAsync(It.IsAny<Book>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_NoEsOwner_LanzaUnauthorizedAccessException()
+    {
+        var ownerId = Guid.NewGuid();
+        var otroOwnerId = Guid.NewGuid();
+
+        SeedUser(ownerId, "supabase-ok");
+        await _db.SaveChangesAsync();
+
+        var draft = new Book
+        {
+            Id = 10,
+            OwnerId = otroOwnerId,
+            Status = BookStatus.DRAFT,
+            Isbn = "123",
+            Titulo = "Titulo",
+            Autor = "Autor",
+            Cover = CoverType.HARDCOVER,
+            NumPaginas = 10,
+            Condition = BookCondition.LIKE_NEW,
+            Photos = new List<BookPhoto> { new() },
+            BookGenres = new List<BookGenre> { new() },
+            BookLanguages = new List<BookLanguage> { new() }
+        };
+
+        var bookRepo = new Mock<IBookRepository>();
+        bookRepo.Setup(x => x.GetByIdAsync(10, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(draft);
+
+        var sut = CreateSut(bookRepo, new Mock<IGenreRepository>(), new Mock<ILanguageRepository>());
+
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
+            sut.PublishAsync(10, "supabase-ok", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PublishAsync_LibroNoExiste_LanzaNotFoundException()
+    {
+        var bookRepo = new Mock<IBookRepository>();
+
+        bookRepo.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Book)null);
+
+        var sut = CreateSut(bookRepo, new Mock<IGenreRepository>(), new Mock<ILanguageRepository>());
+
+        await Assert.ThrowsAsync<NotFoundException>(() => // usa tu NotFoundException real
+            sut.PublishAsync(10, "supabase-ok", CancellationToken.None));
     }
 }
