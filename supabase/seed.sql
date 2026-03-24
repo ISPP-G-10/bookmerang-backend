@@ -104,7 +104,28 @@ INSERT INTO users (id, rating_mean, finished_exchanges, plan) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ==============================================================
--- 4. BOOKS  (4 libros por usuario = 60 en total)
+-- 4. USER_PREFERENCES (básicas)
+-- ============================================================== 
+INSERT INTO user_preferences (user_id, location, radio_km, extension, created_at, updated_at) VALUES
+  (u01, ST_MakePoint(-6.0016,  37.3815)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u02, ST_MakePoint(-5.9712,  37.3840)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u03, ST_MakePoint(-5.9900,  37.4020)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u04, ST_MakePoint(-6.0080,  37.3740)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u05, ST_MakePoint(-5.9930,  37.3890)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u06, ST_MakePoint(-5.9970,  37.3600)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u07, ST_MakePoint(-5.9750,  37.4230)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u08, ST_MakePoint(-5.9600,  37.3500)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u09, ST_MakePoint(-5.9400,  37.3700)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u10, ST_MakePoint(-6.0000,  37.3420)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u11, ST_MakePoint(-6.0320,  37.3970)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u12, ST_MakePoint(-5.9980,  37.4100)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u13, ST_MakePoint(-5.9650,  37.4150)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u14, ST_MakePoint(-5.9712,  37.3830)::geography, 10, 'MEDIUM', now_ts, now_ts),
+  (u15, ST_MakePoint(-6.0020,  37.3800)::geography, 10, 'MEDIUM', now_ts, now_ts)
+ON CONFLICT (user_id) DO NOTHING;
+
+-- ==============================================================
+-- 5. BOOKS  (4 libros por usuario = 60 en total)
 --    IDs 101-160 para evitar colisiones con el seed de test
 -- ==============================================================
 -- Géneros de referencia rápida en comentarios
