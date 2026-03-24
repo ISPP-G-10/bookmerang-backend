@@ -66,7 +66,9 @@ public class AuthController : ControllerBase
         var usuario = await _authService.GetPerfil(supabaseId);
         if (usuario == null) return NotFound("Usuario no encontrado en el sistema.");
 
-        return Ok(new { id = usuario.Id });
+        var plan = await _authService.GetUserPlan(usuario.Id);
+
+        return Ok(new { id = usuario.Id, plan = plan.ToString() });
     }
 
     [HttpGet("perfil")]

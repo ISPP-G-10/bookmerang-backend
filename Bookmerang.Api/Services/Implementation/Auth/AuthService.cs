@@ -381,6 +381,12 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         return user;
     }
 
+    public async Task<PricingPlan> GetUserPlan(Guid userId)
+    {
+        var regularUser = await _db.RegularUsers.FindAsync(userId);
+        return regularUser?.Plan ?? PricingPlan.FREE;
+    }
+
     private string GenerateToken(BaseUser user)
     {
         var secret = _config["Auth:JwtSecret"] ?? _config["JWT_SECRET"];

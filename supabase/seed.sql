@@ -372,6 +372,14 @@ INSERT INTO books_languages (book_id, language_id) VALUES
 (157,1),(158,1),(159,1),(160,1)
 ON CONFLICT (book_id, language_id) DO NOTHING;
 
+-- ==============================================================
+-- 8. BOOKSPOTS (lugares reales de Sevilla)
+-- ==============================================================
+INSERT INTO bookspots (id, nombre, address_text, location, is_bookdrop, created_by_user_id, status, created_at) VALUES
+  (10, 'Biblioteca Pública Municipal de Triana',      'C. Rodrigo de Triana, 70, 41010 Sevilla',       ST_SetSRID(ST_MakePoint(-6.0041, 37.3823), 4326)::geography, false, u01, 'ACTIVE', now_ts - INTERVAL '60 days'),
+  (11, 'Café literario El Gato Tuerto',               'C. Betis, 32, 41010 Sevilla',                   ST_SetSRID(ST_MakePoint(-6.0020, 37.3810), 4326)::geography, false, u03, 'ACTIVE', now_ts - INTERVAL '55 days')
+ON CONFLICT (id) DO NOTHING;
+
 END $$;
 
 COMMIT;
