@@ -24,4 +24,5 @@ public interface IAuthService
     Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail, string currentPassword);
     Task<string?> PatchPassword(string supabaseId, string currentPassword, string newPassword);
     Task<BaseUser?> DeletePerfil(string supabaseId);
+    Task<PricingPlan> GetUserPlan(Guid userId);
 }
