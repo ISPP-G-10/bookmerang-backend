@@ -28,6 +28,9 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql.NameTranslation;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Bookmerang.Api.Services.Interfaces.Bookspots;
+using Bookmerang.Api.Services.Implementation.Bookspots;
+using Bookmerang.Api.Models.Entities;
 
 //DotNetEnv.Env.Load();
 DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
@@ -172,6 +175,12 @@ builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
 builder.Services.AddScoped<IGenreRepository, GenreRepository>();
 builder.Services.AddScoped<ILanguageRepository, LanguageRepository>();
+
+// Bookspots
+builder.Services.AddScoped<IBookspotRepository, BookspotRepository>();
+builder.Services.AddScoped<IBookspotService, BookspotService>();
+builder.Services.AddScoped<IBookspotValidationRepository, BookspotValidationRepository>();
+builder.Services.AddScoped<IBookspotValidationService, BookspotValidationService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers()

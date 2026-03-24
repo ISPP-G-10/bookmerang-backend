@@ -29,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<TypingIndicator> TypingIndicators => Set<TypingIndicator>();
     public DbSet<Bookspot> Bookspots => Set<Bookspot>();
+    public DbSet<BookspotValidation> BookspotValidations => Set<BookspotValidation>();
     public DbSet<Community> Communities => Set<Community>();
     public DbSet<CommunityMember> CommunityMembers => Set<CommunityMember>();
     public DbSet<CommunityChat> CommunityChats => Set<CommunityChat>();
@@ -48,17 +49,20 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<MatchStatus>();
         modelBuilder.HasPostgresEnum<ChatType>("public", "chat_type", new NpgsqlNullNameTranslator());
         modelBuilder.HasPostgresEnum<ExchangeStatus>();
+        modelBuilder.HasPostgresEnum<BookspotStatus>();
         modelBuilder.HasPostgresEnum<CommunityStatus>();
         modelBuilder.HasPostgresEnum<CommunityRole>();
         modelBuilder.HasPostgresEnum<MeetupStatus>();
         modelBuilder.HasPostgresEnum<MeetupAttendanceStatus>();
         modelBuilder.HasPostgresEnum<BookspotStatus>();
         modelBuilder.HasPostgresEnum<PricingPlan>();
+        modelBuilder.HasPostgresEnum<BaseUserType>();
 
         modelBuilder.Entity<BaseUser>(entity =>
         {
             entity.HasIndex(u => u.SupabaseId).IsUnique();
             entity.HasIndex(u => u.Email).IsUnique();
+            entity.Property(u => u.UserType).HasConversion<int>();
         });
 
         modelBuilder.Entity<Exchange>(entity =>
@@ -370,6 +374,22 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // ===== BOOKSPOTS =====
+        modelBuilder.Entity<Bookspot>(e =>
+        {
+            e.ToTable("bookspots");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Nombre).HasColumnName("nombre");
+            e.Property(x => x.AddressText).HasColumnName("address_text");
+            e.Property(x => x.Location).HasColumnName("location").HasColumnType("geography(Point,4326)");
+            e.Property(x => x.IsBookdrop).HasColumnName("is_bookdrop");
+            e.Property(x => x.CreatedByUserId).HasColumnName("created_by_user_id");
+            e.Property(x => x.OwnerId).HasColumnName("owner_id");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+        });
+
         // ===== COMMUNITIES =====
         modelBuilder.Entity<Community>(e =>
         {
@@ -421,6 +441,18 @@ public class AppDbContext : DbContext
             e.Property(x => x.CreatorId).HasColumnName("creator_id");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        // ===== BOOKSPOT_VALIDATIONS =====
+        modelBuilder.Entity<BookspotValidation>(e =>
+        {
+            e.ToTable("bookspot_validations");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.BookspotId).HasColumnName("bookspot_id");
+            e.Property(x => x.ValidatorUserId).HasColumnName("validator_user_id");
+            e.Property(x => x.KnowsPlace).HasColumnName("knows_place");
+            e.Property(x => x.SafeForExchange).HasColumnName("safe_for_exchange");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
         });
 
         modelBuilder.Entity<MeetupAttendance>(e =>
