@@ -20,6 +20,8 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
 
         var community = await _db.Communities.FindAsync(communityId);
         if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para acceder a la biblioteca.");
 
         var user = await _db.RegularUsers.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null) throw new NotFoundException("Usuario no encontrado.");
@@ -84,6 +86,8 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
     {
         var community = await _db.Communities.FindAsync(communityId);
         if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para interactuar con la biblioteca.");
 
         var user = await _db.RegularUsers.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null) throw new NotFoundException("Usuario no encontrado.");
@@ -126,6 +130,11 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
 
     public async Task<List<CommunityLibraryBookDto>> GetSuggestedBooksForMeetupAsync(Guid userId, int communityId)
     {
+        var community = await _db.Communities.FindAsync(communityId);
+        if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+        if (community.Status != CommunityStatus.ACTIVE)
+            throw new ForbiddenException("La comunidad debe estar activa para obtener sugerencias.");
+
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad.");
 
