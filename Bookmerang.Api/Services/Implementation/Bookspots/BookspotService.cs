@@ -3,6 +3,7 @@ using Bookmerang.Api.Exceptions;
 using Bookmerang.Api.Models.DTOs.Bookspots.Requests;
 using Bookmerang.Api.Models.DTOs.Bookspots.Responses;
 using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Bookspots;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -97,37 +98,37 @@ public class BookspotService(
 
     public async Task<BookspotDTO?> GetRandomPendingNearbyAsync(double latitude, double longitude, double radiusKm,
     string supabaseId, CancellationToken ct = default)
-{
-    if (radiusKm > MaxRadiusKm)
-        throw new ValidationException($"El radio máximo permitido es {MaxRadiusKm} km.");
+    {
+        if (radiusKm > MaxRadiusKm)
+            throw new ValidationException($"El radio máximo permitido es {MaxRadiusKm} km.");
 
-    // ID del usuario actual
-    var userId = await ResolveOwnerIdAsync(supabaseId, ct);
+        // ID del usuario actual
+        var userId = await ResolveOwnerIdAsync(supabaseId, ct);
 
-    // Candidatos pendientes cercanos (esto ya trae el validationCount por el Repo)
-    var candidates = await bookspotRepo.GetNearbyPendingAsync(latitude, longitude, radiusKm, ct);
+        // Candidatos pendientes cercanos (esto ya trae el validationCount por el Repo)
+        var candidates = await bookspotRepo.GetNearbyPendingAsync(latitude, longitude, radiusKm, ct);
 
-    var alreadyValidatedIds = await db.BookspotValidations
-        .Where(v => v.ValidatorUserId == userId)
-        .Select(v => v.BookspotId)
-        .ToListAsync(ct);
+        var alreadyValidatedIds = await db.BookspotValidations
+            .Where(v => v.ValidatorUserId == userId)
+            .Select(v => v.BookspotId)
+            .ToListAsync(ct);
 
-    // Filtrado:
-    // - Que no sea el creador (no autovalidarse)
-    // - Que no esté en la lista de ya validados
-    var filtered = candidates
-        .Where(x => x.bookspot.CreatedByUserId != userId && !alreadyValidatedIds.Contains(x.bookspot.Id))
-        .ToList();
+        // Filtrado:
+        // - Que no sea el creador (no autovalidarse)
+        // - Que no esté en la lista de ya validados
+        var filtered = candidates
+            .Where(x => x.bookspot.CreatedByUserId != userId && !alreadyValidatedIds.Contains(x.bookspot.Id))
+            .ToList();
 
-    if (!filtered.Any()) return null;
+        if (!filtered.Any()) return null;
 
-    // Cogemos el valor mínimo de validaciones que haya en la lista
-    var minValidations = filtered.Min(x => x.validationCount);
-    var bestCandidates = filtered.Where(x => x.validationCount == minValidations).ToList();
-    var randomCandidate = bestCandidates[Random.Shared.Next(bestCandidates.Count)];
+        // Cogemos el valor mínimo de validaciones que haya en la lista
+        var minValidations = filtered.Min(x => x.validationCount);
+        var bestCandidates = filtered.Where(x => x.validationCount == minValidations).ToList();
+        var randomCandidate = bestCandidates[Random.Shared.Next(bestCandidates.Count)];
 
-    return MapToDTO(randomCandidate.bookspot, randomCandidate.validationCount);
-}
+        return MapToDTO(randomCandidate.bookspot, randomCandidate.validationCount);
+    }
 
     public async Task<List<BookspotDTO>> GetUserPendingWithValidationCountAsync(
         string supabaseId, CancellationToken ct = default)

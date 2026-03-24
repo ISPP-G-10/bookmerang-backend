@@ -384,70 +384,72 @@ public class AppDbContext : DbContext
             e.Property(x => x.CreatedByUserId).HasColumnName("created_by_user_id");
             e.Property(x => x.OwnerId).HasColumnName("owner_id");
             e.Property(x => x.Status).HasColumnName("status");
-        // ===== COMMUNITIES =====
-        modelBuilder.Entity<Community>(e =>
-        {
-            e.ToTable("communities");
-            e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.Name).HasColumnName("name");
-            e.Property(x => x.ReferenceBookspotId).HasColumnName("reference_bookspot_id");
-            e.Property(x => x.Status).HasColumnName("status");
-            e.Property(x => x.CreatorId).HasColumnName("creator_id");
-            e.Property(x => x.CreatedAt).HasColumnName("created_at");
-        });
+            // ===== COMMUNITIES =====
+            modelBuilder.Entity<Community>(e =>
+            {
+                e.ToTable("communities");
+                e.Property(x => x.Id).HasColumnName("id");
+                e.Property(x => x.Name).HasColumnName("name");
+                e.Property(x => x.ReferenceBookspotId).HasColumnName("reference_bookspot_id");
+                e.Property(x => x.Status).HasColumnName("status");
+                e.Property(x => x.CreatorId).HasColumnName("creator_id");
+                e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            });
 
-        modelBuilder.Entity<CommunityMember>(e =>
-        {
-            e.ToTable("community_members");
-            e.Property(x => x.CommunityId).HasColumnName("community_id");
-            e.Property(x => x.UserId).HasColumnName("user_id");
-            e.Property(x => x.Role).HasColumnName("role");
-            e.Property(x => x.JoinedAt).HasColumnName("joined_at");
-        });
+            modelBuilder.Entity<CommunityMember>(e =>
+            {
+                e.ToTable("community_members");
+                e.Property(x => x.CommunityId).HasColumnName("community_id");
+                e.Property(x => x.UserId).HasColumnName("user_id");
+                e.Property(x => x.Role).HasColumnName("role");
+                e.Property(x => x.JoinedAt).HasColumnName("joined_at");
+            });
 
-        modelBuilder.Entity<CommunityChat>(e =>
-        {
-            e.ToTable("community_chats");
-            e.Property(x => x.CommunityId).HasColumnName("community_id");
-            e.Property(x => x.ChatId).HasColumnName("chat_id");
-        });
+            modelBuilder.Entity<CommunityChat>(e =>
+            {
+                e.ToTable("community_chats");
+                e.Property(x => x.CommunityId).HasColumnName("community_id");
+                e.Property(x => x.ChatId).HasColumnName("chat_id");
+            });
 
-        modelBuilder.Entity<CommunityLibraryLike>(e =>
-        {
-            e.ToTable("community_library_likes");
-            e.Property(x => x.CommunityId).HasColumnName("community_id");
-            e.Property(x => x.UserId).HasColumnName("user_id");
-            e.Property(x => x.BookId).HasColumnName("book_id");
-            e.Property(x => x.CreatedAt).HasColumnName("created_at");
-        });
+            modelBuilder.Entity<CommunityLibraryLike>(e =>
+            {
+                e.ToTable("community_library_likes");
+                e.Property(x => x.CommunityId).HasColumnName("community_id");
+                e.Property(x => x.UserId).HasColumnName("user_id");
+                e.Property(x => x.BookId).HasColumnName("book_id");
+                e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            });
 
-        modelBuilder.Entity<Meetup>(e =>
-        {
-            e.ToTable("meetups");
-            e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.CommunityId).HasColumnName("community_id");
-            e.Property(x => x.Title).HasColumnName("title");
-            e.Property(x => x.Description).HasColumnName("description");
-            e.Property(x => x.OtherBookSpotId).HasColumnName("other_book_spot_id");
-            e.Property(x => x.OtherLocation).HasColumnName("other_location").HasColumnType("geography(Point,4326)");
-            e.Property(x => x.ScheduledAt).HasColumnName("scheduled_at");
-            e.Property(x => x.Status).HasColumnName("status");
-            e.Property(x => x.CreatorId).HasColumnName("creator_id");
-            e.Property(x => x.CreatedAt).HasColumnName("created_at");
-            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-        });
+            modelBuilder.Entity<Meetup>(e =>
+            {
+                e.ToTable("meetups");
+                e.Property(x => x.Id).HasColumnName("id");
+                e.Property(x => x.CommunityId).HasColumnName("community_id");
+                e.Property(x => x.Title).HasColumnName("title");
+                e.Property(x => x.Description).HasColumnName("description");
+                e.Property(x => x.OtherBookSpotId).HasColumnName("other_book_spot_id");
+                e.Property(x => x.OtherLocation).HasColumnName("other_location").HasColumnType("geography(Point,4326)");
+                e.Property(x => x.ScheduledAt).HasColumnName("scheduled_at");
+                e.Property(x => x.Status).HasColumnName("status");
+                e.Property(x => x.CreatorId).HasColumnName("creator_id");
+                e.Property(x => x.CreatedAt).HasColumnName("created_at");
+                e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            });
 
-        // ===== BOOKSPOT_VALIDATIONS =====
-        modelBuilder.Entity<BookspotValidation>(e =>
-        {
-            e.ToTable("bookspot_validations");
-        modelBuilder.Entity<MeetupAttendance>(e =>
-        {
-            e.ToTable("meetup_attendance");
-            e.Property(x => x.MeetupId).HasColumnName("meetup_id");
-            e.Property(x => x.UserId).HasColumnName("user_id");
-            e.Property(x => x.SelectedBookId).HasColumnName("selected_book_id");
-            e.Property(x => x.Status).HasColumnName("status");
+            // ===== BOOKSPOT_VALIDATIONS =====
+            modelBuilder.Entity<BookspotValidation>(e =>
+            {
+                e.ToTable("bookspot_validations");
+                modelBuilder.Entity<MeetupAttendance>(e =>
+            {
+                e.ToTable("meetup_attendance");
+                e.Property(x => x.MeetupId).HasColumnName("meetup_id");
+                e.Property(x => x.UserId).HasColumnName("user_id");
+                e.Property(x => x.SelectedBookId).HasColumnName("selected_book_id");
+                e.Property(x => x.Status).HasColumnName("status");
+            });
+            });
         });
     }
 }

@@ -3,6 +3,7 @@ using Bookmerang.Api.Exceptions;
 using Bookmerang.Api.Models.DTOs.Bookspots.Requests;
 using Bookmerang.Api.Models.DTOs.Bookspots.Responses;
 using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Bookspots;
 using Microsoft.EntityFrameworkCore;
 
