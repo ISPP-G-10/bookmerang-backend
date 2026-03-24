@@ -48,17 +48,29 @@ public class AuthControllerTests
     }
 
     [Fact]
-    public async Task Register_ShouldReturnUnauthorized_WhenSupabaseIdIsMissing()
+    public async Task Register_ShouldReturnBadRequest_WhenServiceReturnsError()
     {
         // Arrange
         SetupControllerContext(null, "test@test.com");
         var request = new RegisterRequest("newuser@test.com", "123456", "newuser", "New User", "photo.jpg", BaseUserType.USER, 0, 0);
+        var errorMessage = "El email ya está registrado.";
+        _mockAuthService
+            .Setup(s => s.RegisterWithCredentials(
+                request.Email,
+                request.Password,
+                request.Username,
+                request.Name,
+                request.ProfilePhoto,
+                request.UserType,
+                It.IsAny<Point>()))
+            .ReturnsAsync(((BaseUser?)null, false, errorMessage));
 
         // Act
         var result = await _authController.Register(request);
 
         // Assert
-        Assert.IsType<UnauthorizedResult>(result);
+        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(errorMessage, badRequestResult.Value);
     }
 
     [Fact]
@@ -71,9 +83,29 @@ public class AuthControllerTests
 
         var request = new RegisterRequest("newuser@test.com", "123456", "newuser", "New User", "photo.jpg", BaseUserType.USER, 0, 0);
 
-        var user = new ProfileDto { Id = Guid.NewGuid(), Username = request.Username };
-        _mockAuthService.Setup(s => s.Register(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<BaseUserType>(), It.IsAny<Point>()))
-            .ReturnsAsync((new BaseUser { Id = user.Id, Username = user.Username, Location = new Point(0,0) }, false));
+        var createdUser = new BaseUser
+        {
+            Id = Guid.NewGuid(),
+            SupabaseId = "supabase-id",
+            Email = request.Email,
+            Username = request.Username,
+            Name = request.Name,
+            ProfilePhoto = request.ProfilePhoto,
+            UserType = request.UserType,
+            Location = new Point(0, 0) { SRID = 4326 }
+        };
+        var token = "fake-jwt-token";
+        _mockAuthService.Setup(s => s.RegisterWithCredentials(
+                request.Email,
+                request.Password,
+                request.Username,
+                request.Name,
+                request.ProfilePhoto,
+                request.UserType,
+                It.IsAny<Point>()))
+            .ReturnsAsync((createdUser, false, null));
+        _mockAuthService.Setup(s => s.Login(request.Email, request.Password))
+            .ReturnsAsync((createdUser, token, null));
 
         // Act
         var result = await _authController.Register(request);
@@ -81,8 +113,9 @@ public class AuthControllerTests
         // Assert
         var createdAtActionResult = Assert.IsType<CreatedAtActionResult>(result);
         Assert.Equal(nameof(AuthController.GetPerfil), createdAtActionResult.ActionName);
-        var returnedDto = Assert.IsType<BaseUserDto>(createdAtActionResult.Value);
-        Assert.Equal(user.Id, returnedDto.Id);
+        var authResponse = Assert.IsType<AuthResponse>(createdAtActionResult.Value);
+        Assert.Equal(token, authResponse.AccessToken);
+        Assert.Equal(createdUser.Id, authResponse.User.Id);
     }
 
     [Fact]
@@ -95,8 +128,15 @@ public class AuthControllerTests
 
         var request = new RegisterRequest("existing@test.com", "123456", "existinguser", "Existing User", "", BaseUserType.USER, 0, 0);
 
-        _mockAuthService.Setup(s => s.Register(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<BaseUserType>(), It.IsAny<Point>()))
-            .ReturnsAsync(((BaseUser?)null, true));
+        _mockAuthService.Setup(s => s.RegisterWithCredentials(
+                request.Email,
+                request.Password,
+                request.Username,
+                request.Name,
+                request.ProfilePhoto,
+                request.UserType,
+                It.IsAny<Point>()))
+            .ReturnsAsync(((BaseUser?)null, true, null));
 
         // Act
         var result = await _authController.Register(request);
@@ -197,7 +237,7 @@ public class AuthControllerTests
         SetupControllerContext(supabaseId, "test@test.com");
         var request = new PatchEmailRequest("new@email.com", "123456");
         var errorMessage = "Email already in use.";
-        _mockAuthService.Setup(s => s.PatchEmail(supabaseId, request.NewEmail)).ReturnsAsync(((BaseUser?)null, errorMessage));
+        _mockAuthService.Setup(s => s.PatchEmail(supabaseId, request.NewEmail, request.CurrentPassword)).ReturnsAsync(((BaseUser?)null, errorMessage));
 
         // Act
         var result = await _authController.PatchEmail(request);
