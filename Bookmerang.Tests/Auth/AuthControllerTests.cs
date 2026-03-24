@@ -295,4 +295,108 @@ public class AuthControllerTests
         Assert.Equal(exceptionMessage, badRequestResult.Value);
     }
 
+    [Fact]
+    public async Task PatchPassword_ShouldReturnUnauthorized_WhenSupabaseIdMissing()
+    {
+        // Arrange
+        SetupControllerContext(null, null);
+
+        // Act
+        var result = await _authController.PatchPassword(new PatchPasswordRequest("any", "newpass123"));
+
+        // Assert
+        Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnBadRequest_WhenServiceReturnsError_CurrentEmpty()
+    {
+        // Arrange
+        var supabaseId = "user-pw-1";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("", "NewPass123!");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync("La contraseña actual es obligatoria.");
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("La contraseña actual es obligatoria.", bad.Value);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnBadRequest_WhenUserNotFound()
+    {
+        // Arrange
+        var supabaseId = "user-pw-2";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("current", "NewPass123!");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync("Usuario no encontrado.");
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Usuario no encontrado.", bad.Value);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnBadRequest_WhenCurrentIncorrect()
+    {
+        // Arrange
+        var supabaseId = "user-pw-3";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("wrong", "BrandNew123!");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync("Contraseña actual incorrecta.");
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Contraseña actual incorrecta.", bad.Value);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnBadRequest_WhenNewPasswordTooShort()
+    {
+        // Arrange
+        var supabaseId = "user-pw-4";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("Correct1!", "short");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync("La nueva contraseña debe tener al menos 8 caracteres.");
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("La nueva contraseña debe tener al menos 8 caracteres.", bad.Value);
+    }
+
+    [Fact]
+    public async Task PatchPassword_ShouldReturnOk_WhenPasswordUpdatedSuccessfully()
+    {
+        // Arrange
+        var supabaseId = "user-pw-5";
+        SetupControllerContext(supabaseId, "u@test.com");
+        var request = new PatchPasswordRequest("Correct123!", "BrandNew123!");
+        _mockAuthService.Setup(s => s.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword))
+            .ReturnsAsync((string?)null);
+
+        // Act
+        var result = await _authController.PatchPassword(request);
+
+        // Assert
+        var ok = Assert.IsType<OkObjectResult>(result);
+        dynamic val = ok.Value!;
+        Assert.Equal("Contraseña actualizada correctamente.", (string)val.message);
+    }
+
 }
