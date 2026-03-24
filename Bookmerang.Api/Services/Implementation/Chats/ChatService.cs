@@ -26,6 +26,17 @@ public class ChatService(AppDbContext db) : IChatService
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
 
+        var communityChatIds = chats.Where(c => c.Type == ChatType.COMMUNITY).Select(c => c.Id).ToList();
+        var communityNames = new Dictionary<int, string>();
+        
+        if (communityChatIds.Any())
+        {
+            communityNames = await _db.CommunityChats
+                .Include(cc => cc.Community)
+                .Where(cc => communityChatIds.Contains(cc.ChatId))
+                .ToDictionaryAsync(cc => cc.ChatId, cc => cc.Community.Name);
+        }
+
         var result = new List<ChatDto>();
 
         foreach (var chat in chats)
@@ -37,7 +48,13 @@ public class ChatService(AppDbContext db) : IChatService
                 .OrderByDescending(m => m.SentAt)
                 .FirstOrDefaultAsync();
 
-            result.Add(chat.ToDto(lastMessage));
+            string? name = null;
+            if (chat.Type == ChatType.COMMUNITY && communityNames.TryGetValue(chat.Id, out var commName))
+            {
+                name = commName;
+            }
+
+            result.Add(chat.ToDto(lastMessage, name));
         }
 
         // Ordenar por último mensaje (los chats con mensajes más recientes primero)
@@ -68,7 +85,14 @@ public class ChatService(AppDbContext db) : IChatService
             .OrderByDescending(m => m.SentAt)
             .FirstOrDefaultAsync();
 
-        return chat.ToDto(lastMessage);
+        string? name = null;
+        if (chat.Type == ChatType.COMMUNITY)
+        {
+            var commChat = await _db.CommunityChats.Include(cc => cc.Community).FirstOrDefaultAsync(cc => cc.ChatId == chatId);
+            if (commChat != null) name = commChat.Community.Name;
+        }
+
+        return chat.ToDto(lastMessage, name);
     }
 
     public async Task<List<MessageDto>> GetMessages(int chatId, Guid userId, int page, int pageSize)
@@ -118,7 +142,7 @@ public class ChatService(AppDbContext db) : IChatService
 
     public async Task<ChatDto?> CreateChat(ChatType type, List<Guid> participantIds)
     {
-        if (participantIds.Count < 2)
+        if (type != ChatType.COMMUNITY && participantIds.Count < 2)
             return null;
 
         // Verificar que todos los usuarios existen

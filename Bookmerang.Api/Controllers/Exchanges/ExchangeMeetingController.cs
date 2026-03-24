@@ -94,7 +94,7 @@ public class ExchangeMeetingController : ControllerBase
             return BadRequest("Faltan propiedades para crear un ExchangeMeeting.");
         
         var exchange = await _exchangeService.GetExchangeWithMatch(dto.ExchangeId.Value);
-        if (exchange == null) return NotFound($"ExchangeMeeting con id {exchange!.ExchangeId} no encontrado.");
+        if (exchange == null) return NotFound($"Exchange con id {dto.ExchangeId} no encontrado.");
         
         if (!IsUserInExchange(userId.Value, exchange!.Match)) return Forbid();
         

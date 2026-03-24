@@ -1,4 +1,4 @@
-namespace Bookmerang.Api.Models.Entities;
+namespace Bookmerang.Api.Models.Enums;
 
 public enum BookspotStatus
 {

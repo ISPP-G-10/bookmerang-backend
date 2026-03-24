@@ -22,4 +22,6 @@ public class FeedSettings
     public required int DefaultPageSize { get; set; }
     public required int RecencyDecayDays { get; set; }
     public required int SwipeValidDays { get; set; }
+    public bool SwipeCleanupEnabled { get; set; } = true;
+    public int SwipeCleanupIntervalHours { get; set; } = 48;
 }

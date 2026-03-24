@@ -397,6 +397,8 @@ COMMENT ON COLUMN "incidents"."informer_id" IS 'usuario que pone la indicendia';
 
 COMMENT ON COLUMN "incidents"."informed_id" IS 'usuario sobre el que se pone la incidencia';
 
+ALTER TABLE base_users ADD COLUMN IF NOT EXISTS password_hash text;
+
 ALTER TABLE "admins" ADD FOREIGN KEY ("id") REFERENCES "base_users" ("id");
 
 ALTER TABLE "bookdrop_users" ADD FOREIGN KEY ("id") REFERENCES "base_users" ("id");
