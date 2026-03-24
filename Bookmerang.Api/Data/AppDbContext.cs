@@ -56,11 +56,13 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<MeetupAttendanceStatus>();
         modelBuilder.HasPostgresEnum<BookspotStatus>();
         modelBuilder.HasPostgresEnum<PricingPlan>();
+        modelBuilder.HasPostgresEnum<BaseUserType>();
 
         modelBuilder.Entity<BaseUser>(entity =>
         {
             entity.HasIndex(u => u.SupabaseId).IsUnique();
             entity.HasIndex(u => u.Email).IsUnique();
+            entity.Property(u => u.UserType).HasConversion<int>();
         });
 
         modelBuilder.Entity<Exchange>(entity =>
