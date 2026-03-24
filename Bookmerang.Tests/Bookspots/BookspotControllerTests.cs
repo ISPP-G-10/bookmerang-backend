@@ -209,7 +209,7 @@ public class BookspotControllerTests
     public async Task GetRandomPendingNearbyAsync_Found_ReturnsOk()
     {
         _bookspotSvc
-            .Setup(s => s.GetRandomPendingNearbyAsync(40.4, -3.7, 10, default))
+            .Setup(s => s.GetRandomPendingNearbyAsync(40.4, -3.7, 10, TestSupabaseId, default))
             .ReturnsAsync(MakeBookspotDto());
 
         var result = await CreateBookspotController()
@@ -222,7 +222,7 @@ public class BookspotControllerTests
     public async Task GetRandomPendingNearbyAsync_NoneFound_Returns204()
     {
         _bookspotSvc
-            .Setup(s => s.GetRandomPendingNearbyAsync(40.4, -3.7, 10, default))
+            .Setup(s => s.GetRandomPendingNearbyAsync(40.4, -3.7, 10, TestSupabaseId, default))
             .ReturnsAsync((BookspotDTO?)null);
 
         var result = await CreateBookspotController()
@@ -276,13 +276,13 @@ public class BookspotControllerTests
     }
 
     [Fact]
-    public async Task DeleteAsync_NotOwner_BubblesValidationException()
+    public async Task DeleteAsync_NotOwner_BubblesForbiddenException()
     {
         _bookspotSvc
             .Setup(s => s.DeleteAsync(TestSupabaseId, 1, default))
-            .ThrowsAsync(new ValidationException("No tienes permiso."));
+            .ThrowsAsync(new ForbiddenException("No tienes permiso para eliminar este bookspot."));
 
-        await Assert.ThrowsAsync<ValidationException>(
+        await Assert.ThrowsAsync<ForbiddenException>(
             () => CreateBookspotController().DeleteAsync(1, default));
     }
 
@@ -426,5 +426,101 @@ public class BookspotControllerTests
 
         await Assert.ThrowsAsync<NotFoundException>(
             () => CreateValidationController().GetByIdAsync(99, default));
+    }
+
+    // ════════════════════════════════════════════════
+    // BookspotsController — GetUserActive
+    // ════════════════════════════════════════════════
+
+    [Fact]
+    public async Task GetUserActiveAsync_ReturnsOkWithList()
+    {
+        var dto = MakeBookspotDto();
+        dto.Status = BookspotStatus.ACTIVE;
+        dto.ValidatedAt = DateTime.UtcNow;
+
+        _bookspotSvc
+            .Setup(s => s.GetUserActiveAsync(TestSupabaseId, default))
+            .ReturnsAsync([dto]);
+
+        var result = await CreateBookspotController().GetUserActiveAsync();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var list = Assert.IsType<List<BookspotDTO>>(ok.Value);
+        Assert.Single(list);
+        Assert.Equal(BookspotStatus.ACTIVE, list[0].Status);
+        Assert.NotNull(list[0].ValidatedAt);
+    }
+
+    [Fact]
+    public async Task GetUserActiveAsync_Empty_ReturnsOkWithEmptyList()
+    {
+        _bookspotSvc
+            .Setup(s => s.GetUserActiveAsync(TestSupabaseId, default))
+            .ReturnsAsync([]);
+
+        var result = await CreateBookspotController().GetUserActiveAsync();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var list = Assert.IsType<List<BookspotDTO>>(ok.Value);
+        Assert.Empty(list);
+    }
+
+    // ════════════════════════════════════════════════
+    // BookspotsController — UpdateName (PATCH)
+    // ════════════════════════════════════════════════
+
+    [Fact]
+    public async Task UpdateNameAsync_ValidRequest_ReturnsOkWithUpdatedDto()
+    {
+        var dto = MakeBookspotDto();
+        dto.Nombre = "Nuevo nombre";
+
+        _bookspotSvc
+            .Setup(s => s.UpdateNameAsync(TestSupabaseId, 1, "Nuevo nombre", default))
+            .ReturnsAsync(dto);
+
+        var request = new UpdateBookspotNameRequest { Nombre = "Nuevo nombre" };
+        var result = await CreateBookspotController().UpdateNameAsync(1, request, default);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var returned = Assert.IsType<BookspotDTO>(ok.Value);
+        Assert.Equal("Nuevo nombre", returned.Nombre);
+    }
+
+    [Fact]
+    public async Task UpdateNameAsync_NotFound_BubblesNotFoundException()
+    {
+        _bookspotSvc
+            .Setup(s => s.UpdateNameAsync(TestSupabaseId, 99, It.IsAny<string>(), default))
+            .ThrowsAsync(new NotFoundException("Bookspot no encontrado."));
+
+        var request = new UpdateBookspotNameRequest { Nombre = "Nombre" };
+        await Assert.ThrowsAsync<NotFoundException>(
+            () => CreateBookspotController().UpdateNameAsync(99, request, default));
+    }
+
+    [Fact]
+    public async Task UpdateNameAsync_NotOwner_BubblesForbiddenException()
+    {
+        _bookspotSvc
+            .Setup(s => s.UpdateNameAsync(TestSupabaseId, 1, It.IsAny<string>(), default))
+            .ThrowsAsync(new ForbiddenException("No tienes permiso para modificar este bookspot."));
+
+        var request = new UpdateBookspotNameRequest { Nombre = "Nombre" };
+        await Assert.ThrowsAsync<ForbiddenException>(
+            () => CreateBookspotController().UpdateNameAsync(1, request, default));
+    }
+
+    [Fact]
+    public async Task UpdateNameAsync_ActiveBookspot_BubblesValidationException()
+    {
+        _bookspotSvc
+            .Setup(s => s.UpdateNameAsync(TestSupabaseId, 1, It.IsAny<string>(), default))
+            .ThrowsAsync(new ValidationException("Solo se puede renombrar un bookspot en estado PENDING."));
+
+        var request = new UpdateBookspotNameRequest { Nombre = "Nombre" };
+        await Assert.ThrowsAsync<ValidationException>(
+            () => CreateBookspotController().UpdateNameAsync(1, request, default));
     }
 }

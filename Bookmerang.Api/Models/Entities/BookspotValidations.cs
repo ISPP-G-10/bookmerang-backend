@@ -27,5 +27,5 @@ public class BookspotValidation
     public bool SafeForExchange { get; set; }
 
     [Column("created_at")]
-    public DateTime Created_at { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -7,6 +7,7 @@ namespace Bookmerang.Api.Models.Entities;
 public class Bookspot
 {
     [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     [Column("id")]
     public int Id { get; set; }
 

@@ -11,7 +11,8 @@ public class BookspotDTO
     public double Longitude { get; set; }
     public bool IsBookdrop { get; set; }
     public BookspotStatus Status { get; set; }
-    public int ValidationCount { get; set; }
+    public int? ValidationCount { get; set; }
     public int RequiredValidations { get; set; } = 5;
     public DateTime CreatedAt { get; set; }
+    public DateTime? ValidatedAt { get; set; }
 }

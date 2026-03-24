@@ -9,4 +9,5 @@ public class BookspotNearbyDTO
     public double Longitude { get; set; }
     public bool IsBookdrop { get; set; }
     public double DistanceKm { get; set; }
+    public string? CreatorUsername { get; set; }
 }

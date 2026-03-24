@@ -16,6 +16,7 @@ public class BookspotService(
 {
     private const double MaxRadiusKm = 50;
     private const int MaxBookspotsPerMonth = 5;
+    private const int RequiredValidations = 5;
     private const double DuplicateRadiusMeters = 5;
 
     public async Task<List<BookspotDTO>> GetActiveAsync(CancellationToken ct = default)
@@ -39,7 +40,7 @@ public class BookspotService(
         var bookspots = await bookspotRepo.GetNearbyActiveAsync(latitude, longitude, radiusKm, ct);
 
         return bookspots
-            .Select(x => MapToNearbyDTO(x.bookspot, x.distanceMeters))
+            .Select(x => MapToNearbyDTO(x.bookspot, x.distanceMeters, x.creatorUsername))
             .OrderBy(b => b.DistanceKm)
             .ToList();
     }
@@ -78,16 +79,14 @@ public class BookspotService(
 
     private async Task<Guid> ResolveOwnerIdAsync(string supabaseId, CancellationToken ct)
     {
-        var userId = await db.Users
-            .Where(u => u.SupabaseId == supabaseId)
-            .Select(u => (Guid?)u.Id)
-            .FirstOrDefaultAsync(ct);
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.SupabaseId == supabaseId, ct);
 
-        if (userId is null)
+        if (user is null)
             throw new NotFoundException(
                 $"No se encontró ningún usuario con supabaseId '{supabaseId}'.");
 
-        return userId.Value;
+        return user.Id;
     }
 
     public async Task<BookspotDTO?> GetByIdAsync(int bookspotId, CancellationToken ct = default)
@@ -96,36 +95,75 @@ public class BookspotService(
         return bookspot is null ? null : MapToDTO(bookspot);
     }
 
-    public async Task<BookspotDTO?> GetRandomPendingNearbyAsync(
-    double latitude, double longitude, double radiusKm, CancellationToken ct = default)
-    {
-        if (radiusKm > MaxRadiusKm)
-            throw new ValidationException($"El radio máximo permitido es {MaxRadiusKm} km.");
+    public async Task<BookspotDTO?> GetRandomPendingNearbyAsync(double latitude, double longitude, double radiusKm,
+    string supabaseId, CancellationToken ct = default)
+{
+    if (radiusKm > MaxRadiusKm)
+        throw new ValidationException($"El radio máximo permitido es {MaxRadiusKm} km.");
 
-        var candidates = await bookspotRepo.GetNearbyPendingAsync(latitude, longitude, radiusKm, ct);
+    // ID del usuario actual
+    var userId = await ResolveOwnerIdAsync(supabaseId, ct);
 
-        if (!candidates.Any()) return null;
+    // Candidatos pendientes cercanos (esto ya trae el validationCount por el Repo)
+    var candidates = await bookspotRepo.GetNearbyPendingAsync(latitude, longitude, radiusKm, ct);
 
-        // Cogemos solo los que tienen menos validaciones y elegimos uno al azar
-        var minValidations = candidates.Min(x => x.validationCount);
-        var leastValidated = candidates
-            .Where(x => x.validationCount == minValidations)
-            .ToList();
+    var alreadyValidatedIds = await db.BookspotValidations
+        .Where(v => v.ValidatorUserId == userId)
+        .Select(v => v.BookspotId)
+        .ToListAsync(ct);
 
-        var random = leastValidated[Random.Shared.Next(leastValidated.Count)];
-        return MapToDTO(random.bookspot);
-    }
+    // Filtrado:
+    // - Que no sea el creador (no autovalidarse)
+    // - Que no esté en la lista de ya validados
+    var filtered = candidates
+        .Where(x => x.bookspot.CreatedByUserId != userId && !alreadyValidatedIds.Contains(x.bookspot.Id))
+        .ToList();
+
+    if (!filtered.Any()) return null;
+
+    // Cogemos el valor mínimo de validaciones que haya en la lista
+    var minValidations = filtered.Min(x => x.validationCount);
+    var bestCandidates = filtered.Where(x => x.validationCount == minValidations).ToList();
+    var randomCandidate = bestCandidates[Random.Shared.Next(bestCandidates.Count)];
+
+    return MapToDTO(randomCandidate.bookspot, randomCandidate.validationCount);
+}
 
     public async Task<List<BookspotDTO>> GetUserPendingWithValidationCountAsync(
         string supabaseId, CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-
         var pending = await bookspotRepo.GetUserPendingAsync(ownerId, ct);
 
-        return pending
-            .Select(x => MapToDTO(x.bookspot, x.validationCount))
-            .ToList();
+        var result = new List<BookspotDTO>();
+        foreach (var (bookspot, positiveCount) in pending)
+        {
+            if (positiveCount >= RequiredValidations)
+            {
+                await bookspotRepo.UpdateStatusAsync(bookspot.Id, BookspotStatus.ACTIVE, ct);
+                var staleValidations = await db.BookspotValidations
+                    .Where(v => v.BookspotId == bookspot.Id)
+                    .ToListAsync(ct);
+                if (staleValidations.Any())
+                {
+                    db.BookspotValidations.RemoveRange(staleValidations);
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+            else
+            {
+                result.Add(MapToDTO(bookspot, positiveCount));
+            }
+        }
+        return result;
+    }
+
+    public async Task<List<BookspotDTO>> GetUserActiveAsync(
+        string supabaseId, CancellationToken ct = default)
+    {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
+        var active = await bookspotRepo.GetUserActiveAsync(ownerId, ct);
+        return active.Select(b => MapToDTO(b)).ToList();
     }
 
     private static BookspotDTO MapToDTO(Bookspot b) => new()
@@ -137,9 +175,10 @@ public class BookspotService(
         Longitude = b.Location.X,
         IsBookdrop = b.IsBookdrop,
         Status = b.Status,
-        ValidationCount = 0,
-        RequiredValidations = 5,
-        CreatedAt = b.CreatedAt
+        ValidationCount = null,
+        RequiredValidations = RequiredValidations,
+        CreatedAt = b.CreatedAt,
+        ValidatedAt = b.Status == BookspotStatus.ACTIVE ? b.UpdatedAt : null
     };
 
     private static BookspotDTO MapToDTO(Bookspot b, int validationCount) => new()
@@ -152,11 +191,12 @@ public class BookspotService(
         IsBookdrop = b.IsBookdrop,
         Status = b.Status,
         ValidationCount = validationCount,
-        RequiredValidations = 5,
-        CreatedAt = b.CreatedAt
+        RequiredValidations = RequiredValidations,
+        CreatedAt = b.CreatedAt,
+        ValidatedAt = b.Status == BookspotStatus.ACTIVE ? b.UpdatedAt : null
     };
 
-    private static BookspotNearbyDTO MapToNearbyDTO(Bookspot b, double distanceMeters) => new()
+    private static BookspotNearbyDTO MapToNearbyDTO(Bookspot b, double distanceMeters, string? creatorUsername = null) => new()
     {
         Id = b.Id,
         Nombre = b.Nombre,
@@ -164,15 +204,32 @@ public class BookspotService(
         Latitude = b.Location.Y,
         Longitude = b.Location.X,
         IsBookdrop = b.IsBookdrop,
-        DistanceKm = Math.Round(distanceMeters / 1000, 2)
+        DistanceKm = Math.Round(distanceMeters / 1000, 2),
+        CreatorUsername = creatorUsername
     };
 
-    public async Task DeleteAsync(string supabaseId, int bookspotId, CancellationToken ct = default)
+    public async Task<BookspotDTO> UpdateNameAsync(
+        string supabaseId, int bookspotId, string nombre, CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var bookspot = await bookspotRepo.GetByIdAsync(bookspotId, ct);
         if (bookspot is null) throw new NotFoundException("Bookspot no encontrado.");
-        if (bookspot.CreatedByUserId != ownerId) throw new ValidationException("No tienes permiso.");
+        if (bookspot.CreatedByUserId != ownerId) throw new ForbiddenException("No tienes permiso para modificar este bookspot.");
+        if (bookspot.Status != BookspotStatus.PENDING)
+            throw new ValidationException("Solo se puede renombrar un bookspot en estado PENDING.");
+        await bookspotRepo.UpdateNameAsync(bookspotId, nombre, ct);
+        bookspot.Nombre = nombre;
+        return MapToDTO(bookspot);
+    }
+
+    public async Task DeleteAsync(string supabaseId, int bookspotId, CancellationToken ct = default)
+    {
+        var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
+
+        var bookspot = await bookspotRepo.GetByIdAsync(bookspotId, ct);
+        if (bookspot is null) throw new NotFoundException("Bookspot no encontrado.");
+        if (bookspot.CreatedByUserId != ownerId) throw new ForbiddenException("No tienes permiso para eliminar este bookspot.");
+
         await bookspotRepo.DeleteAsync(bookspotId, ct);
     }
 }

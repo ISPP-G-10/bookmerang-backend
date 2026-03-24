@@ -354,13 +354,13 @@ public class BookspotServiceBasicTests(
     }
 
     [Fact]
-    public async Task DeleteAsync_NotOwner_ThrowsValidationException()
+    public async Task DeleteAsync_NotOwner_ThrowsForbiddenException()
     {
         await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
         await SeedUserRaw(UserB, SupabaseB, "userB", Madrid);
         var bookspotId = await SeedBookspotRaw(UserA, Madrid);
 
-        await Assert.ThrowsAsync<ValidationException>(
+        await Assert.ThrowsAsync<ForbiddenException>(
             () => _service.DeleteAsync(SupabaseB, bookspotId));
     }
 
@@ -381,10 +381,12 @@ public class BookspotServiceBasicTests(
     public async Task GetRandomPendingNearbyAsync_WithCandidates_ReturnsOne()
     {
         await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        await SeedUserRaw(UserB, SupabaseB, "userB", Madrid);
+        // Los bookspots son de UserA; UserB los valida
         await SeedBookspotRaw(UserA, MadridCerca, BookspotStatus.PENDING);
         await SeedBookspotRaw(UserA, MadridCerca, BookspotStatus.PENDING);
 
-        var result = await _service.GetRandomPendingNearbyAsync(Madrid.Y, Madrid.X, radiusKm: 10);
+        var result = await _service.GetRandomPendingNearbyAsync(Madrid.Y, Madrid.X, radiusKm: 10, SupabaseB);
 
         Assert.NotNull(result);
         Assert.Equal(BookspotStatus.PENDING, result!.Status);
@@ -393,7 +395,9 @@ public class BookspotServiceBasicTests(
     [Fact]
     public async Task GetRandomPendingNearbyAsync_NoCandidates_ReturnsNull()
     {
-        var result = await _service.GetRandomPendingNearbyAsync(Madrid.Y, Madrid.X, radiusKm: 10);
+        await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+
+        var result = await _service.GetRandomPendingNearbyAsync(Madrid.Y, Madrid.X, radiusKm: 10, SupabaseA);
         Assert.Null(result);
     }
 
@@ -401,10 +405,22 @@ public class BookspotServiceBasicTests(
     public async Task GetRandomPendingNearbyAsync_IgnoresActiveAndRejected()
     {
         await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        await SeedUserRaw(UserB, SupabaseB, "userB", Madrid);
         await SeedBookspotRaw(UserA, MadridCerca, BookspotStatus.ACTIVE);
         await SeedBookspotRaw(UserA, MadridCerca, BookspotStatus.REJECTED);
 
-        var result = await _service.GetRandomPendingNearbyAsync(Madrid.Y, Madrid.X, radiusKm: 10);
+        var result = await _service.GetRandomPendingNearbyAsync(Madrid.Y, Madrid.X, radiusKm: 10, SupabaseB);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetRandomPendingNearbyAsync_ExcludesOwnBookspots()
+    {
+        await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        // UserA sube su propio bookspot; al pedirlo con su propia cuenta no debe recibirlo
+        await SeedBookspotRaw(UserA, MadridCerca, BookspotStatus.PENDING);
+
+        var result = await _service.GetRandomPendingNearbyAsync(Madrid.Y, Madrid.X, radiusKm: 10, SupabaseA);
         Assert.Null(result);
     }
 
@@ -426,5 +442,96 @@ public class BookspotServiceBasicTests(
 
         Assert.Single(result);
         Assert.Equal(BookspotStatus.PENDING, result[0].Status);
+    }
+
+    // ════════════════════════════════════════════════
+    // TEST-BI12: GetUserActiveAsync
+    // ════════════════════════════════════════════════
+
+    [Fact]
+    public async Task GetUserActiveAsync_ReturnsOnlyOwnActiveWithValidatedAt()
+    {
+        await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        await SeedUserRaw(UserB, SupabaseB, "userB", Madrid);
+        await SeedBookspotRaw(UserA, status: BookspotStatus.ACTIVE);   // debe aparecer
+        await SeedBookspotRaw(UserA, status: BookspotStatus.PENDING);  // no, sigue pending
+        await SeedBookspotRaw(UserB, status: BookspotStatus.ACTIVE);   // no, de otro usuario
+
+        var result = await _service.GetUserActiveAsync(SupabaseA);
+        Log(result);
+
+        Assert.Single(result);
+        Assert.Equal(BookspotStatus.ACTIVE, result[0].Status);
+        Assert.NotNull(result[0].ValidatedAt); // bookspots activos deben tener ValidatedAt
+    }
+
+    // ════════════════════════════════════════════════
+    // TEST-BI13: UpdateNameAsync
+    // ════════════════════════════════════════════════
+
+    [Fact]
+    public async Task UpdateNameAsync_Owner_PendingBookspot_UpdatesName()
+    {
+        await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        var bookspotId = await SeedBookspotRaw(UserA, status: BookspotStatus.PENDING);
+
+        var result = await _service.UpdateNameAsync(SupabaseA, bookspotId, "Nombre Actualizado");
+
+        Assert.Equal("Nombre Actualizado", result.Nombre);
+        var inDb = await _db.Bookspots.FindAsync(bookspotId);
+        Assert.Equal("Nombre Actualizado", inDb!.Nombre);
+    }
+
+    [Fact]
+    public async Task UpdateNameAsync_NotOwner_ThrowsForbiddenException()
+    {
+        await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        await SeedUserRaw(UserB, SupabaseB, "userB", Madrid);
+        var bookspotId = await SeedBookspotRaw(UserA, status: BookspotStatus.PENDING);
+
+        await Assert.ThrowsAsync<ForbiddenException>(
+            () => _service.UpdateNameAsync(SupabaseB, bookspotId, "Otro Nombre"));
+    }
+
+    [Fact]
+    public async Task UpdateNameAsync_ActiveBookspot_ThrowsValidationException()
+    {
+        await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        var bookspotId = await SeedBookspotRaw(UserA, status: BookspotStatus.ACTIVE);
+
+        await Assert.ThrowsAsync<ValidationException>(
+            () => _service.UpdateNameAsync(SupabaseA, bookspotId, "Nuevo Nombre"));
+    }
+
+    // ════════════════════════════════════════════════
+    // TEST-BI14: Auto-curación en GetUserPendingWithValidationCountAsync
+    // ════════════════════════════════════════════════
+
+    [Fact]
+    public async Task GetUserPendingWithValidationCountAsync_AutoHeals_WhenFivePositiveValidations()
+    {
+        await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        var bookspotId = await SeedBookspotRaw(UserA, status: BookspotStatus.PENDING);
+
+        // Crear 5 validadores distintos con sus validaciones positivas
+        for (var i = 1; i <= 5; i++)
+        {
+            var validatorId = new Guid($"dddddddd-dddd-dddd-dddd-{i:D12}");
+            await SeedUserRaw(validatorId, $"sup-validator-{i}", $"validator{i}", Madrid);
+            await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO bookspot_validations (bookspot_id, validator_user_id, knows_place, safe_for_exchange, created_at)
+                VALUES ({bookspotId}, {validatorId}, true, true, NOW())");
+        }
+
+        // La llamada debe auto-curar el bookspot: excluirlo de pending y activarlo
+        var pending = await _service.GetUserPendingWithValidationCountAsync(SupabaseA);
+
+        Assert.Empty(pending); // Ya no aparece en la lista de pending
+        var inDb = await _db.Bookspots.FindAsync(bookspotId);
+        Assert.Equal(BookspotStatus.ACTIVE, inDb!.Status); // El bookspot está activo
+        // Las validaciones deben haber sido limpiadas tras la activación
+        var validationsLeft = await _db.BookspotValidations
+            .Where(v => v.BookspotId == bookspotId).ToListAsync();
+        Assert.Empty(validationsLeft);
     }
 }

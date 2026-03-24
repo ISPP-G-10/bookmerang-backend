@@ -21,20 +21,28 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
             .Where(b => b.Status == BookspotStatus.PENDING)
             .ToListAsync(ct);
 
-    public async Task<List<(Bookspot bookspot, double distanceMeters)>> GetNearbyActiveAsync(
+    public async Task<List<(Bookspot bookspot, double distanceMeters, string creatorUsername)>> GetNearbyActiveAsync(
     double latitude, double longitude, double radiusKm, CancellationToken ct = default)
     {
         var userLocation = new Point(longitude, latitude) { SRID = 4326 };
         var radiusMeters = radiusKm * 1000;
 
-        return await db.Bookspots
-            .Where(b => b.Status == BookspotStatus.ACTIVE
-                     && b.Location.IsWithinDistance(userLocation, radiusMeters))
-            .Select(b => new { Bookspot = b, Distance = b.Location.Distance(userLocation) })
-            .ToListAsync(ct)
-            .ContinueWith(t => t.Result
-                .Select(x => (x.Bookspot, x.Distance))
-                .ToList(), ct);
+        var results = await (
+            from b in db.Bookspots
+            join bu in db.Users on b.CreatedByUserId equals bu.Id
+            where b.Status == BookspotStatus.ACTIVE
+               && b.Location.IsWithinDistance(userLocation, radiusMeters)
+            select new
+            {
+                Bookspot = b,
+                Distance = b.Location.Distance(userLocation),
+                Username = bu.Username
+            }
+        ).ToListAsync(ct);
+
+        return results
+            .Select(x => (x.Bookspot, x.Distance, x.Username))
+            .ToList();
     }
 
     public async Task<Bookspot> CreateAsync(Bookspot bookspot, CancellationToken ct = default)
@@ -62,7 +70,8 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
         var point = new Point(longitude, latitude) { SRID = 4326 };
 
         return await db.Bookspots
-            .AnyAsync(b => b.Location.IsWithinDistance(point, radiusMeters), ct);
+            .AnyAsync(b => b.Status != BookspotStatus.REJECTED
+                        && b.Location.IsWithinDistance(point, radiusMeters), ct);
     }
 
     public async Task UpdateStatusAsync(int bookspotId, BookspotStatus status, CancellationToken ct = default)
@@ -98,13 +107,16 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
     public async Task<List<(Bookspot bookspot, int validationCount)>> GetUserPendingAsync(
         Guid userId, CancellationToken ct = default)
     {
+        // Solo contamos validaciones POSITIVAS (KnowsPlace && SafeForExchange)
+        // para que el conteo sea coherente con el umbral de activación del servicio.
         return await db.Bookspots
             .Where(b => b.CreatedByUserId == userId
                      && b.Status == BookspotStatus.PENDING)
             .Select(b => new
             {
                 Bookspot = b,
-                ValidationCount = db.BookspotValidations.Count(v => v.BookspotId == b.Id)
+                ValidationCount = db.BookspotValidations
+                    .Count(v => v.BookspotId == b.Id && v.KnowsPlace && v.SafeForExchange)
             })
             .ToListAsync(ct)
             .ContinueWith(t => t.Result
@@ -113,11 +125,42 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<List<Bookspot>> GetUserActiveAsync(Guid userId, CancellationToken ct = default)
+        => await db.Bookspots
+            .Where(b => b.CreatedByUserId == userId && b.Status == BookspotStatus.ACTIVE)
+            .OrderByDescending(b => b.UpdatedAt)
+            .ToListAsync(ct);
+
+    public async Task UpdateNameAsync(int bookspotId, string nombre, CancellationToken ct = default)
+    {
+        var bookspot = await db.Bookspots.FirstOrDefaultAsync(b => b.Id == bookspotId, ct);
+        if (bookspot is null) return;
+        bookspot.Nombre = nombre;
+        bookspot.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task DeleteAsync(int bookspotId, CancellationToken ct = default)
     {
         var bookspot = await db.Bookspots.FirstOrDefaultAsync(b => b.Id == bookspotId, ct);
         if (bookspot is null) return;
+
+        var validations = await db.BookspotValidations
+            .Where(v => v.BookspotId == bookspotId)
+            .ToListAsync(ct);
+
+        if (validations.Any())
+            db.BookspotValidations.RemoveRange(validations);
+
         db.Bookspots.Remove(bookspot);
-        await db.SaveChangesAsync(ct);
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            // Si hay una concurrencia, el bookspot ya ha sido eliminado otro proceso
+        }
     }
 }

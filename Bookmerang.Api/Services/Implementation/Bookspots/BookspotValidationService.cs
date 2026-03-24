@@ -85,17 +85,13 @@ public class BookspotValidationService(
         return validations.Select(MapToDTO).ToList();
     }
 
-    public Task<BookspotValidationDTO> GetByIdAsync(int validationId, CancellationToken ct = default)
+    public async Task<BookspotValidationDTO> GetByIdAsync(int validationId, CancellationToken ct = default)
     {
-        return validationRepo.GetByIdAsync(validationId, ct)
-            .ContinueWith(t =>
-            {
-                var validation = t.Result;
-                if (validation is null)
-                    throw new NotFoundException($"No se encontró ninguna validación con id '{validationId}'.");
+        var validation = await validationRepo.GetByIdAsync(validationId, ct);
+        if (validation is null)
+            throw new NotFoundException($"No se encontró ninguna validación con id '{validationId}'.");
 
-                return MapToDTO(validation);
-            }, ct);
+        return MapToDTO(validation);
     }
 
     private async Task<Guid> ResolveUserIdAsync(string supabaseId, CancellationToken ct)
@@ -119,7 +115,7 @@ public class BookspotValidationService(
             Id = validation.Id,
             KnowsPlace = validation.KnowsPlace,
             SafeForExchange = validation.SafeForExchange,
-            CreatedAt = validation.Created_at
+            CreatedAt = validation.CreatedAt
         };
     }
 }

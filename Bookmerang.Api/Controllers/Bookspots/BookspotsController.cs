@@ -77,7 +77,7 @@ public class BookspotsController(IBookspotService bookspotService) : ControllerB
         [FromQuery] double radiusKm,
         CancellationToken ct)
     {
-        var bookspot = await bookspotService.GetRandomPendingNearbyAsync(latitude, longitude, radiusKm, ct);
+        var bookspot = await bookspotService.GetRandomPendingNearbyAsync(latitude, longitude, radiusKm, SupabaseId,ct);
         if (bookspot is null) return NoContent();
         return Ok(bookspot);
     }
@@ -89,6 +89,30 @@ public class BookspotsController(IBookspotService bookspotService) : ControllerB
     {
         var bookspots = await bookspotService.GetUserPendingWithValidationCountAsync(SupabaseId, ct);
         return Ok(bookspots);
+    }
+
+    // GET /api/bookspots/user/active
+    [HttpGet("user/active")]
+    [SwaggerResponse(200, "Bookspots activos (validados) del usuario", typeof(List<BookspotDTO>))]
+    public async Task<ActionResult<List<BookspotDTO>>> GetUserActiveAsync(CancellationToken ct = default)
+    {
+        var bookspots = await bookspotService.GetUserActiveAsync(SupabaseId, ct);
+        return Ok(bookspots);
+    }
+
+    // PATCH /api/bookspots/{id}
+    [HttpPatch("{id:int}")]
+    [SwaggerResponse(200, "Nombre actualizado", typeof(BookspotDTO))]
+    [SwaggerResponse(400, "Datos inválidos o estado incorrecto")]
+    [SwaggerResponse(403, "No tienes permiso para modificar este bookspot")]
+    [SwaggerResponse(404, "Bookspot no encontrado")]
+    public async Task<ActionResult<BookspotDTO>> UpdateNameAsync(
+        int id,
+        [FromBody] UpdateBookspotNameRequest request,
+        CancellationToken ct)
+    {
+        var bookspot = await bookspotService.UpdateNameAsync(SupabaseId, id, request.Nombre, ct);
+        return Ok(bookspot);
     }
 
     // DELETE /api/bookspots/{id}
