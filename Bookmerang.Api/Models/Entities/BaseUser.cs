@@ -21,6 +21,9 @@ public class BaseUser
     [Column("email")]
     public string Email { get; set; } = string.Empty;
 
+    [Column("password_hash")]
+    public string? PasswordHash { get; set; }
+
     [Required]
     [Column("username")]
     public string Username { get; set; } = string.Empty;

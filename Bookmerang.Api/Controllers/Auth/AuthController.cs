@@ -20,20 +20,14 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    [Authorize]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
-        if (supabaseId == null) return Unauthorized();
-
-        var email = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress") ?? string.Empty;
-
         var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
         var location = factory.CreatePoint(new Coordinate(request.Longitud, request.Latitud));
 
-        var (usuario, yaExistia) = await _authService.Register(
-            supabaseId,
-            email,
+        var (usuario, yaExistia, error) = await _authService.RegisterWithCredentials(
+            request.Email,
+            request.Password,
             request.Username,
             request.Name,
             request.ProfilePhoto,
@@ -41,9 +35,25 @@ public class AuthController : ControllerBase
             location
         );
 
+        if (!string.IsNullOrWhiteSpace(error)) return BadRequest(error);
         if (yaExistia) return Conflict("El usuario ya existe en el sistema.");
 
-        return CreatedAtAction(nameof(GetPerfil), new { }, usuario!.ToDto());
+        var (_, token, loginError) = await _authService.Login(request.Email, request.Password);
+        if (!string.IsNullOrWhiteSpace(loginError) || string.IsNullOrWhiteSpace(token))
+            return StatusCode(StatusCodes.Status500InternalServerError, "No se pudo iniciar sesión tras el registro.");
+
+        return CreatedAtAction(nameof(GetPerfil), new { }, new AuthResponse(token, usuario!.ToDto()));
+    }
+
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    {
+        var (usuario, token, error) = await _authService.Login(request.Email, request.Password);
+
+        if (error != null) return Unauthorized(error);
+        if (usuario == null || string.IsNullOrWhiteSpace(token)) return Unauthorized("Credenciales inválidas.");
+
+        return Ok(new AuthResponse(token, usuario.ToDto()));
     }
 
     [HttpGet("me")]
@@ -56,7 +66,9 @@ public class AuthController : ControllerBase
         var usuario = await _authService.GetPerfil(supabaseId);
         if (usuario == null) return NotFound("Usuario no encontrado en el sistema.");
 
-        return Ok(new { id = usuario.Id });
+        var plan = await _authService.GetUserPlan(usuario.Id);
+
+        return Ok(new { id = usuario.Id, plan = plan.ToString() });
     }
 
     [HttpGet("perfil")]
@@ -66,10 +78,10 @@ public class AuthController : ControllerBase
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
         if (supabaseId == null) return Unauthorized();
 
-        var usuario = await _authService.GetPerfil(supabaseId);
-        if (usuario == null) return NotFound("Usuario no encontrado en el sistema.");
+        var profile = await _authService.GetPerfil(supabaseId);
+        if (profile == null) return NotFound("Usuario no encontrado en el sistema.");
 
-        return Ok(usuario.ToDto());
+        return Ok(profile);
     }
 
     [HttpPatch("perfil")]
@@ -98,12 +110,25 @@ public class AuthController : ControllerBase
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
         if (supabaseId == null) return Unauthorized();
 
-        var (usuario, error) = await _authService.PatchEmail(supabaseId, request.NewEmail);
+        var (usuario, error) = await _authService.PatchEmail(supabaseId, request.NewEmail, request.CurrentPassword);
 
         if (error != null) return BadRequest(error);
         if (usuario == null) return NotFound("Usuario no encontrado.");
 
         return Ok(usuario.ToDto());
+    }
+
+    [HttpPatch("password")]
+    [Authorize]
+    public async Task<IActionResult> PatchPassword([FromBody] PatchPasswordRequest request)
+    {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var error = await _authService.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword);
+        if (error != null) return BadRequest(error);
+
+        return Ok(new { message = "Contraseña actualizada correctamente." });
     }
 
     [HttpDelete("perfil")]
@@ -116,17 +141,23 @@ public class AuthController : ControllerBase
         try
         {
             var usuario = await _authService.DeletePerfil(supabaseId);
+            if (usuario == null)
+            {
+                return Ok(new { message = "La cuenta ha sido borrada en Supabase. No se encontró perfil local." });
+            }
             return Ok(usuario.ToDto());
         }
         catch (Exception ex)
         {
-            return NotFound(ex.Message);
+            return BadRequest(ex.Message);
         }
     }
     
 }
 
 public record RegisterRequest(
+    string Email,
+    string Password,
     string Username,
     string Name,
     string ProfilePhoto,
@@ -142,5 +173,21 @@ public record UpdatePerfilRequest(
 );
 
 public record PatchEmailRequest(
-    string NewEmail
+    string NewEmail,
+    string CurrentPassword
+);
+
+public record PatchPasswordRequest(
+    string CurrentPassword,
+    string NewPassword
+);
+
+public record LoginRequest(
+    string Email,
+    string Password
+);
+
+public record AuthResponse(
+    string AccessToken,
+    BaseUserDto User
 );

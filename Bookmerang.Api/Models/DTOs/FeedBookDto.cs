@@ -14,7 +14,9 @@ public class FeedBookDto
     public string? Condition { get; set; }
     public string? Observaciones { get; set; }
     public List<string> Genres { get; set; } = [];
+    public List<string> Languages { get; set; } = [];
     public List<string> Photos { get; set; } = [];
     public double Score { get; set; }
     public bool IsPriority { get; set; } // P1 vs P2
+    public double DistanceKm { get; set; } // Distancia real en km al owner del libro
 }

@@ -27,6 +27,15 @@ public class AppDbContext : DbContext
     public DbSet<BookLanguage> BookLanguages => Set<BookLanguage>();
     public DbSet<Swipe> Swipes => Set<Swipe>();
     public DbSet<Match> Matches => Set<Match>();
+    public DbSet<TypingIndicator> TypingIndicators => Set<TypingIndicator>();
+    public DbSet<Bookspot> Bookspots => Set<Bookspot>();
+    public DbSet<BookspotValidation> BookspotValidations => Set<BookspotValidation>();
+    public DbSet<Community> Communities => Set<Community>();
+    public DbSet<CommunityMember> CommunityMembers => Set<CommunityMember>();
+    public DbSet<CommunityChat> CommunityChats => Set<CommunityChat>();
+    public DbSet<CommunityLibraryLike> CommunityLibraryLikes => Set<CommunityLibraryLike>();
+    public DbSet<Meetup> Meetups => Set<Meetup>();
+    public DbSet<MeetupAttendance> MeetupAttendances => Set<MeetupAttendance>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -40,23 +49,50 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<MatchStatus>();
         modelBuilder.HasPostgresEnum<ChatType>("public", "chat_type", new NpgsqlNullNameTranslator());
         modelBuilder.HasPostgresEnum<ExchangeStatus>();
+        modelBuilder.HasPostgresEnum<BookspotStatus>();
+        modelBuilder.HasPostgresEnum<CommunityStatus>();
+        modelBuilder.HasPostgresEnum<CommunityRole>();
+        modelBuilder.HasPostgresEnum<MeetupStatus>();
+        modelBuilder.HasPostgresEnum<MeetupAttendanceStatus>();
+        modelBuilder.HasPostgresEnum<BookspotStatus>();
+        modelBuilder.HasPostgresEnum<PricingPlan>();
+        modelBuilder.HasPostgresEnum<BaseUserType>();
 
         modelBuilder.Entity<BaseUser>(entity =>
         {
             entity.HasIndex(u => u.SupabaseId).IsUnique();
             entity.HasIndex(u => u.Email).IsUnique();
+            entity.Property(u => u.UserType).HasConversion<int>();
         });
 
         modelBuilder.Entity<Exchange>(entity =>
         {
-            entity.HasIndex(e => e.SupabaseId).IsUnique();
             entity.HasIndex(e => e.ChatId).IsUnique();
         });
 
         modelBuilder.Entity<ExchangeMeeting>(entity =>
         {
-            entity.HasIndex(em => em.SupabaseId).IsUnique();
             entity.HasIndex(em => em.ExchangeId).IsUnique();
+        });
+
+        modelBuilder.Entity<CommunityMember>(entity =>
+        {
+            entity.HasKey(cm => new { cm.CommunityId, cm.UserId });
+        });
+
+        modelBuilder.Entity<CommunityChat>(entity =>
+        {
+            entity.HasKey(cc => new { cc.CommunityId, cc.ChatId });
+        });
+
+        modelBuilder.Entity<CommunityLibraryLike>(entity =>
+        {
+            entity.HasKey(cl => new { cl.CommunityId, cl.UserId, cl.BookId });
+        });
+
+        modelBuilder.Entity<MeetupAttendance>(entity =>
+        {
+            entity.HasKey(ma => new { ma.MeetupId, ma.UserId });
         });
 
         // Chat participants: clave compuesta
@@ -254,6 +290,8 @@ public class AppDbContext : DbContext
             e.Property(x => x.Status).HasColumnName("status");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
+            e.HasIndex(x => new { x.User1Id, x.User2Id }).IsUnique();
+
             e.HasOne(x => x.Book1)
                 .WithMany()
                 .HasForeignKey(x => x.Book1Id)
@@ -296,6 +334,134 @@ public class AppDbContext : DbContext
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
             e.HasIndex(x => x.ChatId).IsUnique();
+        });
+
+        modelBuilder.Entity<ExchangeMeeting>(e =>
+        {
+            e.ToTable("exchange_meetings");
+            e.Property(x => x.ExchangeMeetingId).HasColumnName("id");
+            e.Property(x => x.ExchangeId).HasColumnName("exchange_id");
+            e.Property(x => x.ExchangeMode).HasColumnName("mode");
+            e.Property(x => x.BookspotId).HasColumnName("bookspot_id");
+            e.Property(x => x.CustomLocation).HasColumnName("custom_location");
+            e.Property(x => x.ScheduledAt).HasColumnName("scheduled_at");
+            e.Property(x => x.ProposerId).HasColumnName("proposer_id");
+            e.Property(x => x.MeetingStatus).HasColumnName("status");
+            e.Property(x => x.MarkAsCompletedByUser1).HasColumnName("mark_as_completed_by_user1");
+            e.Property(x => x.MarkAsCompletedByUser2).HasColumnName("mark_as_completed_by_user2");
+
+            e.HasIndex(x => x.ExchangeId).IsUnique();
+        });
+
+        modelBuilder.Entity<TypingIndicator>(e =>
+        {
+            e.ToTable("typing_indicators");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.ChatId).HasColumnName("chat_id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.StartedAt).HasColumnName("started_at");
+
+            e.HasIndex(x => new { x.ChatId, x.UserId }).IsUnique();
+
+            e.HasOne(x => x.Chat)
+                .WithMany()
+                .HasForeignKey(x => x.ChatId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ===== BOOKSPOTS =====
+        modelBuilder.Entity<Bookspot>(e =>
+        {
+            e.ToTable("bookspots");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Nombre).HasColumnName("nombre");
+            e.Property(x => x.AddressText).HasColumnName("address_text");
+            e.Property(x => x.Location).HasColumnName("location").HasColumnType("geography(Point,4326)");
+            e.Property(x => x.IsBookdrop).HasColumnName("is_bookdrop");
+            e.Property(x => x.CreatedByUserId).HasColumnName("created_by_user_id");
+            e.Property(x => x.OwnerId).HasColumnName("owner_id");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        // ===== COMMUNITIES =====
+        modelBuilder.Entity<Community>(e =>
+        {
+            e.ToTable("communities");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Name).HasColumnName("name");
+            e.Property(x => x.ReferenceBookspotId).HasColumnName("reference_bookspot_id");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatorId).HasColumnName("creator_id");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<CommunityMember>(e =>
+        {
+            e.ToTable("community_members");
+            e.Property(x => x.CommunityId).HasColumnName("community_id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.Role).HasColumnName("role");
+            e.Property(x => x.JoinedAt).HasColumnName("joined_at");
+        });
+
+        modelBuilder.Entity<CommunityChat>(e =>
+        {
+            e.ToTable("community_chats");
+            e.Property(x => x.CommunityId).HasColumnName("community_id");
+            e.Property(x => x.ChatId).HasColumnName("chat_id");
+        });
+
+        modelBuilder.Entity<CommunityLibraryLike>(e =>
+        {
+            e.ToTable("community_library_likes");
+            e.Property(x => x.CommunityId).HasColumnName("community_id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.BookId).HasColumnName("book_id");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<Meetup>(e =>
+        {
+            e.ToTable("meetups");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CommunityId).HasColumnName("community_id");
+            e.Property(x => x.Title).HasColumnName("title");
+            e.Property(x => x.Description).HasColumnName("description");
+            e.Property(x => x.OtherBookSpotId).HasColumnName("other_book_spot_id");
+            e.Property(x => x.OtherLocation).HasColumnName("other_location").HasColumnType("geography(Point,4326)");
+            e.Property(x => x.ScheduledAt).HasColumnName("scheduled_at");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatorId).HasColumnName("creator_id");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        // ===== BOOKSPOT_VALIDATIONS =====
+        modelBuilder.Entity<BookspotValidation>(e =>
+        {
+            e.ToTable("bookspot_validations");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.BookspotId).HasColumnName("bookspot_id");
+            e.Property(x => x.ValidatorUserId).HasColumnName("validator_user_id");
+            e.Property(x => x.KnowsPlace).HasColumnName("knows_place");
+            e.Property(x => x.SafeForExchange).HasColumnName("safe_for_exchange");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<MeetupAttendance>(e =>
+        {
+            e.ToTable("meetup_attendance");
+            e.Property(x => x.MeetupId).HasColumnName("meetup_id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.SelectedBookId).HasColumnName("selected_book_id");
+            e.Property(x => x.Status).HasColumnName("status");
         });
     }
 }

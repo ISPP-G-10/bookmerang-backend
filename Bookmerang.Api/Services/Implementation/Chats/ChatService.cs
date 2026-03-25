@@ -26,6 +26,17 @@ public class ChatService(AppDbContext db) : IChatService
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
 
+        var communityChatIds = chats.Where(c => c.Type == ChatType.COMMUNITY).Select(c => c.Id).ToList();
+        var communityNames = new Dictionary<int, string>();
+        
+        if (communityChatIds.Any())
+        {
+            communityNames = await _db.CommunityChats
+                .Include(cc => cc.Community)
+                .Where(cc => communityChatIds.Contains(cc.ChatId))
+                .ToDictionaryAsync(cc => cc.ChatId, cc => cc.Community.Name);
+        }
+
         var result = new List<ChatDto>();
 
         foreach (var chat in chats)
@@ -37,7 +48,13 @@ public class ChatService(AppDbContext db) : IChatService
                 .OrderByDescending(m => m.SentAt)
                 .FirstOrDefaultAsync();
 
-            result.Add(chat.ToDto(lastMessage));
+            string? name = null;
+            if (chat.Type == ChatType.COMMUNITY && communityNames.TryGetValue(chat.Id, out var commName))
+            {
+                name = commName;
+            }
+
+            result.Add(chat.ToDto(lastMessage, name));
         }
 
         // Ordenar por último mensaje (los chats con mensajes más recientes primero)
@@ -68,7 +85,14 @@ public class ChatService(AppDbContext db) : IChatService
             .OrderByDescending(m => m.SentAt)
             .FirstOrDefaultAsync();
 
-        return chat.ToDto(lastMessage);
+        string? name = null;
+        if (chat.Type == ChatType.COMMUNITY)
+        {
+            var commChat = await _db.CommunityChats.Include(cc => cc.Community).FirstOrDefaultAsync(cc => cc.ChatId == chatId);
+            if (commChat != null) name = commChat.Community.Name;
+        }
+
+        return chat.ToDto(lastMessage, name);
     }
 
     public async Task<List<MessageDto>> GetMessages(int chatId, Guid userId, int page, int pageSize)
@@ -118,7 +142,7 @@ public class ChatService(AppDbContext db) : IChatService
 
     public async Task<ChatDto?> CreateChat(ChatType type, List<Guid> participantIds)
     {
-        if (participantIds.Count < 2)
+        if (type != ChatType.COMMUNITY && participantIds.Count < 2)
             return null;
 
         // Verificar que todos los usuarios existen
@@ -149,6 +173,18 @@ public class ChatService(AppDbContext db) : IChatService
         _db.ChatParticipants.AddRange(participants);
         await _db.SaveChangesAsync();
 
+        // Send automatic presentation message for each user
+        var initialMessages = participantIds.Select(uid => new Message
+        {
+            ChatId = chat.Id,
+            SenderId = uid,
+            Body = "Hola, me ha interesado tu libro",
+            SentAt = DateTime.UtcNow
+        }).ToList();
+
+        _db.Messages.AddRange(initialMessages);
+        await _db.SaveChangesAsync();
+
         // Recargar con datos completos
         return await GetChatByIdInternal(chat.Id);
     }
@@ -157,6 +193,71 @@ public class ChatService(AppDbContext db) : IChatService
     {
         return await _db.ChatParticipants
             .AnyAsync(cp => cp.ChatId == chatId && cp.UserId == userId);
+    }
+
+    public async Task<bool> StartTyping(int chatId, Guid userId)
+    {
+        if (!await IsParticipant(chatId, userId))
+            return false;
+
+        // Verificar si ya existe un registro de typing
+        var existingTyping = await _db.TypingIndicators
+            .FirstOrDefaultAsync(t => t.ChatId == chatId && t.UserId == userId);
+
+        if (existingTyping != null)
+        {
+            // Actualizar el timestamp
+            existingTyping.StartedAt = DateTime.UtcNow;
+            _db.TypingIndicators.Update(existingTyping);
+        }
+        else
+        {
+            // Crear nuevo registro
+            var typing = new TypingIndicator
+            {
+                ChatId = chatId,
+                UserId = userId,
+                StartedAt = DateTime.UtcNow
+            };
+            _db.TypingIndicators.Add(typing);
+        }
+
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> StopTyping(int chatId, Guid userId)
+    {
+        var typingIndicator = await _db.TypingIndicators
+            .FirstOrDefaultAsync(t => t.ChatId == chatId && t.UserId == userId);
+
+        if (typingIndicator == null)
+            return false;
+
+        _db.TypingIndicators.Remove(typingIndicator);
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<List<TypingUserDto>> GetTypingUsers(int chatId, Guid userId)
+    {
+        if (!await IsParticipant(chatId, userId))
+            return new List<TypingUserDto>();
+
+        // Obtener usuarios que están escribiendo (excluyendo al usuario actual)
+        // También filtrar indicadores antiguos (más de 5 segundos)
+        var timeoutThreshold = DateTime.UtcNow.AddSeconds(-5);
+
+        var typingUsers = await _db.TypingIndicators
+            .Include(t => t.User)
+                .ThenInclude(u => u.BaseUser)
+            .Where(t => t.ChatId == chatId 
+                && t.UserId != userId 
+                && t.StartedAt > timeoutThreshold)
+            .Select(t => t.ToDto())
+            .ToListAsync();
+
+        return typingUsers;
     }
 
     private async Task<ChatDto?> GetChatByIdInternal(int chatId)

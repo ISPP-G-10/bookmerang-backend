@@ -1,6 +1,28 @@
 @Bookmerang.Api_HostAddress = http://localhost:5044
+@ChatId = 1
+@Token = your_jwt_token_here
 
 GET {{Bookmerang.Api_HostAddress}}/weatherforecast/
 Accept: application/json
+
+###
+
+### ===== CHAT - TYPING INDICATOR =====
+
+### Start typing - Indica que el usuario está escribiendo
+POST {{Bookmerang.Api_HostAddress}}/api/chat/{{ChatId}}/typing
+Authorization: Bearer {{Token}}
+
+###
+
+### Stop typing - Indica que el usuario dejó de escribir
+DELETE {{Bookmerang.Api_HostAddress}}/api/chat/{{ChatId}}/typing
+Authorization: Bearer {{Token}}
+
+###
+
+### Get typing users - Obtiene quién está escribiendo en el chat
+GET {{Bookmerang.Api_HostAddress}}/api/chat/{{ChatId}}/typing
+Authorization: Bearer {{Token}}
 
 ###

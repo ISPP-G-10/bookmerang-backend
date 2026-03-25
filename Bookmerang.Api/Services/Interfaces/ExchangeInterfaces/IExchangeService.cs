@@ -1,13 +1,15 @@
 using Bookmerang.Api.Models.Entities;
-using Bookmerang.Api.Models.DTOs;
+using Bookmerang.Api.Models.Enums;
 
 namespace Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 
 public interface IExchangeService
 {
     Task<Exchange?> GetExchangeById(int exchangeId);
-    Task<Exchange?> GetExchangeByChatId(int chatId);
+    Task<Exchange?> GetExchangeWithMatch(int exchangeId);
+    Task<Exchange?> GetExchangeByChatIdWithMatch(int chatId);
+    Task<List<Exchange>> GetAllExchanges();
     Task<Exchange> CreateExchange(int chatId, int matchId);
-    Task<Exchange> UpdateExchange(int exchangeId, UpdateExchangeDto dto);
+    Task<Exchange> UpdateExchangeStatus(int exchangeId, ExchangeStatus newStatus);
     Task<bool> DeleteExchange(int exchangeId);
 }

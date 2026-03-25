@@ -16,9 +16,12 @@
       "launchUrl": "swagger",
       "applicationUrl": "http://0.0.0.0:5044",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "JWT_SECRET": "dev-bookmerang-jwt-secret-at-least-32-characters",
+        "JWT_ISSUER": "bookmerang-api",
+        "JWT_AUDIENCE": "bookmerang-client",
+        "JWT_ACCESS_TOKEN_MINUTES": "60"
       }
-    }
     },
     "https": {
       "commandName": "Project",
@@ -27,7 +30,11 @@
       "launchUrl": "swagger",
       "applicationUrl": "https://localhost:7056;http://localhost:5044",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "JWT_SECRET": "dev-bookmerang-jwt-secret-at-least-32-characters",
+        "JWT_ISSUER": "bookmerang-api",
+        "JWT_AUDIENCE": "bookmerang-client",
+        "JWT_ACCESS_TOKEN_MINUTES": "60"
       }
     },
     "IIS Express": {
@@ -35,7 +42,12 @@
       "launchBrowser": true,
       "launchUrl": "swagger",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "JWT_SECRET": "dev-bookmerang-jwt-secret-at-least-32-characters",
+        "JWT_ISSUER": "bookmerang-api",
+        "JWT_AUDIENCE": "bookmerang-client",
+        "JWT_ACCESS_TOKEN_MINUTES": "60"
       }
     }
   }
+}
