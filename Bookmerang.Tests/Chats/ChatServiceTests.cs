@@ -178,8 +178,8 @@ public class ChatServiceTests
         Assert.NotNull(result);
         Assert.Equal(ChatType.EXCHANGE.ToString(), result.Type);
         Assert.Equal(2, db.ChatParticipants.Count());
-        // Initial messages (one per participant)
-        Assert.Equal(2, db.Messages.Count());
+        // JRP 28/03: Sin mensajes iniciales por el cambio en el manejo de los placeholders de mensajes
+        Assert.Equal(0, db.Messages.Count());
     }
 
     [Fact]
