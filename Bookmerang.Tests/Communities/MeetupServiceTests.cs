@@ -53,9 +53,9 @@ public class MeetupServiceTests : IAsyncLifetime
     {
         var bs = new Bookspot { Id = 1, Nombre = "BS", Location = MakePoint(0,0), Status = BookspotStatus.ACTIVE };
         _db.Bookspots.Add(bs);
-        var comm = new Community { Id = id, Name = "Comm", ReferenceBookspotId = bs.Id, Status = CommunityStatus.ACTIVE };
+        var comm = new Community { Id = id, Name = "Comm", ReferenceBookspotId = bs.Id, Status = CommunityStatus.ACTIVE, CreatorId = memberId };
         _db.Communities.Add(comm);
-        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = memberId, Role = CommunityRole.MEMBER });
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = memberId, Role = CommunityRole.MODERATOR });
         return comm;
     }
 
