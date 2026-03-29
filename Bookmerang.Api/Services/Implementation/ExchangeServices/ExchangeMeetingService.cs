@@ -80,10 +80,10 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
             throw new InvalidOperationException($"Meeting con id {meetingId} no encontrado");
         
         var exchange = await _exchange_service.GetExchangeById(meeting.ExchangeId);
-        var oldStatus = exchange!.Status;
-        
         if (exchange == null)
             throw new InvalidOperationException($"Exchange con id {meeting.ExchangeId} no encontrado");
+
+        var oldStatus = exchange.Status;
 
         if (IsAllNull(dto)) 
             throw new InvalidOperationException("Al menos un parámetro debe tener un valor");
@@ -119,7 +119,7 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         if (dto.MarkAsCompletedByUser2.HasValue)
             meeting.MarkAsCompletedByUser2 = dto.MarkAsCompletedByUser2.Value;
 
-        if (IsCompleted(dto)) {
+        if (IsCompleted(meeting)) {
             exchange.Status = ExchangeStatus.COMPLETED;
         }
         else
@@ -151,8 +151,8 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
        dto.MeetingStatus == null && dto.MarkAsCompletedByUser1 == null && 
        dto.MarkAsCompletedByUser2 == null;
 
-    private bool IsCompleted(UpdateExchangeMeetingDto dto)
-    => dto.MarkAsCompletedByUser1 == true && dto.MarkAsCompletedByUser2 == true;
+    private static bool IsCompleted(ExchangeMeeting meeting)
+    => meeting.MarkAsCompletedByUser1 && meeting.MarkAsCompletedByUser2;
 
     public async Task<bool> DeleteExchangeMeeting(int meetingId)
     {

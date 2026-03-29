@@ -226,7 +226,6 @@ public class BookService(
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
         var book = await GetBookOrThrowAsync(bookId, ct);
-        VerifyOwner(book, ownerId);
         return MapToDetailDTO(book);
     }
 

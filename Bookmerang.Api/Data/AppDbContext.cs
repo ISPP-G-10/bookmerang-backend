@@ -49,6 +49,8 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<MatchStatus>();
         modelBuilder.HasPostgresEnum<ChatType>("public", "chat_type", new NpgsqlNullNameTranslator());
         modelBuilder.HasPostgresEnum<ExchangeStatus>();
+        modelBuilder.HasPostgresEnum<ExchangeMode>();
+        modelBuilder.HasPostgresEnum<ExchangeMeetingStatus>();
         modelBuilder.HasPostgresEnum<BookspotStatus>();
         modelBuilder.HasPostgresEnum<CommunityStatus>();
         modelBuilder.HasPostgresEnum<CommunityRole>();
@@ -124,6 +126,11 @@ public class AppDbContext : DbContext
         // ===== USERS =====
         modelBuilder.Entity<User>(e =>
         {
+            e.HasOne(x => x.BaseUser)
+                .WithOne()
+                .HasForeignKey<User>(x => x.Id)
+                .OnDelete(DeleteBehavior.Cascade);
+
             e.HasOne(x => x.UserPreference)
                 .WithOne()
                 .HasForeignKey<UserPreference>(x => x.UserId);

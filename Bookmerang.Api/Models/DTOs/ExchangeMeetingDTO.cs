@@ -38,7 +38,7 @@ public static class ExchangeMeetingExtensions
         meeting.CustomLocation != null ? [meeting.CustomLocation.X, meeting.CustomLocation.Y] : null,
         meeting.ScheduledAt,
         meeting.ProposerId,
-        meeting.Proposer?.BaseUser.Name, //No siempre se incluye el proposer completo
+        meeting.Proposer?.BaseUser?.Name, //No siempre se incluyen todas las relaciones del proposer
         meeting.MeetingStatus,
         meeting.MarkAsCompletedByUser1,
         meeting.MarkAsCompletedByUser2
