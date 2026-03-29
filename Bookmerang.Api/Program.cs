@@ -16,6 +16,8 @@ using Bookmerang.Api.Services.Interfaces.Matcher;
 using Bookmerang.Api.Services.Implementation.Matcher;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
+using Bookmerang.Api.Services.Implementation.Inkdrops;
 using Bookmerang.Api.Services.Interfaces.Communities;
 using Bookmerang.Api.Services.Implementation.Communities;
 using Bookmerang.Api.Validators.Communities;
@@ -163,6 +165,7 @@ builder.Services.AddScoped<IMatcherService, MatcherService>();
 builder.Services.AddHostedService<SwipeCleanupHostedService>();
 builder.Services.AddScoped<IExchangeService, ExchangeService>();
 builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
+builder.Services.AddScoped<IInkdropsService, InkdropsService>();
 
 builder.Services.AddHostedService<WeeklyFeedbackMailService>();
 // Communities

@@ -116,7 +116,8 @@ public class PostgresBookspotFixture : IAsyncLifetime
         foreach (var file in new[]
         {
             "20260222163941_0001_extensions.sql",
-            "20260222164018_0002_schema.sql"
+            "20260222164018_0002_schema.sql",
+            "20260329120000_0008_add_inkdrops.sql"
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

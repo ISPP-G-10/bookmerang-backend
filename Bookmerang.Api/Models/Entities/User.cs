@@ -22,6 +22,14 @@ public class User
     [Column("plan")]
     public Enums.PricingPlan Plan { get; set; } = Enums.PricingPlan.FREE;
 
+    [Required]
+    [Column("inkdrops")]
+    public int Inkdrops { get; set; } = 0;
+
+    [Required]
+    [Column("inkdrops_last_updated")]
+    public string InkdropsLastUpdated { get; set; } = "1970-01";
+
     // Navigation properties
     [ForeignKey("Id")]
     public BaseUser BaseUser { get; set; } = null!;

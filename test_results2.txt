@@ -1,0 +1,24 @@
+﻿  Determinando los proyectos que se van a restaurar...
+  Todos los proyectos est├ín actualizados para la restauraci├│n.
+  Bookmerang.Api -> C:\Users\jesus\bookmerang-backend\Bookmerang.Api\bin\Debug\net8.0\Bookmerang.Api.dll
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Books\BookServiceTests.cs(341,61): warning CS8625: No se puede convertir un literal NULL en un tipo de referencia que no acepta valores NULL. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Books\BookServiceTests.cs(342,69): warning CS8625: No se puede convertir un literal NULL en un tipo de referencia que no acepta valores NULL. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Books\BookServiceTests.cs(402,31): warning CS8600: Se va a convertir un literal nulo o un posible valor nulo en un tipo que no acepta valores NULL [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Helpers\DbSetMockHelper.cs(54,20): warning CS8603: Posible tipo de valor devuelto de referencia nulo. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Helpers\DbSetMockHelper.cs(70,33): warning CS8602: Desreferencia de una referencia posiblemente NULL. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Helpers\DbSetMockHelper.cs(74,21): warning CS8602: Desreferencia de una referencia posiblemente NULL. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Helpers\DbSetMockHelper.cs(77,33): warning CS8602: Desreferencia de una referencia posiblemente NULL. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Helpers\DbSetMockHelper.cs(77,24): warning CS8600: Se va a convertir un literal nulo o un posible valor nulo en un tipo que no acepta valores NULL [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Helpers\DbSetMockHelper.cs(77,24): warning CS8603: Posible tipo de valor devuelto de referencia nulo. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Helpers\DbSetMockHelper.cs(82,29): warning CS8602: Desreferencia de una referencia posiblemente NULL. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Helpers\DbSetMockHelper.cs(82,20): warning CS8600: Se va a convertir un literal nulo o un posible valor nulo en un tipo que no acepta valores NULL [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Helpers\DbSetMockHelper.cs(82,20): warning CS8603: Posible tipo de valor devuelto de referencia nulo. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookspots\BookspotServiceBasicTests.cs(108,28): warning EF1002: Method 'ExecuteSqlRawAsync' inserts interpolated strings directly into the SQL, without any protection against SQL injection. Consider using 'ExecuteSqlAsync' instead, which protects against SQL injection, or make sure that the value is sanitized and suppress the warning. [C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\Bookmerang.Tests.csproj]
+  Bookmerang.Tests -> C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\bin\Debug\net8.0\Bookmerang.Tests.dll
+Serie de pruebas para C:\Users\jesus\bookmerang-backend\Bookmerang.Tests\bin\Debug\net8.0\Bookmerang.Tests.dll (.NETCoreApp,Version=v8.0)
+Versi├│n 17.11.1 (x64) de VSTest
+
+Iniciando la ejecuci├│n de pruebas, espere...
+1 archivos de prueba en total coincidieron con el patr├│n especificado.
+
+Correctas! - Con error:     0, Superado:   402, Omitido:     0, Total:   402, Duraci├│n: 10 s - Bookmerang.Tests.dll (net8.0)

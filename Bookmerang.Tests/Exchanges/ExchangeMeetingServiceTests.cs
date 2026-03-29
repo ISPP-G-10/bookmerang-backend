@@ -4,6 +4,7 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Bookmerang.Tests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -16,13 +17,18 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 {
 	private AppDbContext _db = null!;
 	private Mock<IExchangeService> _exchangeService = null!;
+	private Mock<IInkdropsService> _inkdropsService = null!;
 	private ExchangeMeetingService _service = null!;
 
 	public Task InitializeAsync()
 	{
 		_db = DbContextFactory.CreateInMemory();
 		_exchangeService = new Mock<IExchangeService>();
-		_service = new ExchangeMeetingService(_db, _exchangeService.Object);
+		_inkdropsService = new Mock<IInkdropsService>();
+		_inkdropsService
+			.Setup(s => s.GrantExchangeInkdropsAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+			.Returns(Task.CompletedTask);
+		_service = new ExchangeMeetingService(_db, _exchangeService.Object, _inkdropsService.Object);
 		return Task.CompletedTask;
 	}
 
@@ -35,6 +41,18 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task UpdateExchangeMeeting_BothCompletionFlagsTrue_SetsExchangeCompleted()
 	{
+		var match = new Api.Models.Entities.Match
+		{
+			Id = 30,
+			User1Id = Guid.NewGuid(),
+			User2Id = Guid.NewGuid(),
+			Book1Id = 1,
+			Book2Id = 2,
+			Status = MatchStatus.NEW,
+			CreatedAt = DateTime.UtcNow
+		};
+		_db.Matches.Add(match);
+
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 10,
@@ -605,6 +623,18 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task UpdateExchangeMeeting_MarkBothCompleted_SetsExchangeCompleted()
 	{
+		var match = new Api.Models.Entities.Match
+		{
+			Id = 12,
+			User1Id = Guid.NewGuid(),
+			User2Id = Guid.NewGuid(),
+			Book1Id = 1,
+			Book2Id = 2,
+			Status = MatchStatus.NEW,
+			CreatedAt = DateTime.UtcNow
+		};
+		_db.Matches.Add(match);
+
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 75,
