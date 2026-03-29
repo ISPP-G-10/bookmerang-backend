@@ -18,7 +18,8 @@ public record ChatParticipantDto(
     Guid UserId,
     string Username,
     string ProfilePhoto,
-    DateTime JoinedAt
+    DateTime JoinedAt,
+    CommunityRole? Role = null
 );
 
 public record MessageDto(
@@ -54,11 +55,28 @@ public static class ChatExtensions
         name
     );
 
+    public static ChatDto ToDtoWithRoles(this Chat chat, Dictionary<Guid, CommunityRole> userRoles, Message? lastMessage = null, string? name = null) => new(
+        chat.Id,
+        chat.Type.ToString(),
+        chat.CreatedAt,
+        chat.Participants.Select(p => p.ToDto(userRoles.TryGetValue(p.UserId, out var role) ? role : null)).ToList(),
+        lastMessage?.ToDto(),
+        name
+    );
+
     public static ChatParticipantDto ToDto(this ChatParticipant participant) => new(
         participant.UserId,
         participant.User?.BaseUser?.Username ?? string.Empty,
         participant.User?.BaseUser?.ProfilePhoto ?? string.Empty,
         participant.JoinedAt
+    );
+
+    public static ChatParticipantDto ToDto(this ChatParticipant participant, CommunityRole? role) => new(
+        participant.UserId,
+        participant.User?.BaseUser?.Username ?? string.Empty,
+        participant.User?.BaseUser?.ProfilePhoto ?? string.Empty,
+        participant.JoinedAt,
+        role
     );
 
     public static MessageDto ToDto(this Message message) => new(

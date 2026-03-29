@@ -15,20 +15,33 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
 {
     private readonly AppDbContext _db = db;
     private readonly IValidator<CreateMeetupRequest> _createMeetupRequestValidator = createMeetupRequestValidator;
+    private const int MaxMeetupAssistants = 10; //Límite de asistentes a una quedada de comunidad
 
     public async Task<MeetupDto> CreateMeetupAsync(Guid creatorId, int communityId, CreateMeetupRequest request)
     {
+        var scheduledAtUtc = DateTime.SpecifyKind(request.ScheduledAt, DateTimeKind.Utc);
+
         var community = await _db.Communities.FindAsync(communityId);
         if (community == null) throw new NotFoundException("Comunidad no encontrada.");
         if (community.Status != CommunityStatus.ACTIVE)
             throw new ForbiddenException("La comunidad debe estar activa para crear quedadas.");
 
-        var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == communityId && cm.UserId == creatorId);
-        if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para crear una quedada.");
+        var membership = await _db.CommunityMembers
+            .FirstOrDefaultAsync(cm => cm.CommunityId == communityId && cm.UserId == creatorId);
+        if (membership == null)
+            throw new ForbiddenException("Debes ser miembro de la comunidad para crear una quedada.");
+
+        var isCreator = community.CreatorId == creatorId;
+        var isModerator = membership.Role == CommunityRole.MODERATOR;
+        if (!isCreator && !isModerator)
+            throw new ForbiddenException("Solo el creador o los moderadores pueden crear quedadas.");
 
         var validationResult = await _createMeetupRequestValidator.ValidateAsync(request);
         if (!validationResult.IsValid)
             throw new AppValidationException(string.Join(" ", validationResult.Errors.Select(e => e.ErrorMessage)));
+
+        if (await HasSchedulingConflictAsync(creatorId, scheduledAtUtc))
+            throw new AppValidationException("No puedes crear esta quedada porque ya estás apuntado a otra en esa fecha y hora.");
 
         Point? otherLocation = null;
         if (request.OtherLocation != null)
@@ -44,7 +57,7 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
             Description = request.Description,
             OtherBookSpotId = request.OtherBookSpotId,
             OtherLocation = otherLocation,
-            ScheduledAt = request.ScheduledAt,
+            ScheduledAt = scheduledAtUtc,
             Status = MeetupStatus.SCHEDULED,
             CreatorId = creatorId,
             CreatedAt = DateTime.UtcNow,
@@ -57,6 +70,95 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
         return MapToDto(meetup);
     }
 
+    public async Task<MeetupDto> UpdateMeetupAsync(Guid userId, int communityId, int meetupId, CreateMeetupRequest request)
+    {
+        var community = await _db.Communities.FindAsync(communityId);
+        if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+
+        var membership = await _db.CommunityMembers
+            .FirstOrDefaultAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
+        if (membership == null)
+            throw new ForbiddenException("Debes ser miembro de la comunidad para modificar una quedada.");
+
+        var isCreator = community.CreatorId == userId;
+        var isModerator = membership.Role == CommunityRole.MODERATOR;
+        if (!isCreator && !isModerator)
+            throw new ForbiddenException("Solo el creador o los moderadores pueden modificar quedadas.");
+
+        var meetup = await _db.Meetups
+            .Include(m => m.Attendances)
+                .ThenInclude(a => a.User)
+                .ThenInclude(u => u.BaseUser)
+            .Include(m => m.Attendances)
+                .ThenInclude(a => a.SelectedBook)
+            .FirstOrDefaultAsync(m => m.Id == meetupId && m.CommunityId == communityId);
+
+        if (meetup == null)
+            throw new NotFoundException("Quedada no encontrada.");
+
+        if (HasMeetupStarted(meetup))
+            throw new AppValidationException("No se puede modificar una quedada que ya ha empezado.");
+
+        var validationResult = await _createMeetupRequestValidator.ValidateAsync(request);
+        if (!validationResult.IsValid)
+            throw new AppValidationException(string.Join(" ", validationResult.Errors.Select(e => e.ErrorMessage)));
+
+        var scheduledAtUtc = DateTime.SpecifyKind(request.ScheduledAt, DateTimeKind.Utc);
+        if (await HasSchedulingConflictAsync(userId, scheduledAtUtc, meetupId))
+            throw new AppValidationException("No puedes programar esta quedada porque ya estás apuntado a otra en esa fecha y hora.");
+
+        Point? otherLocation = null;
+        if (request.OtherLocation != null)
+        {
+            var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
+            otherLocation = factory.CreatePoint(new Coordinate(request.OtherLocation[0], request.OtherLocation[1]));
+        }
+
+        meetup.Title = request.Title;
+        meetup.Description = request.Description;
+        meetup.OtherBookSpotId = request.OtherBookSpotId;
+        meetup.OtherLocation = otherLocation;
+        meetup.ScheduledAt = scheduledAtUtc;
+        meetup.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+        return MapToDto(meetup);
+    }
+
+    public async Task DeleteMeetupAsync(Guid userId, int communityId, int meetupId)
+    {
+        var community = await _db.Communities.FindAsync(communityId);
+        if (community == null) throw new NotFoundException("Comunidad no encontrada.");
+
+        var membership = await _db.CommunityMembers
+            .FirstOrDefaultAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
+        if (membership == null)
+            throw new ForbiddenException("Debes ser miembro de la comunidad para eliminar una quedada.");
+
+        var isCreator = community.CreatorId == userId;
+        var isModerator = membership.Role == CommunityRole.MODERATOR;
+        if (!isCreator && !isModerator)
+            throw new ForbiddenException("Solo el creador o los moderadores pueden eliminar quedadas.");
+
+        var meetup = await _db.Meetups
+            .Include(m => m.Attendances)
+            .FirstOrDefaultAsync(m => m.Id == meetupId && m.CommunityId == communityId);
+
+        if (meetup == null)
+            throw new NotFoundException("Quedada no encontrada.");
+
+        if (HasMeetupStarted(meetup))
+            throw new AppValidationException("No se puede eliminar una quedada que ya ha empezado.");
+
+        if (meetup.Attendances.Count > 0)
+        {
+            _db.MeetupAttendances.RemoveRange(meetup.Attendances);
+        }
+
+        _db.Meetups.Remove(meetup);
+        await _db.SaveChangesAsync();
+    }
+
     public async Task<List<MeetupDto>> GetMeetupsByCommunityAsync(int communityId)
     {
         var community = await _db.Communities.FindAsync(communityId);
@@ -66,6 +168,11 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
 
         var meetups = await _db.Meetups
             .Where(m => m.CommunityId == communityId && m.Status == MeetupStatus.SCHEDULED)
+            .Include(m => m.Attendances)
+                .ThenInclude(a => a.User)
+                .ThenInclude(u => u.BaseUser)
+            .Include(m => m.Attendances)
+                .ThenInclude(a => a.SelectedBook)
             .OrderBy(m => m.ScheduledAt)
             .ToListAsync();
 
@@ -85,6 +192,10 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
         if (meetup.Status != MeetupStatus.SCHEDULED)
             throw new AppValidationException("No te puedes unir a una quedada que ya no está programada.");
 
+        var meetupScheduledAtUtc = DateTime.SpecifyKind(meetup.ScheduledAt, DateTimeKind.Utc);
+        if (await HasSchedulingConflictAsync(userId, meetupScheduledAtUtc, meetupId))
+            throw new AppValidationException("Ya estás apuntado a otra quedada en esa fecha y hora.");
+
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == meetup.CommunityId && cm.UserId == userId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para asistir a la quedada.");
 
@@ -95,18 +206,21 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
             throw new AppValidationException("El libro seleccionado debe estar publicado para poder llevarlo a un intercambio.");
 
         var existingAttendance = await _db.MeetupAttendances.FirstOrDefaultAsync(ma => ma.MeetupId == meetupId && ma.UserId == userId);
+        if (existingAttendance != null && existingAttendance.Status != MeetupAttendanceStatus.CANCELLED)
+            throw new AppValidationException("Ya estás apuntado a esta quedada.");
+
+        var activeAssistantsCount = await _db.MeetupAttendances.CountAsync(ma =>
+            ma.MeetupId == meetupId
+            && (ma.Status == MeetupAttendanceStatus.REGISTERED || ma.Status == MeetupAttendanceStatus.ATTENDED));
+
+        if (activeAssistantsCount >= MaxMeetupAssistants)
+            throw new AppValidationException("La quedada ya está completa.");
+
         if (existingAttendance != null)
         {
-            if (existingAttendance.Status == MeetupAttendanceStatus.CANCELLED)
-            {
-                existingAttendance.Status = MeetupAttendanceStatus.REGISTERED;
-                existingAttendance.SelectedBookId = request.SelectedBookId;
-                _db.MeetupAttendances.Update(existingAttendance);
-            }
-            else
-            {
-                throw new AppValidationException("Ya estás apuntado a esta quedada.");
-            }
+            existingAttendance.Status = MeetupAttendanceStatus.REGISTERED;
+            existingAttendance.SelectedBookId = request.SelectedBookId;
+            _db.MeetupAttendances.Update(existingAttendance);
         }
         else
         {
@@ -157,6 +271,39 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
         await _db.SaveChangesAsync();
     }
 
+    private async Task<bool> HasSchedulingConflictAsync(Guid userId, DateTime scheduledAt, int? excludedMeetupId = null)
+    {
+        var normalizedTarget = EnsureUtc(scheduledAt);
+        var date = normalizedTarget.Date;
+        var hour = scheduledAt.Hour;
+        var minute = scheduledAt.Minute;
+
+        return await _db.MeetupAttendances.AnyAsync(ma =>
+            ma.UserId == userId
+            && (ma.Status == MeetupAttendanceStatus.REGISTERED || ma.Status == MeetupAttendanceStatus.ATTENDED)
+            && ma.Meetup.Status == MeetupStatus.SCHEDULED
+            && (!excludedMeetupId.HasValue || ma.MeetupId != excludedMeetupId.Value)
+            && ma.Meetup.ScheduledAt.Date == date
+            && ma.Meetup.ScheduledAt.Hour == hour
+            && ma.Meetup.ScheduledAt.Minute == minute);
+    }
+
+    private static bool HasMeetupStarted(Meetup meetup)
+    {
+        var scheduledAtUtc = EnsureUtc(meetup.ScheduledAt);
+        return scheduledAtUtc <= DateTime.UtcNow;
+    }
+
+    private static DateTime EnsureUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+        };
+    }
+
     private static MeetupDto MapToDto(Meetup meetup)
     {
         return new MeetupDto
@@ -171,7 +318,17 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
             Status = meetup.Status,
             CreatorId = meetup.CreatorId,
             CreatedAt = meetup.CreatedAt,
-            UpdatedAt = meetup.UpdatedAt
+            UpdatedAt = meetup.UpdatedAt,
+            Attendees = meetup.Attendances
+                .Where(a => a.Status == MeetupAttendanceStatus.REGISTERED || a.Status == MeetupAttendanceStatus.ATTENDED)
+                .Select(a => new MeetupAttendeeDto
+                {
+                    UserId = a.UserId,
+                    Username = a.User?.BaseUser?.Username ?? string.Empty,
+                    SelectedBookId = a.SelectedBookId,
+                    SelectedBookTitle = a.SelectedBook?.Titulo ?? string.Empty
+                })
+                .ToList()
         };
     }
 }

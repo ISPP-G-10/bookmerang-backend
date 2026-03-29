@@ -86,10 +86,25 @@ public class ChatService(AppDbContext db) : IChatService
             .FirstOrDefaultAsync();
 
         string? name = null;
+        Dictionary<Guid, CommunityRole>? userRoles = null;
+
         if (chat.Type == ChatType.COMMUNITY)
         {
             var commChat = await _db.CommunityChats.Include(cc => cc.Community).FirstOrDefaultAsync(cc => cc.ChatId == chatId);
-            if (commChat != null) name = commChat.Community.Name;
+            if (commChat != null)
+            {
+                name = commChat.Community.Name;
+                
+                // Enriquecer participantes con roles de comunidad
+                userRoles = await _db.CommunityMembers
+                    .Where(cm => cm.CommunityId == commChat.CommunityId)
+                    .ToDictionaryAsync(cm => cm.UserId, cm => cm.Role);
+            }
+        }
+
+        if (userRoles != null)
+        {
+            return chat.ToDtoWithRoles(userRoles, lastMessage, name);
         }
 
         return chat.ToDto(lastMessage, name);
