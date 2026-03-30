@@ -51,5 +51,5 @@ public class Bookspot
     [ForeignKey("CreatedByUserId")]
     public User? CreatedByUser { get; set; }
 
-    // Navigation property for OwnerId would require BookdropUser entity, skipping for now
+    public BookdropUser? Owner { get; set; }
 }
