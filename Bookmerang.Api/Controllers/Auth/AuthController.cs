@@ -45,6 +45,33 @@ public class AuthController : ControllerBase
         return CreatedAtAction(nameof(GetPerfil), new { }, new AuthResponse(token, usuario!.ToDto()));
     }
 
+    [HttpPost("register/business")]
+    public async Task<IActionResult> RegisterBusiness([FromBody] RegisterBusinessRequest request)
+    {
+        var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
+        var location = factory.CreatePoint(new Coordinate(request.Longitud, request.Latitud));
+
+        var (usuario, yaExistia, error) = await _authService.RegisterBusiness(
+            request.Email,
+            request.Password,
+            request.Username,
+            request.Name,
+            request.ProfilePhoto,
+            location,
+            request.NombreEstablecimiento,
+            request.AddressText
+        );
+
+        if (!string.IsNullOrWhiteSpace(error))
+            return yaExistia ? Conflict(error) : BadRequest(error);
+
+        var (_, token, loginError) = await _authService.Login(request.Email, request.Password);
+        if (!string.IsNullOrWhiteSpace(loginError) || string.IsNullOrWhiteSpace(token))
+            return StatusCode(StatusCodes.Status500InternalServerError, "No se pudo iniciar sesión tras el registro.");
+
+        return CreatedAtAction(nameof(GetPerfil), new { }, new AuthResponse(token, usuario!.ToDto()));
+    }
+
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
@@ -180,6 +207,18 @@ public record PatchEmailRequest(
 public record PatchPasswordRequest(
     string CurrentPassword,
     string NewPassword
+);
+
+public record RegisterBusinessRequest(
+    string Email,
+    string Password,
+    string Username,
+    string Name,
+    string? ProfilePhoto,
+    string NombreEstablecimiento,
+    string AddressText,
+    double Latitud,
+    double Longitud
 );
 
 public record LoginRequest(

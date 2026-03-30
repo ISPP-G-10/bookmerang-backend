@@ -29,9 +29,8 @@ public class Bookspot
     [Column("is_bookdrop")]
     public bool IsBookdrop { get; set; } = false;
 
-    [Required]
     [Column("created_by_user_id")]
-    public Guid CreatedByUserId { get; set; }
+    public Guid? CreatedByUserId { get; set; }
 
     [Column("owner_id")]
     public Guid? OwnerId { get; set; }
