@@ -112,29 +112,39 @@ public class BookdropService(AppDbContext db) : IBookdropService
             .FirstOrDefaultAsync(b => b.Id == bookdropUserId);
         if (bookdropUser == null) return (false, null);
 
-        var bookspot = bookdropUser.Bookspot;
-
-        // Eliminar validaciones del bookspot
-        var validations = await _db.BookspotValidations
-            .Where(v => v.BookspotId == bookspot.Id)
-            .ToListAsync();
-        if (validations.Any()) _db.BookspotValidations.RemoveRange(validations);
-
-        // Desvincular owner del bookspot antes de borrar bookdrop_user
-        bookspot.OwnerId = null;
-        await _db.SaveChangesAsync();
-
-        _db.BookdropUsers.Remove(bookdropUser);
-        _db.Bookspots.Remove(bookspot);
-        await _db.SaveChangesAsync();
-
-        var baseUser = await _db.Users.FindAsync(bookdropUserId);
-        if (baseUser != null)
+        using var transaction = await _db.Database.BeginTransactionAsync();
+        try
         {
-            _db.Users.Remove(baseUser);
-            await _db.SaveChangesAsync();
-        }
+            var bookspot = bookdropUser.Bookspot;
 
-        return (true, null);
+            // Eliminar validaciones del bookspot
+            var validations = await _db.BookspotValidations
+                .Where(v => v.BookspotId == bookspot.Id)
+                .ToListAsync();
+            if (validations.Any()) _db.BookspotValidations.RemoveRange(validations);
+
+            // Desvincular owner del bookspot antes de borrar bookdrop_user
+            bookspot.OwnerId = null;
+            await _db.SaveChangesAsync();
+
+            _db.BookdropUsers.Remove(bookdropUser);
+            _db.Bookspots.Remove(bookspot);
+            await _db.SaveChangesAsync();
+
+            var baseUser = await _db.Users.FindAsync(bookdropUserId);
+            if (baseUser != null)
+            {
+                _db.Users.Remove(baseUser);
+                await _db.SaveChangesAsync();
+            }
+
+            await transaction.CommitAsync();
+            return (true, null);
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 }

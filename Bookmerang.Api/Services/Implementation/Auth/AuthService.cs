@@ -406,56 +406,63 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         if (await _db.Users.AnyAsync(u => u.Email == email))
             return (null, true, "El email ya está registrado.");
 
-        var internalSubject = Guid.NewGuid().ToString("N");
-        var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
-
-        // 1. Crear BaseUser con tipo BOOKDROP_USER
-        var baseUser = new BaseUser
+        using var transaction = await _db.Database.BeginTransactionAsync();
+        try
         {
-            SupabaseId = internalSubject,
-            Email = email,
-            Username = username,
-            Name = name,
-            ProfilePhoto = profilePhoto ?? string.Empty,
-            UserType = BaseUserType.BOOKDROP_USER,
-            Location = location
-        };
+            var internalSubject = Guid.NewGuid().ToString("N");
+            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
 
-        _db.Users.Add(baseUser);
-        await _db.SaveChangesAsync();
+            // 1. Crear BaseUser con tipo BOOKDROP_USER
+            var baseUser = new BaseUser
+            {
+                SupabaseId = internalSubject,
+                Email = email,
+                Username = username,
+                Name = name,
+                ProfilePhoto = profilePhoto ?? string.Empty,
+                PasswordHash = hashedPassword,
+                UserType = BaseUserType.BOOKDROP_USER,
+                Location = location
+            };
 
-        baseUser.PasswordHash = hashedPassword;
-        baseUser.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+            _db.Users.Add(baseUser);
+            await _db.SaveChangesAsync();
 
-        // 2. Crear Bookspot sin owner (aún no existe bookdrop_user)
-        var bookspot = new Bookspot
+            // 2. Crear Bookspot sin owner (aún no existe bookdrop_user)
+            var bookspot = new Bookspot
+            {
+                Nombre = nombreEstablecimiento,
+                AddressText = addressText,
+                Location = location,
+                IsBookdrop = true,
+                Status = BookspotStatus.ACTIVE
+            };
+
+            _db.Bookspots.Add(bookspot);
+            await _db.SaveChangesAsync();
+
+            // 3. Crear BookdropUser vinculando base_user y bookspot
+            var bookdropUser = new BookdropUser
+            {
+                Id = baseUser.Id,
+                BookSpotId = bookspot.Id
+            };
+
+            _db.BookdropUsers.Add(bookdropUser);
+            await _db.SaveChangesAsync();
+
+            // 4. Ahora que bookdrop_user existe, vincular el owner en el bookspot
+            bookspot.OwnerId = baseUser.Id;
+            await _db.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+            return (baseUser, false, null);
+        }
+        catch
         {
-            Nombre = nombreEstablecimiento,
-            AddressText = addressText,
-            Location = location,
-            IsBookdrop = true,
-            Status = BookspotStatus.ACTIVE
-        };
-
-        _db.Bookspots.Add(bookspot);
-        await _db.SaveChangesAsync();
-
-        // 3. Crear BookdropUser vinculando base_user y bookspot
-        var bookdropUser = new BookdropUser
-        {
-            Id = baseUser.Id,
-            BookSpotId = bookspot.Id
-        };
-
-        _db.BookdropUsers.Add(bookdropUser);
-        await _db.SaveChangesAsync();
-
-        // 4. Ahora que bookdrop_user existe, vincular el owner en el bookspot
-        bookspot.OwnerId = baseUser.Id;
-        await _db.SaveChangesAsync();
-
-        return (baseUser, false, null);
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<PricingPlan> GetUserPlan(Guid userId)
