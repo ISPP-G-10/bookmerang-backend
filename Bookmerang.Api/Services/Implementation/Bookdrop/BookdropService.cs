@@ -82,4 +82,59 @@ public class BookdropService(AppDbContext db) : IBookdropService
             baseUser.CreatedAt
         );
     }
+
+    public async Task<List<BookdropProfileDto>> GetAll()
+    {
+        var bookdropUsers = await _db.BookdropUsers
+            .Include(b => b.BaseUser)
+            .Include(b => b.Bookspot)
+            .ToListAsync();
+
+        return bookdropUsers.Select(b => new BookdropProfileDto(
+            b.Id,
+            b.BaseUser.Email,
+            b.BaseUser.Username,
+            b.BaseUser.Name,
+            b.BaseUser.ProfilePhoto,
+            b.Bookspot.Nombre,
+            b.Bookspot.AddressText,
+            b.Bookspot.Location.Y,
+            b.Bookspot.Location.X,
+            b.Bookspot.Status,
+            b.BaseUser.CreatedAt
+        )).ToList();
+    }
+
+    public async Task<(bool found, string? error)> DeleteBookdrop(Guid bookdropUserId)
+    {
+        var bookdropUser = await _db.BookdropUsers
+            .Include(b => b.Bookspot)
+            .FirstOrDefaultAsync(b => b.Id == bookdropUserId);
+        if (bookdropUser == null) return (false, null);
+
+        var bookspot = bookdropUser.Bookspot;
+
+        // Eliminar validaciones del bookspot
+        var validations = await _db.BookspotValidations
+            .Where(v => v.BookspotId == bookspot.Id)
+            .ToListAsync();
+        if (validations.Any()) _db.BookspotValidations.RemoveRange(validations);
+
+        // Desvincular owner del bookspot antes de borrar bookdrop_user
+        bookspot.OwnerId = null;
+        await _db.SaveChangesAsync();
+
+        _db.BookdropUsers.Remove(bookdropUser);
+        _db.Bookspots.Remove(bookspot);
+        await _db.SaveChangesAsync();
+
+        var baseUser = await _db.Users.FindAsync(bookdropUserId);
+        if (baseUser != null)
+        {
+            _db.Users.Remove(baseUser);
+            await _db.SaveChangesAsync();
+        }
+
+        return (true, null);
+    }
 }

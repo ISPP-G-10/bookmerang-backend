@@ -40,4 +40,18 @@ public class BookdropController(IBookdropService bookdropService) : ControllerBa
         return Ok(perfil);
     }
 
+    [HttpDelete("perfil")]
+    public async Task<IActionResult> DeletePerfil()
+    {
+        var userId = User.FindFirstValue("user_id");
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var targetId))
+            return Unauthorized();
+
+        var (found, error) = await _bookdropService.DeleteBookdrop(targetId);
+
+        if (!found) return NotFound("Establecimiento no encontrado.");
+        if (error != null) return BadRequest(error);
+
+        return Ok(new { message = "Establecimiento eliminado correctamente." });
+    }
 }
