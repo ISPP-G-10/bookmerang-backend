@@ -156,6 +156,8 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("BookdropOnly", policy =>
         policy.RequireClaim("user_type", ((int)BaseUserType.BOOKDROP_USER).ToString()));
+    options.AddPolicy("UserOnly", policy =>
+        policy.RequireClaim("user_type", ((int)BaseUserType.USER).ToString()));
     options.AddPolicy("AdminOnly", policy =>
         policy.RequireClaim("user_type", ((int)BaseUserType.ADMIN).ToString()));
 });

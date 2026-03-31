@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using NetTopologySuite.Geometries;
 using Bookmerang.Api.Models.DTOs;
@@ -31,7 +32,7 @@ public class AuthController : ControllerBase
             request.Username,
             request.Name,
             request.ProfilePhoto,
-            request.UserType,
+            BaseUserType.USER,
             location
         );
 
@@ -84,7 +85,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("me")]
-    [Authorize]
+    [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> GetMe()
     {
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
@@ -99,7 +100,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("perfil")]
-    [Authorize]
+    [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> GetPerfil()
     {
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
@@ -112,7 +113,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPatch("perfil")]
-    [Authorize]
+    [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> PatchPerfil([FromBody] UpdatePerfilRequest request)
     {
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
@@ -159,7 +160,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpDelete("perfil")]
-    [Authorize]
+    [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> DeletePerfil()
     {
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
@@ -209,17 +210,42 @@ public record PatchPasswordRequest(
     string NewPassword
 );
 
-public record RegisterBusinessRequest(
-    string Email,
-    string Password,
-    string Username,
-    string Name,
-    string? ProfilePhoto,
-    string NombreEstablecimiento,
-    string AddressText,
-    double Latitud,
-    double Longitud
-);
+public class RegisterBusinessRequest
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
+    [MinLength(6)]
+    public string Password { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(50, MinimumLength = 3)]
+    public string Username { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(100, MinimumLength = 2)]
+    public string Name { get; set; } = string.Empty;
+
+    public string? ProfilePhoto { get; set; }
+
+    [Required]
+    [StringLength(100, MinimumLength = 3)]
+    public string NombreEstablecimiento { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(200, MinimumLength = 5)]
+    public string AddressText { get; set; } = string.Empty;
+
+    [Required]
+    [Range(-90, 90)]
+    public double Latitud { get; set; }
+
+    [Required]
+    [Range(-180, 180)]
+    public double Longitud { get; set; }
+}
 
 public record LoginRequest(
     string Email,

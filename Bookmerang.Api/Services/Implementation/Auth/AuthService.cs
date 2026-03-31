@@ -406,6 +406,9 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         if (await _db.Users.AnyAsync(u => u.Email == email))
             return (null, true, "El email ya está registrado.");
 
+        if (await _db.Users.AnyAsync(u => u.Username == username))
+            return (null, false, "El nombre de usuario ya está en uso.");
+
         using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
@@ -449,9 +452,6 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
             };
 
             _db.BookdropUsers.Add(bookdropUser);
-            await _db.SaveChangesAsync();
-
-            // 4. Ahora que bookdrop_user existe, vincular el owner en el bookspot
             bookspot.OwnerId = baseUser.Id;
             await _db.SaveChangesAsync();
 
