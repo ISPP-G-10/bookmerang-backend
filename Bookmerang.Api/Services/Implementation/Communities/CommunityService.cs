@@ -400,6 +400,26 @@ public class CommunityService(
         }).ToList();
     }
 
+    public async Task<List<CommunityMemberDto>> GetCommunityMembersAsync(int communityId)
+    {
+        var members = await _db.CommunityMembers
+            .Include(cm => cm.User)
+                .ThenInclude(u => u.BaseUser)
+            .Where(cm => cm.CommunityId == communityId)
+            .OrderBy(cm => cm.JoinedAt)
+            .ToListAsync();
+
+        return members.Select(cm => new CommunityMemberDto
+        {
+            CommunityId = cm.CommunityId,
+            UserId = cm.UserId,
+            Username = cm.User?.BaseUser?.Username ?? "Usuario",
+            ProfilePhoto = cm.User?.BaseUser?.ProfilePhoto ?? "",
+            Role = cm.Role,
+            JoinedAt = cm.JoinedAt
+        }).ToList();
+    }
+
     private async Task TransferCreatorAsync(Community community, int communityId, List<Guid> remainingMemberIds)
     {
         if (remainingMemberIds.Count == 0)

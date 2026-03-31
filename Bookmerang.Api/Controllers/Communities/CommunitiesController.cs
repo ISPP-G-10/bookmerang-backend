@@ -58,6 +58,13 @@ public class CommunitiesController(
         return Ok(result);
     }
 
+    [HttpGet("{id}/members")]
+    public async Task<IActionResult> GetCommunityMembers(int id)
+    {
+        var result = await _communityService.GetCommunityMembersAsync(id);
+        return Ok(result);
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateCommunity([FromBody] CreateCommunityRequest request)
     {

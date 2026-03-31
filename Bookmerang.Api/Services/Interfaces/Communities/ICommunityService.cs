@@ -11,4 +11,5 @@ public interface ICommunityService
     Task DeleteCommunityAsync(Guid userId, int communityId);
     Task<CommunityDto> GetCommunityDetailsAsync(int communityId);
     Task<List<CommunityDto>> GetMyCommunitiesAsync(Guid userId);
+    Task<List<CommunityMemberDto>> GetCommunityMembersAsync(int communityId);
 }
