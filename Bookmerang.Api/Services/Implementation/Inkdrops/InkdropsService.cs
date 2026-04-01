@@ -108,16 +108,18 @@ public class InkdropsService(AppDbContext db) : IInkdropsService
                 _db.Users,
                 x => x.u.Id,
                 bu => bu.Id,
-                (x, bu) => new CommunityRankingEntryDto(
-                    x.u.Id,
-                    bu.Username,
-                    bu.Name,
-                    x.s.InkdropsThisMonth
-                )
+                (x, bu) => new { x.u.Id, bu.Username, bu.Name, x.s.InkdropsThisMonth }
             )
             .OrderByDescending(r => r.InkdropsThisMonth)
             .ToListAsync();
 
-        return new CommunityRankingDto(communityId, currentMonth, ranking);
-    }
+        var rankingDtos = ranking.Select(r => new CommunityRankingEntryDto(
+            r.Id,
+            r.Username,
+            r.Name,
+            r.InkdropsThisMonth
+        )).ToList();
+
+        return new CommunityRankingDto(communityId, currentMonth, rankingDtos);
+            }
 }
