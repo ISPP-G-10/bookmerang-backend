@@ -508,4 +508,248 @@ public class CommunityServiceTests : IAsyncLifetime
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() => _service.DeleteCommunityAsync(memberId, comm.Id));
         Assert.Contains("Solo los moderadores", ex.Message);
     }
+
+    // ==================== KICK MEMBER TESTS ====================
+
+    [Fact]
+    public async Task KickMember_ModeratorKicksMember_Succeeds()
+    {
+        // Arrange
+        var moderatorId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+        SeedUser(moderatorId, "moderator@test.com", PricingPlan.PREMIUM);
+        SeedUser(memberId, "member@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(100, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "KickTestComm",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = moderatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+
+        var chat = new Chat { Type = ChatType.COMMUNITY };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityChats.Add(new CommunityChat { CommunityId = comm.Id, ChatId = chat.Id });
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = moderatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = memberId,
+            Role = CommunityRole.MEMBER,
+            JoinedAt = DateTime.UtcNow
+        });
+        _db.ChatParticipants.Add(new ChatParticipant { ChatId = chat.Id, UserId = moderatorId, JoinedAt = DateTime.UtcNow });
+        _db.ChatParticipants.Add(new ChatParticipant { ChatId = chat.Id, UserId = memberId, JoinedAt = DateTime.UtcNow });
+        await _db.SaveChangesAsync();
+
+        // Act
+        await _service.KickMemberAsync(moderatorId, comm.Id, memberId);
+
+        // Assert
+        var kickedMember = await _db.CommunityMembers
+            .FirstOrDefaultAsync(m => m.CommunityId == comm.Id && m.UserId == memberId);
+        Assert.Null(kickedMember);
+
+        var chatParticipant = await _db.ChatParticipants
+            .FirstOrDefaultAsync(cp => cp.ChatId == chat.Id && cp.UserId == memberId);
+        Assert.Null(chatParticipant);
+
+        // Moderator should still be in community
+        var moderator = await _db.CommunityMembers
+            .FirstOrDefaultAsync(m => m.CommunityId == comm.Id && m.UserId == moderatorId);
+        Assert.NotNull(moderator);
+    }
+
+    [Fact]
+    public async Task KickMember_NonModeratorTriesToKick_ThrowsUnauthorized()
+    {
+        // Arrange
+        var moderatorId = Guid.NewGuid();
+        var member1Id = Guid.NewGuid();
+        var member2Id = Guid.NewGuid();
+        SeedUser(moderatorId, "moderator-kick@test.com", PricingPlan.PREMIUM);
+        SeedUser(member1Id, "member1-kick@test.com", PricingPlan.PREMIUM);
+        SeedUser(member2Id, "member2-kick@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(101, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "KickUnauthorized",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = moderatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = moderatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = member1Id,
+            Role = CommunityRole.MEMBER,
+            JoinedAt = DateTime.UtcNow
+        });
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = member2Id,
+            Role = CommunityRole.MEMBER,
+            JoinedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        // Act & Assert - member1 tries to kick member2
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => _service.KickMemberAsync(member1Id, comm.Id, member2Id));
+        Assert.Contains("Solo los moderadores pueden expulsar", ex.Message);
+    }
+
+    [Fact]
+    public async Task KickMember_ModeratorTriesToKickSelf_ThrowsInvalidOperation()
+    {
+        // Arrange
+        var moderatorId = Guid.NewGuid();
+        SeedUser(moderatorId, "mod-self-kick@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(102, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "SelfKickComm",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = moderatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = moderatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.KickMemberAsync(moderatorId, comm.Id, moderatorId));
+        Assert.Contains("No puedes expulsarte a ti mismo", ex.Message);
+    }
+
+    [Fact]
+    public async Task KickMember_ModeratorTriesToKickAnotherModerator_ThrowsInvalidOperation()
+    {
+        // Arrange
+        var mod1Id = Guid.NewGuid();
+        var mod2Id = Guid.NewGuid();
+        SeedUser(mod1Id, "mod1@test.com", PricingPlan.PREMIUM);
+        SeedUser(mod2Id, "mod2@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(103, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "TwoModsComm",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = mod1Id,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = mod1Id,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = mod2Id,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.KickMemberAsync(mod1Id, comm.Id, mod2Id));
+        Assert.Contains("No puedes expulsar a otro moderador", ex.Message);
+    }
+
+    [Fact]
+    public async Task KickMember_UserNotInCommunity_ThrowsInvalidOperation()
+    {
+        // Arrange
+        var moderatorId = Guid.NewGuid();
+        var outsiderId = Guid.NewGuid();
+        SeedUser(moderatorId, "mod-outsider@test.com", PricingPlan.PREMIUM);
+        SeedUser(outsiderId, "outsider@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(104, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "OutsiderComm",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = moderatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = moderatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        // Act & Assert - try to kick someone who's not in the community
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.KickMemberAsync(moderatorId, comm.Id, outsiderId));
+        Assert.Contains("no es miembro de esta comunidad", ex.Message);
+    }
+
+    [Fact]
+    public async Task KickMember_CommunityNotFound_ThrowsInvalidOperation()
+    {
+        // Arrange
+        var moderatorId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+        SeedUser(moderatorId, "mod-notfound@test.com", PricingPlan.PREMIUM);
+        SeedUser(memberId, "member-notfound@test.com", PricingPlan.PREMIUM);
+        await _db.SaveChangesAsync();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.KickMemberAsync(moderatorId, 99999, memberId));
+        Assert.Contains("Comunidad no encontrada", ex.Message);
+    }
 }

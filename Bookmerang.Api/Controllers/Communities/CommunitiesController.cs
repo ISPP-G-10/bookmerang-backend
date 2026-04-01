@@ -58,6 +58,34 @@ public class CommunitiesController(
         return Ok(result);
     }
 
+    [HttpGet("{id}/members")]
+    public async Task<IActionResult> GetCommunityMembers(int id)
+    {
+        var result = await _communityService.GetCommunityMembersAsync(id);
+        return Ok(result);
+    }
+
+    [HttpPost("{id}/kick/{memberId}")]
+    public async Task<IActionResult> KickMember(int id, Guid memberId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            await _communityService.KickMemberAsync(userId.Value, id, memberId);
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateCommunity([FromBody] CreateCommunityRequest request)
     {
