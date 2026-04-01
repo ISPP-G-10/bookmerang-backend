@@ -12,4 +12,5 @@ public interface ICommunityService
     Task<CommunityDto> GetCommunityDetailsAsync(int communityId);
     Task<List<CommunityDto>> GetMyCommunitiesAsync(Guid userId);
     Task<List<CommunityMemberDto>> GetCommunityMembersAsync(int communityId);
+    Task KickMemberAsync(Guid moderatorId, int communityId, Guid memberToKickId);
 }

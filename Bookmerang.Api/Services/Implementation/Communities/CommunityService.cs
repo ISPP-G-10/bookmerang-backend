@@ -420,6 +420,43 @@ public class CommunityService(
         }).ToList();
     }
 
+    public async Task KickMemberAsync(Guid moderatorId, int communityId, Guid memberToKickId)
+    {
+        var community = await _db.Communities
+            .Include(c => c.Members)
+            .Include(c => c.CommunityChat)
+            .FirstOrDefaultAsync(c => c.Id == communityId);
+
+        if (community == null)
+            throw new InvalidOperationException("Comunidad no encontrada");
+
+        // Verify the requester is a moderator
+        var moderatorMembership = community.Members.FirstOrDefault(m => m.UserId == moderatorId);
+        if (moderatorMembership == null || moderatorMembership.Role != CommunityRole.MODERATOR)
+            throw new UnauthorizedAccessException("Solo los moderadores pueden expulsar miembros");
+
+        // Cannot kick yourself
+        if (moderatorId == memberToKickId)
+            throw new InvalidOperationException("No puedes expulsarte a ti mismo");
+
+        // Find the member to kick
+        var memberToKick = community.Members.FirstOrDefault(m => m.UserId == memberToKickId);
+        if (memberToKick == null)
+            throw new InvalidOperationException("El usuario no es miembro de esta comunidad");
+
+        // Cannot kick another moderator
+        if (memberToKick.Role == CommunityRole.MODERATOR)
+            throw new InvalidOperationException("No puedes expulsar a otro moderador");
+
+        // Remove from community
+        _db.CommunityMembers.Remove(memberToKick);
+
+        // Remove from chat if exists
+        await CleanupUserCommunityDataAsync(memberToKickId, communityId, community.CommunityChat?.ChatId);
+
+        await _db.SaveChangesAsync();
+    }
+
     private async Task TransferCreatorAsync(Community community, int communityId, List<Guid> remainingMemberIds)
     {
         if (remainingMemberIds.Count == 0)
