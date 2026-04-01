@@ -425,6 +425,121 @@ INSERT INTO bookspots (id, nombre, address_text, location, is_bookdrop, created_
   (35, 'Papelería Valme (Zona Arco Norte)', 'Av. Adolfo Suárez, 24, 41704 Dos Hermanas', ST_MakePoint(-5.9388, 37.2945)::geography, false, u10, 'ACTIVE', now_ts - INTERVAL '1 day')
 ON CONFLICT (id) DO NOTHING;
 
+-- ==============================================================
+-- 12. COMUNIDADES DE PRUEBA
+-- ==============================================================
+-- Comunidad 1: Club de Lectura Triana (en Biblioteca de Triana, bookspot 10)
+-- Creador/Moderador: Laura (u01)
+-- Miembros: Sofía (u03), Elena (u05), Pablo (u06)
+INSERT INTO communities (id, name, reference_bookspot_id, status, creator_id, created_at) VALUES
+  (1, 'Club de Lectura Triana', 10, 'ACTIVE', u01, now_ts - INTERVAL '30 days'),
+  (2, 'Amantes del Thriller', 12, 'ACTIVE', u02, now_ts - INTERVAL '25 days'),
+  (3, 'Fantasía y Ciencia Ficción', 14, 'ACTIVE', u03, now_ts - INTERVAL '20 days'),
+  (4, 'Lectores de Dos Hermanas', 16, 'ACTIVE', u04, now_ts - INTERVAL '15 days'),
+  (5, 'Románticos Empedernidos', 22, 'ACTIVE', u05, now_ts - INTERVAL '10 days')
+ON CONFLICT (id) DO NOTHING;
+
+-- Miembros de comunidades (el creador siempre es MODERATOR)
+INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES
+  -- Club de Lectura Triana (comunidad 1)
+  (1, u01, 'MODERATOR', now_ts - INTERVAL '30 days'),  -- Laura (creador)
+  (1, u03, 'MEMBER', now_ts - INTERVAL '28 days'),     -- Sofía
+  (1, u05, 'MEMBER', now_ts - INTERVAL '26 days'),     -- Elena
+  (1, u06, 'MEMBER', now_ts - INTERVAL '24 days'),     -- Pablo
+  
+  -- Amantes del Thriller (comunidad 2)
+  (2, u02, 'MODERATOR', now_ts - INTERVAL '25 days'),  -- Marcos (creador)
+  (2, u09, 'MEMBER', now_ts - INTERVAL '23 days'),     -- Carmen
+  (2, u13, 'MEMBER', now_ts - INTERVAL '21 days'),     -- Isabel
+  (2, u14, 'MEMBER', now_ts - INTERVAL '19 days'),     -- Rodrigo
+  
+  -- Fantasía y Ciencia Ficción (comunidad 3)
+  (3, u03, 'MODERATOR', now_ts - INTERVAL '20 days'),  -- Sofía (creador)
+  (3, u08, 'MEMBER', now_ts - INTERVAL '18 days'),     -- Diego
+  (3, u11, 'MEMBER', now_ts - INTERVAL '16 days'),     -- Natalia
+  (3, u12, 'MEMBER', now_ts - INTERVAL '14 days'),     -- Andrés
+  
+  -- Lectores de Dos Hermanas (comunidad 4)
+  (4, u04, 'MODERATOR', now_ts - INTERVAL '15 days'),  -- Alejandro (creador)
+  (4, u06, 'MEMBER', now_ts - INTERVAL '13 days'),     -- Pablo
+  (4, u08, 'MEMBER', now_ts - INTERVAL '11 days'),     -- Diego
+  (4, u10, 'MEMBER', now_ts - INTERVAL '9 days'),      -- Javier
+  
+  -- Románticos Empedernidos (comunidad 5)
+  (5, u05, 'MODERATOR', now_ts - INTERVAL '10 days'),  -- Elena (creador)
+  (5, u07, 'MEMBER', now_ts - INTERVAL '8 days'),      -- Lucía
+  (5, u11, 'MEMBER', now_ts - INTERVAL '6 days'),      -- Natalia
+  (5, u15, 'MEMBER', now_ts - INTERVAL '4 days')       -- María José
+ON CONFLICT (community_id, user_id) DO NOTHING;
+
+-- Chats para las comunidades (tipo COMMUNITY)
+INSERT INTO chats (id, type, created_at) VALUES
+  (1001, 'COMMUNITY', now_ts - INTERVAL '30 days'),
+  (1002, 'COMMUNITY', now_ts - INTERVAL '25 days'),
+  (1003, 'COMMUNITY', now_ts - INTERVAL '20 days'),
+  (1004, 'COMMUNITY', now_ts - INTERVAL '15 days'),
+  (1005, 'COMMUNITY', now_ts - INTERVAL '10 days')
+ON CONFLICT (id) DO NOTHING;
+
+-- Relación comunidad-chat
+INSERT INTO community_chats (community_id, chat_id) VALUES
+  (1, 1001),
+  (2, 1002),
+  (3, 1003),
+  (4, 1004),
+  (5, 1005)
+ON CONFLICT (community_id) DO NOTHING;
+
+-- Participantes en los chats de comunidades (todos los miembros)
+INSERT INTO chat_participants (chat_id, user_id, joined_at) VALUES
+  -- Chat comunidad 1
+  (1001, u01, now_ts - INTERVAL '30 days'),
+  (1001, u03, now_ts - INTERVAL '28 days'),
+  (1001, u05, now_ts - INTERVAL '26 days'),
+  (1001, u06, now_ts - INTERVAL '24 days'),
+  -- Chat comunidad 2
+  (1002, u02, now_ts - INTERVAL '25 days'),
+  (1002, u09, now_ts - INTERVAL '23 days'),
+  (1002, u13, now_ts - INTERVAL '21 days'),
+  (1002, u14, now_ts - INTERVAL '19 days'),
+  -- Chat comunidad 3
+  (1003, u03, now_ts - INTERVAL '20 days'),
+  (1003, u08, now_ts - INTERVAL '18 days'),
+  (1003, u11, now_ts - INTERVAL '16 days'),
+  (1003, u12, now_ts - INTERVAL '14 days'),
+  -- Chat comunidad 4
+  (1004, u04, now_ts - INTERVAL '15 days'),
+  (1004, u06, now_ts - INTERVAL '13 days'),
+  (1004, u08, now_ts - INTERVAL '11 days'),
+  (1004, u10, now_ts - INTERVAL '9 days'),
+  -- Chat comunidad 5
+  (1005, u05, now_ts - INTERVAL '10 days'),
+  (1005, u07, now_ts - INTERVAL '8 days'),
+  (1005, u11, now_ts - INTERVAL '6 days'),
+  (1005, u15, now_ts - INTERVAL '4 days')
+ON CONFLICT (chat_id, user_id) DO NOTHING;
+
+-- Algunos mensajes de prueba en los chats de comunidades
+INSERT INTO messages (chat_id, sender_id, body, sent_at) VALUES
+  (1001, u01, '¡Bienvenidos al Club de Lectura Triana! Este mes leeremos "Cien años de soledad"', now_ts - INTERVAL '30 days'),
+  (1001, u03, '¡Qué buena elección! Me encanta García Márquez', now_ts - INTERVAL '29 days'),
+  (1001, u05, '¿Nos vemos el sábado en la biblioteca para comentarlo?', now_ts - INTERVAL '28 days'),
+  
+  (1002, u02, 'Acabamos de terminar "La chica del tren". ¿Qué os ha parecido?', now_ts - INTERVAL '20 days'),
+  (1002, u09, 'El final me dejó con la boca abierta', now_ts - INTERVAL '19 days'),
+  
+  (1003, u03, '¿Habéis leído la nueva de Brandon Sanderson?', now_ts - INTERVAL '15 days'),
+  (1003, u08, 'Sí, increíble como siempre. Sus sistemas de magia son geniales', now_ts - INTERVAL '14 days'),
+  (1003, u11, 'Yo estoy esperando a que salga en español', now_ts - INTERVAL '13 days'),
+  
+  (1004, u04, 'Propongo que hagamos un intercambio de libros este fin de semana', now_ts - INTERVAL '10 days'),
+  (1004, u06, 'Me apunto! Tengo varios que ya he leído', now_ts - INTERVAL '9 days'),
+  
+  (1005, u05, '¿Alguien ha leído "It Ends With Us"?', now_ts - INTERVAL '5 days'),
+  (1005, u15, 'Yo, y lloré muchísimo con el final', now_ts - INTERVAL '4 days'),
+  (1005, u07, 'Está en mi lista de pendientes', now_ts - INTERVAL '3 days')
+ON CONFLICT DO NOTHING;
+
 END $$;
 
 COMMIT;
