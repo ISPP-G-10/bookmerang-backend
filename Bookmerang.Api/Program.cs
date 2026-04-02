@@ -72,6 +72,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         o => o.UseNetTopologySuite()
     ));
 
+builder.Services.AddHttpClient();
+
 // ===== CONFIGURACIÓN =====
 builder.Services.Configure<MatcherSettings>(
     builder.Configuration.GetSection(MatcherSettings.SectionName));
