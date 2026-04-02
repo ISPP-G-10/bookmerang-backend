@@ -30,9 +30,12 @@ using Bookmerang.Api.Services.Interfaces.Bookdrop;
 using Bookmerang.Api.Services.Implementation.Bookdrop;
 using Bookmerang.Api.Services.Interfaces.Bookspots;
 using Bookmerang.Api.Services.Implementation.Bookspots;
+using Bookmerang.Api.Services.Interfaces.Subscriptions;
+using Bookmerang.Api.Services.Implementation.Subscriptions;
+using Stripe;
 
 //DotNetEnv.Env.Load();
-DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
+DotNetEnv.Env.Load(System.IO.File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,6 +47,23 @@ builder.Configuration["Auth:JwtSecret"] = Environment.GetEnvironmentVariable("JW
 builder.Configuration["Auth:JwtIssuer"] = Environment.GetEnvironmentVariable("JWT_ISSUER");
 builder.Configuration["Auth:JwtAudience"] = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
 builder.Configuration["Auth:JwtAccessTokenMinutes"] = Environment.GetEnvironmentVariable("JWT_ACCESS_TOKEN_MINUTES");
+
+// Stripe
+var stripeSecretKeyEnv = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
+if (!string.IsNullOrEmpty(stripeSecretKeyEnv))
+    builder.Configuration["Stripe:SecretKey"] = stripeSecretKeyEnv;
+var stripePriceId = Environment.GetEnvironmentVariable("STRIPE_PREMIUM_PRICE_ID");
+if (!string.IsNullOrEmpty(stripePriceId))
+    builder.Configuration["Stripe:PremiumPriceId"] = stripePriceId;
+var stripeSuccessUrl = Environment.GetEnvironmentVariable("STRIPE_SUCCESS_URL");
+if (!string.IsNullOrEmpty(stripeSuccessUrl))
+    builder.Configuration["Stripe:SuccessUrl"] = stripeSuccessUrl;
+var stripeCancelUrl = Environment.GetEnvironmentVariable("STRIPE_CANCEL_URL");
+if (!string.IsNullOrEmpty(stripeCancelUrl))
+    builder.Configuration["Stripe:CancelUrl"] = stripeCancelUrl;
+var stripePublishableKey = Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY");
+if (!string.IsNullOrEmpty(stripePublishableKey))
+    builder.Configuration["Stripe:PublishableKey"] = stripePublishableKey;
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -64,6 +84,8 @@ Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupStatus>("meetup_status", 
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookspotStatus>("bookspot_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<SubscriptionStatus>("subscription_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<SubscriptionPlatform>("subscription_platform", new NpgsqlNullNameTranslator());
 #pragma warning restore CS0618
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -197,6 +219,19 @@ builder.Services.AddScoped<IBookspotRepository, BookspotRepository>();
 builder.Services.AddScoped<IBookspotService, BookspotService>();
 builder.Services.AddScoped<IBookspotValidationRepository, BookspotValidationRepository>();
 builder.Services.AddScoped<IBookspotValidationService, BookspotValidationService>();
+
+// Subscriptions (Premium)
+builder.Services.AddScoped<ISubscriptionService, Bookmerang.Api.Services.Implementation.Subscriptions.SubscriptionService>();
+builder.Services.AddScoped<IStripeSubscriptionService, StripeSubscriptionService>();
+builder.Services.AddHostedService<SubscriptionExpirationHostedService>();
+builder.Services.AddHostedService<MonthlyRankingRewardHostedService>();
+
+// Configure Stripe
+var stripeSecretKey = builder.Configuration["Stripe:SecretKey"] ?? Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
+if (!string.IsNullOrEmpty(stripeSecretKey))
+{
+    StripeConfiguration.ApiKey = stripeSecretKey;
+}
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers()
