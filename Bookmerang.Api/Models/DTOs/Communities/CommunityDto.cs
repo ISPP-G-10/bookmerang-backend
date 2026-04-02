@@ -10,6 +10,7 @@ public class CommunityDto
     public CommunityStatus Status { get; set; }
     public Guid? CreatorId { get; set; }
     public DateTime CreatedAt { get; set; }
+    public CommunityRole? CurrentUserRole { get; set; }
     
     // Optional details
     public int? ChatId { get; set; }
