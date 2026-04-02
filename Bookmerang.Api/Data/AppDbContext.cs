@@ -35,6 +35,7 @@ public class AppDbContext : DbContext
     public DbSet<CommunityChat> CommunityChats => Set<CommunityChat>();
     public DbSet<CommunityLibraryLike> CommunityLibraryLikes => Set<CommunityLibraryLike>();
     public DbSet<Meetup> Meetups => Set<Meetup>();
+    public DbSet<BookdropUser> BookdropUsers => Set<BookdropUser>();
     public DbSet<MeetupAttendance> MeetupAttendances => Set<MeetupAttendance>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -127,6 +128,22 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.UserPreference)
                 .WithOne()
                 .HasForeignKey<UserPreference>(x => x.UserId);
+        });
+
+        // ===== BOOKDROP_USERS =====
+        modelBuilder.Entity<BookdropUser>(e =>
+        {
+            e.ToTable("bookdrop_users");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.BookSpotId).HasColumnName("book_spot_id");
+
+            e.HasOne(x => x.BaseUser)
+                .WithOne()
+                .HasForeignKey<BookdropUser>(x => x.Id);
+
+            e.HasOne(x => x.Bookspot)
+                .WithOne(b => b.Owner)
+                .HasForeignKey<BookdropUser>(x => x.BookSpotId);
         });
 
         // User → UserProgress (1:1)

@@ -381,6 +381,90 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         return user;
     }
 
+    public async Task<(BaseUser? usuario, bool yaExistia, string? error)> RegisterBusiness(
+        string email,
+        string password,
+        string username,
+        string name,
+        string? profilePhoto,
+        Point location,
+        string nombreEstablecimiento,
+        string addressText)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return (null, false, "El email es obligatorio.");
+
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+            return (null, false, "La contraseña debe tener al menos 6 caracteres.");
+
+        if (string.IsNullOrWhiteSpace(nombreEstablecimiento))
+            return (null, false, "El nombre del establecimiento es obligatorio.");
+
+        if (string.IsNullOrWhiteSpace(addressText))
+            return (null, false, "La dirección del establecimiento es obligatoria.");
+
+        if (await _db.Users.AnyAsync(u => u.Email == email))
+            return (null, true, "El email ya está registrado.");
+
+        if (await _db.Users.AnyAsync(u => u.Username == username))
+            return (null, false, "El nombre de usuario ya está en uso.");
+
+        using var transaction = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var internalSubject = Guid.NewGuid().ToString("N");
+            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
+
+            // 1. Crear BaseUser con tipo BOOKDROP_USER
+            var baseUser = new BaseUser
+            {
+                SupabaseId = internalSubject,
+                Email = email,
+                Username = username,
+                Name = name,
+                ProfilePhoto = profilePhoto ?? string.Empty,
+                PasswordHash = hashedPassword,
+                UserType = BaseUserType.BOOKDROP_USER,
+                Location = location
+            };
+
+            _db.Users.Add(baseUser);
+            await _db.SaveChangesAsync();
+
+            // 2. Crear Bookspot sin owner (aún no existe bookdrop_user)
+            var bookspot = new Bookspot
+            {
+                Nombre = nombreEstablecimiento,
+                AddressText = addressText,
+                Location = location,
+                IsBookdrop = true,
+                Status = BookspotStatus.ACTIVE
+            };
+
+            _db.Bookspots.Add(bookspot);
+            await _db.SaveChangesAsync();
+
+            // 3. Crear BookdropUser vinculando base_user y bookspot
+            var bookdropUser = new BookdropUser
+            {
+                Id = baseUser.Id,
+                BookSpotId = bookspot.Id
+            };
+
+            _db.BookdropUsers.Add(bookdropUser);
+            bookspot.OwnerId = baseUser.Id;
+            await _db.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+            return (baseUser, false, null);
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
     public async Task<PricingPlan> GetUserPlan(Guid userId)
     {
         var regularUser = await _db.RegularUsers.FindAsync(userId);
@@ -407,7 +491,8 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
             new Claim(JwtRegisteredClaimNames.Sub, user.SupabaseId),
             new Claim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", user.SupabaseId),
             new Claim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", user.Email),
-            new Claim("user_id", user.Id.ToString())
+            new Claim("user_id", user.Id.ToString()),
+            new Claim("user_type", ((int)user.UserType).ToString())
         };
 
         var token = new JwtSecurityToken(
