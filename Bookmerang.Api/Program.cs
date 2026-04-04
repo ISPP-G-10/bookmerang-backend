@@ -250,6 +250,7 @@ using (var scope = app.Services.CreateScope())
         "SELECT setval('messages_id_seq',          COALESCE((SELECT MAX(id) FROM messages), 0) + 1, false)",
         "SELECT setval('exchanges_id_seq',         COALESCE((SELECT MAX(id) FROM exchanges), 0) + 1, false)",
         "SELECT setval('user_preferences_id_seq',  COALESCE((SELECT MAX(id) FROM user_preferences), 0) + 1, false)",
+        "SELECT setval('communities_id_seq',       COALESCE((SELECT MAX(id) FROM communities), 0) + 1, false)",
     };
     foreach (var sql in sequences)
         db.Database.ExecuteSqlRaw(sql);
