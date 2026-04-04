@@ -1,0 +1,92 @@
+name: "🐛 Bug / Fix"
+description: "Reportar un error o comportamiento incorrecto"
+title: "[Backend] - "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐛 Bug / Fix
+
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: "📝 Descripción del error"
+      description: "¿Qué ocurre? ¿Cuándo ocurre?"
+      placeholder: |
+        Ejemplo: El endpoint /bookspots/nearby devuelve 500 cuando el radio es mayor de 20 km.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduccion
+    attributes:
+      label: "🔁 Pasos para reproducirlo"
+      placeholder: |
+        1. Llamar a GET /bookspots/nearby con radiusKm=25
+        2. El servidor responde con 500 Internal Server Error
+    validations:
+      required: false
+
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: "📍 Módulo"
+      options:
+        - "BookSpots"
+        - "Matcher"
+        - "Chats"
+        - "Comunidades"
+        - "Biblioteca"
+        - "Perfil / Usuarios"
+        - "Autenticación"
+        - "Premium / Pagos"
+        - "Infraestructura"
+        - "Tests"
+        - "Documentación"
+        - "➕ Otro (especificar abajo)"
+    validations:
+      required: true
+
+  - type: input
+    id: otro-modulo
+    attributes:
+      label: "➕ Otro módulo"
+      placeholder: "Ej: Notificaciones push"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: prioridad
+    attributes:
+      label: "⚠️ Prioridad"
+      options:
+        - "🔥 Crítico — Bloquea y no se puede trabajar"
+        - "🔴 Alta — Funcionalidad principal rota"
+        - "🟡 Media — Tiene solución alternativa"
+        - "🟢 Baja — Error menor / respuesta inesperada"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sprint
+    attributes:
+      label: "⏳ Sprint"
+      options:
+        - "DP"
+        - "Sprint 1"
+        - "Sprint 2"
+        - "Sprint 3"
+        - "PPL"
+        - "WPL"
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: "📸 Logs / stack trace / capturas (opcional)"
+      placeholder: "Pega aquí el mensaje de error, stack trace o cualquier información adicional"
+    validations:
+      required: false

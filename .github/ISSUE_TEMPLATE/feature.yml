@@ -1,0 +1,85 @@
+name: "📋 Nueva tarea / Mejora"
+description: "Proponer una nueva funcionalidad o mejora"
+title: "[Backend] - "
+labels: ["enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 📋 Nueva tarea / Mejora
+
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: "🔍 Descripción"
+      description: "¿Qué hay que hacer y por qué?"
+      placeholder: |
+        Ejemplo: Implementar endpoint para obtener los BookSpots cercanos filtrados por tipo.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: "📍 Módulo"
+      options:
+        - "BookSpots"
+        - "Matcher"
+        - "Chats"
+        - "Comunidades"
+        - "Biblioteca"
+        - "Perfil / Usuarios"
+        - "Autenticación"
+        - "Premium / Pagos"
+        - "Infraestructura"
+        - "Tests"
+        - "Documentación"
+        - "➕ Otro (especificar abajo)"
+    validations:
+      required: true
+
+  - type: input
+    id: otro-modulo
+    attributes:
+      label: "➕ Otro módulo"
+      placeholder: "Ej: Notificaciones push"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: prioridad
+    attributes:
+      label: "⚠️ Prioridad"
+      options:
+        - "🔥 Urgente — Bloquea otras tareas"
+        - "🔴 Alta — Debería hacerse lo antes posible"
+        - "🟡 Media — Importante pero no urgente"
+        - "🟢 Baja — Detalle menor"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sprint
+    attributes:
+      label: "⏳ Sprint"
+      options:
+        - "DP"
+        - "Sprint 1"
+        - "Sprint 2"
+        - "Sprint 3"
+        - "PPL"
+        - "WPL"
+    validations:
+      required: true
+
+  - type: textarea
+    id: archivos
+    attributes:
+      label: "📁 Controladores / Servicios afectados (opcional)"
+      placeholder: |
+        Ej:
+        - Bookmerang.Api/Controllers/BookspotController.cs
+        - Bookmerang.Api/Services/BookspotService.cs
+    validations:
+      required: false
