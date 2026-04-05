@@ -25,4 +25,13 @@ public interface IAuthService
     Task<string?> PatchPassword(string supabaseId, string currentPassword, string newPassword);
     Task<BaseUser?> DeletePerfil(string supabaseId);
     Task<PricingPlan> GetUserPlan(Guid userId);
+    Task<(BaseUser? usuario, bool yaExistia, string? error)> RegisterBusiness(
+        string email,
+        string password,
+        string username,
+        string name,
+        string? profilePhoto,
+        Point location,
+        string nombreEstablecimiento,
+        string addressText);
 }

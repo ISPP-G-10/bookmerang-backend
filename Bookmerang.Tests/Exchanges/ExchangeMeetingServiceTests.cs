@@ -41,23 +41,31 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task UpdateExchangeMeeting_BothCompletionFlagsTrue_SetsExchangeCompleted()
 	{
+		var user1Id = Guid.NewGuid();
+		var user2Id = Guid.NewGuid();
 		var match = new Api.Models.Entities.Match
 		{
 			Id = 30,
-			User1Id = Guid.NewGuid(),
-			User2Id = Guid.NewGuid(),
-			Book1Id = 1,
-			Book2Id = 2,
+			User1Id = user1Id,
+			User2Id = user2Id,
+			Book1Id = 301,
+			Book2Id = 302,
 			Status = MatchStatus.NEW,
 			CreatedAt = DateTime.UtcNow
 		};
+
 		_db.Matches.Add(match);
+		_db.Books.AddRange(
+			new Book { Id = 301, OwnerId = user1Id, Status = BookStatus.PUBLISHED },
+			new Book { Id = 302, OwnerId = user2Id, Status = BookStatus.PUBLISHED }
+		);
 
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 10,
 			ChatId = 20,
 			MatchId = 30,
+			Match = match,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
 			UpdatedAt = DateTime.UtcNow
@@ -78,7 +86,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(10))
+			.Setup(s => s.GetExchangeWithMatch(10))
 			.ReturnsAsync(exchange);
 
 		var dto = new UpdateExchangeMeetingDto(null, null, null, null, null, true, true);
@@ -434,7 +442,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(70))
+			.Setup(s => s.GetExchangeWithMatch(70))
 			.ReturnsAsync(exchange);
 
 		var dto = new UpdateExchangeMeetingDto(null, null, null, null, null, null, null);
@@ -474,7 +482,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(71))
+			.Setup(s => s.GetExchangeWithMatch(71))
 			.ReturnsAsync(exchange);
 
 		var dto = new UpdateExchangeMeetingDto(null, null, null, DateTime.UtcNow.AddMinutes(2), null, null, null);
@@ -513,7 +521,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(72))
+			.Setup(s => s.GetExchangeWithMatch(72))
 			.ReturnsAsync(exchange);
 
 		var dto = new UpdateExchangeMeetingDto(ExchangeMode.BOOKSPOT, null, null, null, null, null, null);
@@ -553,7 +561,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(73))
+			.Setup(s => s.GetExchangeWithMatch(73))
 			.ReturnsAsync(exchange);
 
 		var dto = new UpdateExchangeMeetingDto(ExchangeMode.BOOKSPOT, 15, null, null, ExchangeMeetingStatus.ACCEPTED, null, null);
@@ -569,7 +577,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 	public async Task UpdateExchangeMeeting_MeetingDoesNotExist_ThrowsInvalidOperationException()
 	{
 		_exchangeService
-			.Setup(s => s.GetExchangeById(It.IsAny<int>()))
+			.Setup(s => s.GetExchangeWithMatch(It.IsAny<int>()))
 			.ReturnsAsync((Api.Models.Entities.Exchange?)null);
 
 		var dto = new UpdateExchangeMeetingDto(null, null, null, null, null, null, null);
@@ -608,7 +616,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(74))
+			.Setup(s => s.GetExchangeWithMatch(74))
 			.ReturnsAsync(exchange);
 
 		var dto = new UpdateExchangeMeetingDto(null, null, new[] { 5.5, 6.5 }, null, null, null, null);
@@ -623,23 +631,31 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task UpdateExchangeMeeting_MarkBothCompleted_SetsExchangeCompleted()
 	{
+		var user1Id = Guid.NewGuid();
+		var user2Id = Guid.NewGuid();
 		var match = new Api.Models.Entities.Match
 		{
 			Id = 12,
-			User1Id = Guid.NewGuid(),
-			User2Id = Guid.NewGuid(),
-			Book1Id = 1,
-			Book2Id = 2,
+			User1Id = user1Id,
+			User2Id = user2Id,
+			Book1Id = 1201,
+			Book2Id = 1202,
 			Status = MatchStatus.NEW,
 			CreatedAt = DateTime.UtcNow
 		};
+
 		_db.Matches.Add(match);
+		_db.Books.AddRange(
+			new Book { Id = 1201, OwnerId = user1Id, Status = BookStatus.PUBLISHED },
+			new Book { Id = 1202, OwnerId = user2Id, Status = BookStatus.PUBLISHED }
+		);
 
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 75,
 			ChatId = 12,
 			MatchId = 12,
+			Match = match,
 			Status = ExchangeStatus.ACCEPTED,
 			CreatedAt = DateTime.UtcNow,
 			UpdatedAt = DateTime.UtcNow
@@ -662,7 +678,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(75))
+			.Setup(s => s.GetExchangeWithMatch(75))
 			.ReturnsAsync(exchange);
 
 		var dto = new UpdateExchangeMeetingDto(null, null, null, null, null, true, true);
@@ -704,7 +720,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(76))
+			.Setup(s => s.GetExchangeWithMatch(76))
 			.ReturnsAsync(exchange);
 
 		var dto = new UpdateExchangeMeetingDto(null, null, null, null, null, true, false);

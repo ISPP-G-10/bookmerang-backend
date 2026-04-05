@@ -54,8 +54,39 @@ public class CommunitiesController(
     [HttpGet("{id}")]
     public async Task<IActionResult> GetCommunityDetails(int id)
     {
-        var result = await _communityService.GetCommunityDetailsAsync(id);
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var result = await _communityService.GetCommunityDetailsAsync(userId.Value, id);
         return Ok(result);
+    }
+
+    [HttpGet("{id}/members")]
+    public async Task<IActionResult> GetCommunityMembers(int id)
+    {
+        var result = await _communityService.GetCommunityMembersAsync(id);
+        return Ok(result);
+    }
+
+    [HttpPost("{id}/kick/{memberId}")]
+    public async Task<IActionResult> KickMember(int id, Guid memberId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            await _communityService.KickMemberAsync(userId.Value, id, memberId);
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpPost]
@@ -146,6 +177,26 @@ public class CommunitiesController(
 
         var result = await _meetupService.CreateMeetupAsync(userId.Value, id, request);
         return Ok(result); // Using OK instead of CreatedAtAction since no specific GET meetup endpoint is defined yet
+    }
+
+    [HttpPut("{id}/meetups/{meetupId}")]
+    public async Task<IActionResult> UpdateMeetup(int id, int meetupId, [FromBody] CreateMeetupRequest request)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var result = await _meetupService.UpdateMeetupAsync(userId.Value, id, meetupId, request);
+        return Ok(result);
+    }
+
+    [HttpDelete("{id}/meetups/{meetupId}")]
+    public async Task<IActionResult> DeleteMeetup(int id, int meetupId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        await _meetupService.DeleteMeetupAsync(userId.Value, id, meetupId);
+        return NoContent();
     }
 
     [HttpPost("{id}/meetups/{meetupId}/attend")]

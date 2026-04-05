@@ -86,10 +86,25 @@ public class ChatService(AppDbContext db) : IChatService
             .FirstOrDefaultAsync();
 
         string? name = null;
+        Dictionary<Guid, CommunityRole>? userRoles = null;
+
         if (chat.Type == ChatType.COMMUNITY)
         {
             var commChat = await _db.CommunityChats.Include(cc => cc.Community).FirstOrDefaultAsync(cc => cc.ChatId == chatId);
-            if (commChat != null) name = commChat.Community.Name;
+            if (commChat != null)
+            {
+                name = commChat.Community.Name;
+                
+                // Enriquecer participantes con roles de comunidad
+                userRoles = await _db.CommunityMembers
+                    .Where(cm => cm.CommunityId == commChat.CommunityId)
+                    .ToDictionaryAsync(cm => cm.UserId, cm => cm.Role);
+            }
+        }
+
+        if (userRoles != null)
+        {
+            return chat.ToDtoWithRoles(userRoles, lastMessage, name);
         }
 
         return chat.ToDto(lastMessage, name);
@@ -171,18 +186,6 @@ public class ChatService(AppDbContext db) : IChatService
         }).ToList();
 
         _db.ChatParticipants.AddRange(participants);
-        await _db.SaveChangesAsync();
-
-        // Send automatic presentation message for each user
-        var initialMessages = participantIds.Select(uid => new Message
-        {
-            ChatId = chat.Id,
-            SenderId = uid,
-            Body = "Hola, me ha interesado tu libro",
-            SentAt = DateTime.UtcNow
-        }).ToList();
-
-        _db.Messages.AddRange(initialMessages);
         await _db.SaveChangesAsync();
 
         // Recargar con datos completos

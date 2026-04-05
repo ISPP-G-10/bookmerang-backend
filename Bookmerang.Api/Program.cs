@@ -10,7 +10,6 @@ using Bookmerang.Api.Services.Interfaces.PilotUsers;
 using Bookmerang.Api.Services.Implementation.PilotUsers;
 using Bookmerang.Api.Services.Interfaces.Books;
 using Bookmerang.Api.Services.Implementation.Books;
-using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Matcher;
 using Bookmerang.Api.Services.Implementation.Matcher;
@@ -24,15 +23,15 @@ using Bookmerang.Api.Validators.Communities;
 using Bookmerang.Api.Middleware;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using Npgsql.NameTranslation;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Bookmerang.Api.Services.Interfaces.Bookdrop;
+using Bookmerang.Api.Services.Implementation.Bookdrop;
 using Bookmerang.Api.Services.Interfaces.Bookspots;
 using Bookmerang.Api.Services.Implementation.Bookspots;
-using Bookmerang.Api.Models.Entities;
 
 //DotNetEnv.Env.Load();
 DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
@@ -74,6 +73,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         connectionString,
         o => o.UseNetTopologySuite()
     ));
+
+builder.Services.AddHttpClient();
 
 // ===== CONFIGURACIÓN =====
 builder.Services.Configure<MatcherSettings>(
@@ -154,6 +155,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// ===== AUTORIZACIÓN (policies por tipo de usuario) =====
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("BookdropOnly", policy =>
+        policy.RequireClaim("user_type", ((int)BaseUserType.BOOKDROP_USER).ToString()));
+    options.AddPolicy("UserOnly", policy =>
+        policy.RequireClaim("user_type", ((int)BaseUserType.USER).ToString()));
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireClaim("user_type", ((int)BaseUserType.ADMIN).ToString()));
+});
+
 // ===== SERVICIOS =====
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IChatService, ChatService>();
@@ -179,6 +191,9 @@ builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
 builder.Services.AddScoped<IGenreRepository, GenreRepository>();
 builder.Services.AddScoped<ILanguageRepository, LanguageRepository>();
+
+// Bookdrop (establecimientos)
+builder.Services.AddScoped<IBookdropService, BookdropService>();
 
 // Bookspots
 builder.Services.AddScoped<IBookspotRepository, BookspotRepository>();
@@ -238,6 +253,7 @@ using (var scope = app.Services.CreateScope())
         "SELECT setval('messages_id_seq',          COALESCE((SELECT MAX(id) FROM messages), 0) + 1, false)",
         "SELECT setval('exchanges_id_seq',         COALESCE((SELECT MAX(id) FROM exchanges), 0) + 1, false)",
         "SELECT setval('user_preferences_id_seq',  COALESCE((SELECT MAX(id) FROM user_preferences), 0) + 1, false)",
+        "SELECT setval('communities_id_seq',       COALESCE((SELECT MAX(id) FROM communities), 0) + 1, false)",
     };
     foreach (var sql in sequences)
         db.Database.ExecuteSqlRaw(sql);

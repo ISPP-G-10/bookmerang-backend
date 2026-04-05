@@ -35,6 +35,7 @@ public class AppDbContext : DbContext
     public DbSet<CommunityChat> CommunityChats => Set<CommunityChat>();
     public DbSet<CommunityLibraryLike> CommunityLibraryLikes => Set<CommunityLibraryLike>();
     public DbSet<Meetup> Meetups => Set<Meetup>();
+    public DbSet<BookdropUser> BookdropUsers => Set<BookdropUser>();
     public DbSet<MeetupAttendance> MeetupAttendances => Set<MeetupAttendance>();
     public DbSet<CommunityMonthlyScore> CommunityMonthlyScores => Set<CommunityMonthlyScore>();
 
@@ -50,6 +51,8 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<MatchStatus>();
         modelBuilder.HasPostgresEnum<ChatType>("public", "chat_type", new NpgsqlNullNameTranslator());
         modelBuilder.HasPostgresEnum<ExchangeStatus>();
+        modelBuilder.HasPostgresEnum<ExchangeMode>();
+        modelBuilder.HasPostgresEnum<ExchangeMeetingStatus>();
         modelBuilder.HasPostgresEnum<BookspotStatus>();
         modelBuilder.HasPostgresEnum<CommunityStatus>();
         modelBuilder.HasPostgresEnum<CommunityRole>();
@@ -125,9 +128,30 @@ public class AppDbContext : DbContext
         // ===== USERS =====
         modelBuilder.Entity<User>(e =>
         {
+            e.HasOne(x => x.BaseUser)
+                .WithOne()
+                .HasForeignKey<User>(x => x.Id)
+                .OnDelete(DeleteBehavior.Cascade);
+
             e.HasOne(x => x.UserPreference)
                 .WithOne()
                 .HasForeignKey<UserPreference>(x => x.UserId);
+        });
+
+        // ===== BOOKDROP_USERS =====
+        modelBuilder.Entity<BookdropUser>(e =>
+        {
+            e.ToTable("bookdrop_users");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.BookSpotId).HasColumnName("book_spot_id");
+
+            e.HasOne(x => x.BaseUser)
+                .WithOne()
+                .HasForeignKey<BookdropUser>(x => x.Id);
+
+            e.HasOne(x => x.Bookspot)
+                .WithOne(b => b.Owner)
+                .HasForeignKey<BookdropUser>(x => x.BookSpotId);
         });
 
         // User → UserProgress (1:1)

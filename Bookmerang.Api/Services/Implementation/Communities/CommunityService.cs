@@ -41,6 +41,7 @@ public class CommunityService(
             Status = c.Status,
             CreatorId = c.CreatorId,
             CreatedAt = c.CreatedAt,
+            CurrentUserRole = c.Members.FirstOrDefault(m => m.UserId == userId)?.Role,
             ChatId = c.CommunityChat?.ChatId,
             MemberCount = c.Members.Count
         }).ToList();
@@ -62,7 +63,7 @@ public class CommunityService(
                 .Include(cm => cm.Community)
                 .Where(cm => cm.UserId == creatorId && cm.Community.Status != CommunityStatus.ARCHIVED)
                 .CountAsync();
-            
+
             if (activeCommunities >= 1)
             {
                 throw new ForbiddenException("Los usuarios con plan gratuito solo pueden pertenecer a una comunidad no archivada.");
@@ -78,7 +79,7 @@ public class CommunityService(
 
         var nameExistsNearby = await _db.Communities
             .Include(c => c.ReferenceBookspot)
-            .AnyAsync(c => c.Name.ToLower() == request.Name.ToLower() 
+            .AnyAsync(c => c.Name.ToLower() == request.Name.ToLower()
                 && c.Status != CommunityStatus.ARCHIVED
                 && c.ReferenceBookspot.Location.IsWithinDistance(bookspot.Location, distanceLimit));
 
@@ -134,6 +135,7 @@ public class CommunityService(
                 Status = community.Status,
                 CreatorId = community.CreatorId,
                 CreatedAt = community.CreatedAt,
+                CurrentUserRole = CommunityRole.MODERATOR,
                 ChatId = chatDto.Id,
                 MemberCount = 1
             };
@@ -151,9 +153,9 @@ public class CommunityService(
             .Include(c => c.Members)
             .Include(c => c.CommunityChat)
             .FirstOrDefaultAsync(c => c.Id == communityId);
-        
+
         if (community == null) throw new NotFoundException("Comunidad no encontrada.");
-        
+
         if (community.Members.Any(m => m.UserId == userId))
             throw new AppValidationException("Ya perteneces a esta comunidad.");
 
@@ -169,7 +171,7 @@ public class CommunityService(
                 .Include(cm => cm.Community)
                 .Where(cm => cm.UserId == userId && cm.Community.Status != CommunityStatus.ARCHIVED)
                 .CountAsync();
-            
+
             if (activeCommunities >= 1)
             {
                 throw new ForbiddenException("Los usuarios con plan gratuito solo pueden pertenecer a una comunidad no archivada. Abandona tu comunidad actual para unirte a otra.");
@@ -218,6 +220,7 @@ public class CommunityService(
                 Status = community.Status,
                 CreatorId = community.CreatorId,
                 CreatedAt = community.CreatedAt,
+                CurrentUserRole = CommunityRole.MEMBER,
                 ChatId = community.CommunityChat?.ChatId,
                 MemberCount = memberCountBeforeJoin + 1
             };
@@ -252,7 +255,7 @@ public class CommunityService(
             .Where(m => m.UserId != userId)
             .Select(m => m.UserId)
             .ToList();
-        
+
         using var transaction = await _db.Database.BeginTransactionAsync();
 
         try
@@ -354,7 +357,7 @@ public class CommunityService(
         }
     }
 
-    public async Task<CommunityDto> GetCommunityDetailsAsync(int communityId)
+    public async Task<CommunityDto> GetCommunityDetailsAsync(Guid userId, int communityId)
     {
         var community = await _db.Communities
             .Include(c => c.Members)
@@ -371,6 +374,7 @@ public class CommunityService(
             Status = community.Status,
             CreatorId = community.CreatorId,
             CreatedAt = community.CreatedAt,
+            CurrentUserRole = community.Members.FirstOrDefault(m => m.UserId == userId)?.Role,
             ChatId = community.CommunityChat?.ChatId,
             MemberCount = community.Members.Count
         };
@@ -395,9 +399,67 @@ public class CommunityService(
             Status = c.Status,
             CreatorId = c.CreatorId,
             CreatedAt = c.CreatedAt,
+            CurrentUserRole = c.Members.FirstOrDefault(m => m.UserId == userId)?.Role,
             ChatId = c.CommunityChat?.ChatId,
             MemberCount = c.Members.Count
         }).ToList();
+    }
+
+    public async Task<List<CommunityMemberDto>> GetCommunityMembersAsync(int communityId)
+    {
+        var members = await _db.CommunityMembers
+            .Include(cm => cm.User)
+                .ThenInclude(u => u.BaseUser)
+            .Where(cm => cm.CommunityId == communityId)
+            .OrderBy(cm => cm.JoinedAt)
+            .ToListAsync();
+
+        return members.Select(cm => new CommunityMemberDto
+        {
+            CommunityId = cm.CommunityId,
+            UserId = cm.UserId,
+            Username = cm.User?.BaseUser?.Username ?? "Usuario",
+            ProfilePhoto = cm.User?.BaseUser?.ProfilePhoto ?? "",
+            Role = cm.Role,
+            JoinedAt = cm.JoinedAt
+        }).ToList();
+    }
+
+    public async Task KickMemberAsync(Guid moderatorId, int communityId, Guid memberToKickId)
+    {
+        var community = await _db.Communities
+            .Include(c => c.Members)
+            .Include(c => c.CommunityChat)
+            .FirstOrDefaultAsync(c => c.Id == communityId);
+
+        if (community == null)
+            throw new InvalidOperationException("Comunidad no encontrada");
+
+        // Verify the requester is a moderator
+        var moderatorMembership = community.Members.FirstOrDefault(m => m.UserId == moderatorId);
+        if (moderatorMembership == null || moderatorMembership.Role != CommunityRole.MODERATOR)
+            throw new UnauthorizedAccessException("Solo los moderadores pueden expulsar miembros");
+
+        // Cannot kick yourself
+        if (moderatorId == memberToKickId)
+            throw new InvalidOperationException("No puedes expulsarte a ti mismo");
+
+        // Find the member to kick
+        var memberToKick = community.Members.FirstOrDefault(m => m.UserId == memberToKickId);
+        if (memberToKick == null)
+            throw new InvalidOperationException("El usuario no es miembro de esta comunidad");
+
+        // Cannot kick another moderator
+        if (memberToKick.Role == CommunityRole.MODERATOR)
+            throw new InvalidOperationException("No puedes expulsar a otro moderador");
+
+        // Remove from community
+        _db.CommunityMembers.Remove(memberToKick);
+
+        // Remove from chat if exists
+        await CleanupUserCommunityDataAsync(memberToKickId, communityId, community.CommunityChat?.ChatId);
+
+        await _db.SaveChangesAsync();
     }
 
     private async Task TransferCreatorAsync(Community community, int communityId, List<Guid> remainingMemberIds)

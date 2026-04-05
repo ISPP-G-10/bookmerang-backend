@@ -81,18 +81,19 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         if (meeting == null)
             throw new InvalidOperationException($"Meeting con id {meetingId} no encontrado");
         
-        var exchange = await _exchange_service.GetExchangeById(meeting.ExchangeId);
-        var oldStatus = exchange!.Status;
+        var exchange = await _exchange_service.GetExchangeWithMatch(meeting.ExchangeId);
         
         if (exchange == null)
             throw new InvalidOperationException($"Exchange con id {meeting.ExchangeId} no encontrado");
+
+        var oldStatus = exchange.Status;
 
         if (IsAllNull(dto)) 
             throw new InvalidOperationException("Al menos un parámetro debe tener un valor");
 
         if(dto.ScheduledAt != null && dto.ScheduledAt < DateTime.UtcNow.AddMinutes(5))
         {
-            throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próximo a ella");
+            throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próxima a ella");
         }
         if(dto.ExchangeMode == ExchangeMode.BOOKSPOT && dto.BookspotId == null)
         {
@@ -121,10 +122,21 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         if (dto.MarkAsCompletedByUser2.HasValue)
             meeting.MarkAsCompletedByUser2 = dto.MarkAsCompletedByUser2.Value;
 
-        if (IsCompleted(dto)) {
+        if (IsCompleted(meeting)) {
             exchange.Status = ExchangeStatus.COMPLETED;
-            var matchWithUsers = await _db.Matches.FirstAsync(m => m.Id == exchange.MatchId);
-            await _inkdrops_service.GrantExchangeInkdropsAsync(matchWithUsers.User1Id, matchWithUsers.User2Id);
+
+            if (exchange.Match == null)
+                throw new InvalidOperationException($"Match no encontrado para exchange con id {exchange.ExchangeId}");
+
+            var book1 = await _db.Books.FirstOrDefaultAsync(b => b.Id == exchange.Match.Book1Id);
+            var book2 = await _db.Books.FirstOrDefaultAsync(b => b.Id == exchange.Match.Book2Id);
+
+            if (book1 == null || book2 == null)
+                throw new InvalidOperationException($"No se han encontrado los libros del match para exchange con id {exchange.ExchangeId}");
+
+            book1.OwnerId = exchange.Match.User2Id;
+            book2.OwnerId = exchange.Match.User1Id;
+            await _inkdrops_service.GrantExchangeInkdropsAsync(exchange.Match.User1Id, exchange.Match.User2Id);
         }
         else
         {
@@ -134,17 +146,19 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
 
         if(exchange.Status != oldStatus)
         {
-            // ensure the exchange's timestamps have UTC kind before saving
-            exchange.CreatedAt = DateTime.SpecifyKind(exchange.CreatedAt, DateTimeKind.Utc);
+            // Solo actualizamos campos de estado; evitamos tocar created_at.
             exchange.UpdatedAt = DateTime.UtcNow;
-            _db.Exchanges.Update(exchange);
         }
-
         
-        
-        _db.ExchangeMeetings.Update(meeting);
-        
-        await _db.SaveChangesAsync();
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            var detail = ex.InnerException?.Message ?? ex.Message;
+            throw new InvalidOperationException($"Error al guardar el cierre del intercambio: {detail}", ex);
+        }
 
         return meeting;
     }
@@ -155,8 +169,8 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
        dto.MeetingStatus == null && dto.MarkAsCompletedByUser1 == null && 
        dto.MarkAsCompletedByUser2 == null;
 
-    private bool IsCompleted(UpdateExchangeMeetingDto dto)
-    => dto.MarkAsCompletedByUser1 == true && dto.MarkAsCompletedByUser2 == true;
+    private static bool IsCompleted(ExchangeMeeting meeting)
+    => meeting.MarkAsCompletedByUser1 && meeting.MarkAsCompletedByUser2;
 
     public async Task<bool> DeleteExchangeMeeting(int meetingId)
     {

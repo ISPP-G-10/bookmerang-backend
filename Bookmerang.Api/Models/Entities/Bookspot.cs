@@ -29,9 +29,8 @@ public class Bookspot
     [Column("is_bookdrop")]
     public bool IsBookdrop { get; set; } = false;
 
-    [Required]
     [Column("created_by_user_id")]
-    public Guid CreatedByUserId { get; set; }
+    public Guid? CreatedByUserId { get; set; }
 
     [Column("owner_id")]
     public Guid? OwnerId { get; set; }
@@ -51,5 +50,5 @@ public class Bookspot
     [ForeignKey("CreatedByUserId")]
     public User? CreatedByUser { get; set; }
 
-    // Navigation property for OwnerId would require BookdropUser entity, skipping for now
+    public BookdropUser? Owner { get; set; }
 }
