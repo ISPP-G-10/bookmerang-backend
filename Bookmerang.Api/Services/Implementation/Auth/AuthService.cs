@@ -8,7 +8,10 @@ using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using NetTopologySuite.Geometries;
 using Microsoft.Extensions.Configuration;
-using System.Net.Http.Headers;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Bookmerang.Api.Services.Implementation.Auth;
 
@@ -111,6 +114,60 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         return (nuevoUsuario, false);
     }
 
+    public async Task<(BaseUser? usuario, bool yaExistia, string? error)> RegisterWithCredentials(
+        string email,
+        string password,
+        string username,
+        string name,
+        string profilePhoto,
+        BaseUserType type,
+        Point location)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return (null, false, "El email es obligatorio.");
+
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+            return (null, false, "La contraseña debe tener al menos 6 caracteres.");
+
+        if (await _db.Users.AnyAsync(u => u.Email == email))
+            return (null, true, "El email ya está registrado.");
+
+        var internalSubject = Guid.NewGuid().ToString("N");
+        var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
+
+        var (usuario, yaExistia) = await Register(
+            internalSubject,
+            email,
+            username,
+            name,
+            profilePhoto,
+            type,
+            location
+        );
+
+        if (yaExistia || usuario == null)
+            return (null, true, "El usuario ya existe en el sistema.");
+
+        usuario.PasswordHash = hashedPassword;
+        usuario.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return (usuario, false, null);
+    }
+
+    public async Task<(BaseUser? usuario, string token, string? error)> Login(string email, string password)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null)
+            return (null, string.Empty, "Credenciales inválidas.");
+
+        if (string.IsNullOrWhiteSpace(user.PasswordHash) || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            return (null, string.Empty, "Credenciales inválidas.");
+
+        var token = GenerateToken(user);
+        return (user, token, null);
+    }
+
     public async Task<BaseUser?> UpdatePerfil(string supabaseId,string? username, string? name, string? profilePhoto)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
@@ -124,8 +181,8 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         if (!string.IsNullOrWhiteSpace(name))
             user.Name = name;
 
-        if (!string.IsNullOrWhiteSpace(profilePhoto))
-            user.ProfilePhoto = profilePhoto;
+        if (profilePhoto != null)
+            user.ProfilePhoto = string.IsNullOrWhiteSpace(profilePhoto) ? string.Empty : profilePhoto;
 
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -155,14 +212,64 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
     return (user, null);
 }
 
+    public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail, string currentPassword)
+    {
+        if (string.IsNullOrWhiteSpace(currentPassword))
+            return (null, "La contraseña actual es obligatoria.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+        if (user == null)
+            return (null, "Usuario no encontrado.");
+
+        if (string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            // Usuario legado sin hash local: inicializamos su hash con la contraseña introducida.
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(currentPassword);
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+        else if (!BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
+        {
+            return (null, "Contraseña incorrecta.");
+        }
+
+        return await PatchEmail(supabaseId, newEmail);
+    }
+
+    public async Task<string?> PatchPassword(string supabaseId, string currentPassword, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(currentPassword))
+            return "La contraseña actual es obligatoria.";
+
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+            return "La nueva contraseña debe tener al menos 8 caracteres.";
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+        if (user == null)
+            return "Usuario no encontrado.";
+
+        if (string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            // Usuario legado sin hash local: aceptamos la contraseña actual indicada para inicializar hash.
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(currentPassword);
+        }
+        else if (!BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
+        {
+            return "Contraseña actual incorrecta.";
+        }
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return null;
+    }
+
     public async Task<BaseUser?> DeletePerfil(string supabaseId)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
         
         if (user == null)
         {
-            // El usuario no está en la base de datos local, pero intentamos limpiarlo de Supabase por si acaso
-            await DeleteFromSupabaseAuth(supabaseId);
             return null;
         }
 
@@ -180,10 +287,7 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
             throw new Exception("No puedes borrar tu cuenta porque tienes intercambios en proceso.");
         }
 
-        // 2. Borrar de Supabase Auth PRIMERO para evitar inconsistencias si falla la conexión
-        await DeleteFromSupabaseAuth(supabaseId);
-
-        // 3. Borrado en cascada local manual (ya que EF tiene Restrict/NoAction en muchas de estas)
+        // 2. Borrado en cascada local manual (ya que EF tiene Restrict/NoAction en muchas de estas)
 
         // TypingIndicators
         var typingIndicators = await _db.TypingIndicators.Where(t => t.UserId == userId).ToListAsync();
@@ -277,26 +381,129 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         return user;
     }
 
-    private async Task DeleteFromSupabaseAuth(string supabaseId)
+    public async Task<(BaseUser? usuario, bool yaExistia, string? error)> RegisterBusiness(
+        string email,
+        string password,
+        string username,
+        string name,
+        string? profilePhoto,
+        Point location,
+        string nombreEstablecimiento,
+        string addressText)
     {
-        var supabaseUrl = _config["Supabase:Url"] ?? _config["SUPABASE_URL"];
-        var serviceRoleKey = _config["Supabase:ServiceRoleKey"] ?? _config["SUPABASE_SERVICE_ROLE_KEY"];
+        if (string.IsNullOrWhiteSpace(email))
+            return (null, false, "El email es obligatorio.");
 
-        if (string.IsNullOrWhiteSpace(supabaseUrl) || string.IsNullOrWhiteSpace(serviceRoleKey))
-            throw new InvalidOperationException("Supabase configuration missing: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.");
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+            return (null, false, "La contraseña debe tener al menos 6 caracteres.");
 
-        using var http = new HttpClient();
-        http.BaseAddress = new Uri(supabaseUrl);
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", serviceRoleKey);
-        http.DefaultRequestHeaders.Add("apikey", serviceRoleKey);
+        if (string.IsNullOrWhiteSpace(nombreEstablecimiento))
+            return (null, false, "El nombre del establecimiento es obligatorio.");
 
-        var response = await http.DeleteAsync($"/auth/v1/admin/users/{supabaseId}");
+        if (string.IsNullOrWhiteSpace(addressText))
+            return (null, false, "La dirección del establecimiento es obligatoria.");
 
-        if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
+        if (await _db.Users.AnyAsync(u => u.Email == email))
+            return (null, true, "El email ya está registrado.");
+
+        if (await _db.Users.AnyAsync(u => u.Username == username))
+            return (null, false, "El nombre de usuario ya está en uso.");
+
+        using var transaction = await _db.Database.BeginTransactionAsync();
+        try
         {
-            var error = await response.Content.ReadAsStringAsync();
-            throw new Exception($"Error borrando usuario en Supabase Auth: {error}");
+            var internalSubject = Guid.NewGuid().ToString("N");
+            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
+
+            // 1. Crear BaseUser con tipo BOOKDROP_USER
+            var baseUser = new BaseUser
+            {
+                SupabaseId = internalSubject,
+                Email = email,
+                Username = username,
+                Name = name,
+                ProfilePhoto = profilePhoto ?? string.Empty,
+                PasswordHash = hashedPassword,
+                UserType = BaseUserType.BOOKDROP_USER,
+                Location = location
+            };
+
+            _db.Users.Add(baseUser);
+            await _db.SaveChangesAsync();
+
+            // 2. Crear Bookspot sin owner (aún no existe bookdrop_user)
+            var bookspot = new Bookspot
+            {
+                Nombre = nombreEstablecimiento,
+                AddressText = addressText,
+                Location = location,
+                IsBookdrop = true,
+                Status = BookspotStatus.ACTIVE
+            };
+
+            _db.Bookspots.Add(bookspot);
+            await _db.SaveChangesAsync();
+
+            // 3. Crear BookdropUser vinculando base_user y bookspot
+            var bookdropUser = new BookdropUser
+            {
+                Id = baseUser.Id,
+                BookSpotId = bookspot.Id
+            };
+
+            _db.BookdropUsers.Add(bookdropUser);
+            bookspot.OwnerId = baseUser.Id;
+            await _db.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+            return (baseUser, false, null);
         }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    public async Task<PricingPlan> GetUserPlan(Guid userId)
+    {
+        var regularUser = await _db.RegularUsers.FindAsync(userId);
+        return regularUser?.Plan ?? PricingPlan.FREE;
+    }
+
+    private string GenerateToken(BaseUser user)
+    {
+        var secret = _config["Auth:JwtSecret"] ?? _config["JWT_SECRET"];
+        var issuer = _config["Auth:JwtIssuer"] ?? _config["JWT_ISSUER"] ?? "bookmerang-api";
+        var audience = _config["Auth:JwtAudience"] ?? _config["JWT_AUDIENCE"] ?? "bookmerang-client";
+        var ttlMinutes = int.TryParse(_config["Auth:JwtAccessTokenMinutes"] ?? _config["JWT_ACCESS_TOKEN_MINUTES"], out var ttl)
+            ? ttl
+            : 60;
+
+        if (string.IsNullOrWhiteSpace(secret))
+            throw new InvalidOperationException("JWT_SECRET no está configurado.");
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var claims = new[]
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, user.SupabaseId),
+            new Claim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", user.SupabaseId),
+            new Claim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", user.Email),
+            new Claim("user_id", user.Id.ToString()),
+            new Claim("user_type", ((int)user.UserType).ToString())
+        };
+
+        var token = new JwtSecurityToken(
+            issuer: issuer,
+            audience: audience,
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(ttlMinutes),
+            signingCredentials: credentials
+        );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
 }

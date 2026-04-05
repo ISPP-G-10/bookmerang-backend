@@ -51,6 +51,24 @@ public class ExchangeMeetingController : ControllerBase
         return Ok(meeting.ToDto());
     }
 
+    /// GET /api/exchangemeeting/byExchange/{exchangeId}
+    [HttpGet("byExchange/{exchangeId:int}")]
+    public async Task<IActionResult> GetMeetingByExchangeId(int exchangeId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var exchange = await _exchangeService.GetExchangeWithMatch(exchangeId);
+        if (exchange == null) return NotFound($"Exchange con id {exchangeId} no encontrado.");
+
+        if (!IsUserInExchange(userId.Value, exchange.Match)) return Forbid();
+
+        var meeting = await _meetingService.GetMeetingByExchangeId(exchangeId);
+        if (meeting == null) return NotFound($"No existe meeting para exchange con id {exchangeId}.");
+
+        return Ok(meeting.ToDto());
+    }
+
     /// GET /api/exchangemeeting/byUser/{proposerId}
     [HttpGet("byUser/{proposerId:guid}")]
     public async Task<IActionResult> GetMeetingsByUserId(Guid proposerId)
@@ -94,7 +112,7 @@ public class ExchangeMeetingController : ControllerBase
             return BadRequest("Faltan propiedades para crear un ExchangeMeeting.");
         
         var exchange = await _exchangeService.GetExchangeWithMatch(dto.ExchangeId.Value);
-        if (exchange == null) return NotFound($"ExchangeMeeting con id {exchange!.ExchangeId} no encontrado.");
+        if (exchange == null) return NotFound($"Exchange con id {dto.ExchangeId} no encontrado.");
         
         if (!IsUserInExchange(userId.Value, exchange!.Match)) return Forbid();
         

@@ -6,22 +6,30 @@ using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Api.Services.Implementation.Chats;
 using Bookmerang.Api.Services.Interfaces.Genres;
 using Bookmerang.Api.Services.Implementation.Genres;
+using Bookmerang.Api.Services.Interfaces.PilotUsers;
+using Bookmerang.Api.Services.Implementation.PilotUsers;
 using Bookmerang.Api.Services.Interfaces.Books;
 using Bookmerang.Api.Services.Implementation.Books;
-using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Matcher;
 using Bookmerang.Api.Services.Implementation.Matcher;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
+using Bookmerang.Api.Services.Interfaces.Communities;
+using Bookmerang.Api.Services.Implementation.Communities;
+using Bookmerang.Api.Validators.Communities;
 using Bookmerang.Api.Middleware;
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using Npgsql.NameTranslation;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Bookmerang.Api.Services.Interfaces.Bookdrop;
+using Bookmerang.Api.Services.Implementation.Bookdrop;
+using Bookmerang.Api.Services.Interfaces.Bookspots;
+using Bookmerang.Api.Services.Implementation.Bookspots;
 
 //DotNetEnv.Env.Load();
 DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
@@ -32,6 +40,10 @@ builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEn
 builder.Configuration["Supabase:JwtSecret"] = Environment.GetEnvironmentVariable("SUPABASE_JWT_SECRET");
 builder.Configuration["Supabase:Url"] = Environment.GetEnvironmentVariable("SUPABASE_URL");
 builder.Configuration["Supabase:ServiceRoleKey"] = Environment.GetEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY");
+builder.Configuration["Auth:JwtSecret"] = Environment.GetEnvironmentVariable("JWT_SECRET");
+builder.Configuration["Auth:JwtIssuer"] = Environment.GetEnvironmentVariable("JWT_ISSUER");
+builder.Configuration["Auth:JwtAudience"] = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+builder.Configuration["Auth:JwtAccessTokenMinutes"] = Environment.GetEnvironmentVariable("JWT_ACCESS_TOKEN_MINUTES");
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -46,6 +58,12 @@ Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MatchStatus>("match_status", ne
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeStatus>("exchange_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeMode>("exchange_mode", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ExchangeMeetingStatus>("exchange_meeting_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<CommunityStatus>("community_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<CommunityRole>("community_role", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupStatus>("meetup_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookspotStatus>("bookspot_status", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", new NpgsqlNullNameTranslator());
 #pragma warning restore CS0618
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -53,6 +71,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         connectionString,
         o => o.UseNetTopologySuite()
     ));
+
+builder.Services.AddHttpClient();
 
 // ===== CONFIGURACIÓN =====
 builder.Services.Configure<MatcherSettings>(
@@ -85,7 +105,8 @@ builder.Services.AddCors(options =>
                 "http://localhost:8081",
                 "http://localhost:3000",
                 "https://bookmerang-frontend.onrender.com",
-                "https://bookmerang-front.jollytree-74260255.spaincentral.azurecontainerapps.io"
+                "https://bookmerang-front.jollytree-74260255.spaincentral.azurecontainerapps.io",
+                "https://bookmerang-frontend.whitedune-16348441.spaincentral.azurecontainerapps.io"
             )
             .AllowAnyHeader()
             .AllowAnyMethod()
@@ -93,12 +114,16 @@ builder.Services.AddCors(options =>
 });
 
 // ===== JWT =====
-var supabaseUrl = builder.Configuration["Supabase:Url"];
+var jwtSecret = builder.Configuration["Auth:JwtSecret"] ?? "";
+var jwtIssuer = builder.Configuration["Auth:JwtIssuer"] ?? "bookmerang-api";
+var jwtAudience = builder.Configuration["Auth:JwtAudience"] ?? "bookmerang-client";
 
-var httpClient = new HttpClient();
-var jwksJson = httpClient.GetStringAsync($"{supabaseUrl}/auth/v1/.well-known/jwks.json").Result;
-var jwks = new JsonWebKeySet(jwksJson);
-var signingKeys = jwks.GetSigningKeys();
+if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
+{
+    throw new InvalidOperationException("JWT_SECRET debe estar configurado y tener al menos 32 caracteres.");
+}
+
+var jwtKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtSecret));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -106,13 +131,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKeys = signingKeys,
+            IssuerSigningKey = jwtKey,
             ValidateIssuer = true,
-            ValidIssuer = $"{supabaseUrl}/auth/v1",
+            ValidIssuer = jwtIssuer,
             ValidateAudience = true,
-            ValidAudience = "authenticated",
+            ValidAudience = jwtAudience,
             ValidateLifetime = true,
-            ValidAlgorithms = new[] { "ES256" }
+            ClockSkew = TimeSpan.FromMinutes(1)
         };
         options.Events = new JwtBearerEvents
         {
@@ -128,20 +153,50 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// ===== AUTORIZACIÓN (policies por tipo de usuario) =====
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("BookdropOnly", policy =>
+        policy.RequireClaim("user_type", ((int)BaseUserType.BOOKDROP_USER).ToString()));
+    options.AddPolicy("UserOnly", policy =>
+        policy.RequireClaim("user_type", ((int)BaseUserType.USER).ToString()));
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireClaim("user_type", ((int)BaseUserType.ADMIN).ToString()));
+});
+
 // ===== SERVICIOS =====
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<IGenreService, GenreService>();
+builder.Services.AddScoped<IPilotUsersService, PilotUsersService>();
+builder.Services.AddScoped<IWeeklyFeedbackMailService, WeeklyFeedbackMailService>();
 builder.Services.AddScoped<IMatcherService, MatcherService>();
+builder.Services.AddHostedService<SwipeCleanupHostedService>();
 builder.Services.AddScoped<IExchangeService, ExchangeService>();
 builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
+
+builder.Services.AddHostedService<WeeklyFeedbackMailService>();
+// Communities
+builder.Services.AddScoped<ICommunityService, CommunityService>();
+builder.Services.AddScoped<IMeetupService, MeetupService>();
+builder.Services.AddScoped<ICommunityLibraryService, CommunityLibraryService>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateMeetupRequestValidator>();
 
 // Books
 builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<IBookRepository, BookRepository>();
 builder.Services.AddScoped<IGenreRepository, GenreRepository>();
 builder.Services.AddScoped<ILanguageRepository, LanguageRepository>();
+
+// Bookdrop (establecimientos)
+builder.Services.AddScoped<IBookdropService, BookdropService>();
+
+// Bookspots
+builder.Services.AddScoped<IBookspotRepository, BookspotRepository>();
+builder.Services.AddScoped<IBookspotService, BookspotService>();
+builder.Services.AddScoped<IBookspotValidationRepository, BookspotValidationRepository>();
+builder.Services.AddScoped<IBookspotValidationService, BookspotValidationService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers()
@@ -184,6 +239,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.ExecuteSqlRaw("ALTER TABLE base_users ADD COLUMN IF NOT EXISTS password_hash text;");
     var sequences = new[]
     {
         "SELECT setval('books_id_seq',            COALESCE((SELECT MAX(id) FROM books), 0) + 1, false)",
@@ -194,6 +250,7 @@ using (var scope = app.Services.CreateScope())
         "SELECT setval('messages_id_seq',          COALESCE((SELECT MAX(id) FROM messages), 0) + 1, false)",
         "SELECT setval('exchanges_id_seq',         COALESCE((SELECT MAX(id) FROM exchanges), 0) + 1, false)",
         "SELECT setval('user_preferences_id_seq',  COALESCE((SELECT MAX(id) FROM user_preferences), 0) + 1, false)",
+        "SELECT setval('communities_id_seq',       COALESCE((SELECT MAX(id) FROM communities), 0) + 1, false)",
     };
     foreach (var sql in sequences)
         db.Database.ExecuteSqlRaw(sql);

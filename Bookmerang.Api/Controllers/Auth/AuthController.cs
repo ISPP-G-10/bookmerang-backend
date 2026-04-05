@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using NetTopologySuite.Geometries;
 using Bookmerang.Api.Models.DTOs;
@@ -20,34 +21,71 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    [Authorize]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
-        if (supabaseId == null) return Unauthorized();
-
-        var email = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress") ?? string.Empty;
-
         var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
         var location = factory.CreatePoint(new Coordinate(request.Longitud, request.Latitud));
 
-        var (usuario, yaExistia) = await _authService.Register(
-            supabaseId,
-            email,
+        var (usuario, yaExistia, error) = await _authService.RegisterWithCredentials(
+            request.Email,
+            request.Password,
             request.Username,
             request.Name,
             request.ProfilePhoto,
-            request.UserType,
+            BaseUserType.USER,
             location
         );
 
+        if (!string.IsNullOrWhiteSpace(error)) return BadRequest(error);
         if (yaExistia) return Conflict("El usuario ya existe en el sistema.");
 
-        return CreatedAtAction(nameof(GetPerfil), new { }, usuario!.ToDto());
+        var (_, token, loginError) = await _authService.Login(request.Email, request.Password);
+        if (!string.IsNullOrWhiteSpace(loginError) || string.IsNullOrWhiteSpace(token))
+            return StatusCode(StatusCodes.Status500InternalServerError, "No se pudo iniciar sesión tras el registro.");
+
+        return CreatedAtAction(nameof(GetPerfil), new { }, new AuthResponse(token, usuario!.ToDto()));
+    }
+
+    [HttpPost("register/business")]
+    public async Task<IActionResult> RegisterBusiness([FromBody] RegisterBusinessRequest request)
+    {
+        var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
+        var location = factory.CreatePoint(new Coordinate(request.Longitud, request.Latitud));
+
+        var (usuario, yaExistia, error) = await _authService.RegisterBusiness(
+            request.Email,
+            request.Password,
+            request.Username,
+            request.Name,
+            request.ProfilePhoto,
+            location,
+            request.NombreEstablecimiento,
+            request.AddressText
+        );
+
+        if (!string.IsNullOrWhiteSpace(error))
+            return yaExistia ? Conflict(error) : BadRequest(error);
+
+        var (_, token, loginError) = await _authService.Login(request.Email, request.Password);
+        if (!string.IsNullOrWhiteSpace(loginError) || string.IsNullOrWhiteSpace(token))
+            return StatusCode(StatusCodes.Status500InternalServerError, "No se pudo iniciar sesión tras el registro.");
+
+        return CreatedAtAction(nameof(GetPerfil), new { }, new AuthResponse(token, usuario!.ToDto()));
+    }
+
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    {
+        var (usuario, token, error) = await _authService.Login(request.Email, request.Password);
+
+        if (error != null) return Unauthorized(error);
+        if (usuario == null || string.IsNullOrWhiteSpace(token)) return Unauthorized("Credenciales inválidas.");
+
+        return Ok(new AuthResponse(token, usuario.ToDto()));
     }
 
     [HttpGet("me")]
-    [Authorize]
+    [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> GetMe()
     {
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
@@ -56,11 +94,13 @@ public class AuthController : ControllerBase
         var usuario = await _authService.GetPerfil(supabaseId);
         if (usuario == null) return NotFound("Usuario no encontrado en el sistema.");
 
-        return Ok(new { id = usuario.Id });
+        var plan = await _authService.GetUserPlan(usuario.Id);
+
+        return Ok(new { id = usuario.Id, plan = plan.ToString() });
     }
 
     [HttpGet("perfil")]
-    [Authorize]
+    [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> GetPerfil()
     {
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
@@ -73,7 +113,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPatch("perfil")]
-    [Authorize]
+    [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> PatchPerfil([FromBody] UpdatePerfilRequest request)
     {
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
@@ -98,7 +138,7 @@ public class AuthController : ControllerBase
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
         if (supabaseId == null) return Unauthorized();
 
-        var (usuario, error) = await _authService.PatchEmail(supabaseId, request.NewEmail);
+        var (usuario, error) = await _authService.PatchEmail(supabaseId, request.NewEmail, request.CurrentPassword);
 
         if (error != null) return BadRequest(error);
         if (usuario == null) return NotFound("Usuario no encontrado.");
@@ -106,8 +146,21 @@ public class AuthController : ControllerBase
         return Ok(usuario.ToDto());
     }
 
-    [HttpDelete("perfil")]
+    [HttpPatch("password")]
     [Authorize]
+    public async Task<IActionResult> PatchPassword([FromBody] PatchPasswordRequest request)
+    {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var error = await _authService.PatchPassword(supabaseId, request.CurrentPassword, request.NewPassword);
+        if (error != null) return BadRequest(error);
+
+        return Ok(new { message = "Contraseña actualizada correctamente." });
+    }
+
+    [HttpDelete("perfil")]
+    [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> DeletePerfil()
     {
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
@@ -131,6 +184,8 @@ public class AuthController : ControllerBase
 }
 
 public record RegisterRequest(
+    string Email,
+    string Password,
     string Username,
     string Name,
     string ProfilePhoto,
@@ -146,5 +201,58 @@ public record UpdatePerfilRequest(
 );
 
 public record PatchEmailRequest(
-    string NewEmail
+    string NewEmail,
+    string CurrentPassword
+);
+
+public record PatchPasswordRequest(
+    string CurrentPassword,
+    string NewPassword
+);
+
+public class RegisterBusinessRequest
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
+    [MinLength(6)]
+    public string Password { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(50, MinimumLength = 3)]
+    public string Username { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(100, MinimumLength = 2)]
+    public string Name { get; set; } = string.Empty;
+
+    public string? ProfilePhoto { get; set; }
+
+    [Required]
+    [StringLength(100, MinimumLength = 3)]
+    public string NombreEstablecimiento { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(200, MinimumLength = 5)]
+    public string AddressText { get; set; } = string.Empty;
+
+    [Required]
+    [Range(-90, 90)]
+    public double Latitud { get; set; }
+
+    [Required]
+    [Range(-180, 180)]
+    public double Longitud { get; set; }
+}
+
+public record LoginRequest(
+    string Email,
+    string Password
+);
+
+public record AuthResponse(
+    string AccessToken,
+    BaseUserDto User
 );

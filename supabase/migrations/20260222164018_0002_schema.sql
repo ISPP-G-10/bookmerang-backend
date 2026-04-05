@@ -278,7 +278,8 @@ CREATE TABLE "bookspots" (
   "created_by_user_id" UUID,
   "owner_id" UUID,
   "status" bookspot_status NOT NULL,
-  "created_at" timestamp NOT NULL
+  "created_at" timestamp NOT NULL,
+  "updated_at" timestamp NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE "bookspot_validations" (
@@ -395,6 +396,8 @@ COMMENT ON COLUMN "community_monthly_scores"."month" IS 'YYYY-MM';
 COMMENT ON COLUMN "incidents"."informer_id" IS 'usuario que pone la indicendia';
 
 COMMENT ON COLUMN "incidents"."informed_id" IS 'usuario sobre el que se pone la incidencia';
+
+ALTER TABLE base_users ADD COLUMN IF NOT EXISTS password_hash text;
 
 ALTER TABLE "admins" ADD FOREIGN KEY ("id") REFERENCES "base_users" ("id");
 

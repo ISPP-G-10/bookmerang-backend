@@ -25,26 +25,24 @@ public class UserPreferenceService : IUserPreferenceService
         return pref is null ? null : ToDto(pref);
     }
 
-    public async Task<UserPreferenceDto> UpsertAsync(Guid supabaseUserId, UpsertUserPreferenceDto request, CancellationToken cancellationToken = default)
+    public async Task<UserPreferenceDto> UpsertAsync(Guid userId, UpsertUserPreferenceDto request, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
 
-    var user = await _dbContext.Set<BaseUser>()
-        .Where(u => u.SupabaseId == supabaseUserId.ToString())
-        .Select(u => u.Id)
-        .FirstOrDefaultAsync(cancellationToken);
+    var userExists = await _dbContext.Set<BaseUser>()
+        .AnyAsync(u => u.Id == userId, cancellationToken);
 
-    if (user == Guid.Empty)
+    if (!userExists)
         throw new Exception("User not found in base_users");
 
     var pref = await _dbContext.UserPreferences
-        .FirstOrDefaultAsync(x => x.UserId == user, cancellationToken);
+        .FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
 
     if (pref is null)
     {
         pref = new UserPreference
         {
-            UserId = user,   
+            UserId = userId,
             CreatedAt = now,
             Location = new Point(request.Longitude, request.Latitude) { SRID = 4326 },
             Extension = request.Extension
