@@ -249,7 +249,7 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     // ===== Actualización con coordenadas =====
 
     [Fact]
-    public async Task UpdatePerfil_WithCoordinates_UpdatesBothBookspotAndBaseUser()
+    public async Task UpdatePerfil_WithCoordinates_UpdatesBookspot()
     {
         await using var db = _fixture.CreateDbContext();
         var authService = _fixture.CreateAuthService(db);
@@ -270,10 +270,6 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
         Assert.NotNull(perfil);
         Assert.Equal(40.4168, perfil.Latitud, 4);
         Assert.Equal(-3.7038, perfil.Longitud, 4);
-
-        var baseUser = await db.Users.FirstAsync(u => u.Id == usuario.Id);
-        Assert.Equal(40.4168, baseUser.Location.Y, 4);
-        Assert.Equal(-3.7038, baseUser.Location.X, 4);
     }
 
     // ===== Listar todos los bookdrops =====

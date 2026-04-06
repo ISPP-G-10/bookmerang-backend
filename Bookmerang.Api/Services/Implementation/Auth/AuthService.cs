@@ -1,13 +1,10 @@
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Data;
-using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
 using Microsoft.EntityFrameworkCore;
-using System.Linq;
 using NetTopologySuite.Geometries;
-using Microsoft.Extensions.Configuration;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -416,6 +413,10 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
 
             // 1. Crear BaseUser con tipo BOOKDROP_USER
+            // La localización del base user se fija a (0,0) porque no representa nada -> ubicación real en cada bookstop
+            var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
+            var zeroLocation = factory.CreatePoint(new Coordinate(0, 0));
+
             var baseUser = new BaseUser
             {
                 SupabaseId = internalSubject,
@@ -425,7 +426,7 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
                 ProfilePhoto = profilePhoto ?? string.Empty,
                 PasswordHash = hashedPassword,
                 UserType = BaseUserType.BOOKDROP_USER,
-                Location = location
+                Location = zeroLocation
             };
 
             _db.Users.Add(baseUser);

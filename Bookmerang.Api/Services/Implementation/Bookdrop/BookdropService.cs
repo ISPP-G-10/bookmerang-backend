@@ -60,7 +60,6 @@ public class BookdropService(AppDbContext db) : IBookdropService
             var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
             var newLocation = factory.CreatePoint(new NetTopologySuite.Geometries.Coordinate(request.Longitud.Value, request.Latitud.Value));
             bookspot.Location = newLocation;
-            baseUser.Location = newLocation;
         }
 
         bookspot.UpdatedAt = DateTime.UtcNow;
