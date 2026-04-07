@@ -192,6 +192,7 @@ builder.Services.AddScoped<ILanguageRepository, LanguageRepository>();
 
 // Bookdrop (establecimientos)
 builder.Services.AddScoped<IBookdropService, BookdropService>();
+builder.Services.AddScoped<IBookDropExchangeService, BookDropExchangeService>();
 
 // Bookspots
 builder.Services.AddScoped<IBookspotRepository, BookspotRepository>();

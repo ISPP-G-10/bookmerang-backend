@@ -104,6 +104,15 @@ public class BookdropService(AppDbContext db) : IBookdropService
         )).ToList();
     }
 
+    public async Task<int?> GetBookspotIdBySupabaseId(string supabaseId)
+    {
+        var baseUser = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+        if (baseUser == null) return null;
+
+        var bookdropUser = await _db.BookdropUsers.FirstOrDefaultAsync(b => b.Id == baseUser.Id);
+        return bookdropUser?.BookSpotId;
+    }
+
     public async Task<(bool found, string? error)> DeleteBookdrop(Guid bookdropUserId)
     {
         var bookdropUser = await _db.BookdropUsers
