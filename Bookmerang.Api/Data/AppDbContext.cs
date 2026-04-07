@@ -38,6 +38,7 @@ public class AppDbContext : DbContext
     public DbSet<BookdropUser> BookdropUsers => Set<BookdropUser>();
     public DbSet<MeetupAttendance> MeetupAttendances => Set<MeetupAttendance>();
     public DbSet<CommunityMonthlyScore> CommunityMonthlyScores => Set<CommunityMonthlyScore>();
+    public DbSet<InkdropsHistory> InkdropsHistories => Set<InkdropsHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +62,7 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<BookspotStatus>();
         modelBuilder.HasPostgresEnum<PricingPlan>();
         modelBuilder.HasPostgresEnum<BaseUserType>();
+        modelBuilder.HasPostgresEnum<InkdropsActionType>();
 
         modelBuilder.Entity<BaseUser>(entity =>
         {

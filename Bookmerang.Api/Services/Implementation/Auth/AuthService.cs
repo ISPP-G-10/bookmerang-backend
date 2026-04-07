@@ -4,6 +4,7 @@ using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
+using Bookmerang.Api.Services.Interfaces.Leveling;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using NetTopologySuite.Geometries;
@@ -15,37 +16,30 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Bookmerang.Api.Services.Implementation.Auth;
 
-public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
+public class AuthService(AppDbContext db, IConfiguration config, ILevelingService levelingService) : IAuthService
 {
     private readonly AppDbContext _db = db;
     private readonly IConfiguration _config = config;
+    private readonly ILevelingService _levelingService = levelingService;
 
     public async Task<ProfileDto?> GetPerfil(string supabaseId)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
         if (user == null) return null;
 
+        var regularUser = await _db.RegularUsers.FirstOrDefaultAsync(u => u.Id == user.Id);
+        if (regularUser == null) return null;
+
         var progress = await _db.UserProgresses.FirstOrDefaultAsync(p => p.UserId == user.Id);
 
-        // Lógica de gamificación base
         var xp = progress?.XpTotal ?? 0;
-        var level = (xp / 1000) + 1; // 1000 XP por nivel
-        var inksToNextLevel = 1000 - (xp % 1000);
-        var progressPercent = (double)(xp % 1000) / 1000.0;
+        var (level, inksToNextLevel, progressPercent) = _levelingService.CalculateLevelInfo(xp);
+        var tier = _levelingService.GetTier(level);
 
-        // Tier basado en el nivel
-        string tier = "BRONCE";
-        if (level >= 50) tier = "DIAMANTE";
-        else if (level >= 25) tier = "PLATINO";
-        else if (level >= 10) tier = "ORO";
-        else if (level >= 5) tier = "PLATA";
-
-        // Bonus basado en racha
         var streak = progress?.StreakWeeks ?? 0;
-        var bonus = Math.Min(streak * 4, 20); // 4% por semana, máx 20%
+        var bonus = Math.Min(streak * 4, 20);
 
-        // Simulamos MonthlyInkDrops y DaysUntilReset por ahora o los podemos derivar
-        var monthlyInkDrops = xp % 500; // Solo para mostrar un valor
+        var monthlyInkDrops = regularUser.Inkdrops;
         var daysUntilReset = DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month) - DateTime.UtcNow.Day;
 
         return new ProfileDto
@@ -94,7 +88,12 @@ public class AuthService(AppDbContext db, IConfiguration config) : IAuthService
         {
             var regularUser = new User
             {
-                Id = nuevoUsuario.Id
+                Id = nuevoUsuario.Id,
+                Plan = PricingPlan.FREE,
+                RatingMean = 0,
+                FinishedExchanges = 0,
+                Inkdrops = 0,
+                InkdropsLastUpdated = "1970-01"
             };
             _db.RegularUsers.Add(regularUser);
             await _db.SaveChangesAsync();

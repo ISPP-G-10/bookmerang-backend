@@ -17,6 +17,8 @@ using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Bookmerang.Api.Services.Implementation.Inkdrops;
+using Bookmerang.Api.Services.Interfaces.Streaks;
+using Bookmerang.Api.Services.Implementation.Streaks;
 using Bookmerang.Api.Services.Interfaces.Communities;
 using Bookmerang.Api.Services.Implementation.Communities;
 using Bookmerang.Api.Validators.Communities;
@@ -32,6 +34,8 @@ using Bookmerang.Api.Services.Interfaces.Bookdrop;
 using Bookmerang.Api.Services.Implementation.Bookdrop;
 using Bookmerang.Api.Services.Interfaces.Bookspots;
 using Bookmerang.Api.Services.Implementation.Bookspots;
+using Bookmerang.Api.Services.Interfaces.Leveling;
+using Bookmerang.Api.Services.Implementation.Leveling;
 
 //DotNetEnv.Env.Load();
 DotNetEnv.Env.Load(File.Exists(".env.local") ? ".env.local" : ".env"); //para desarrollo
@@ -66,6 +70,7 @@ Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupStatus>("meetup_status", 
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookspotStatus>("bookspot_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<InkdropsActionType>("inkdrops_action_type", new NpgsqlNullNameTranslator());
 #pragma warning restore CS0618
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -178,6 +183,8 @@ builder.Services.AddHostedService<SwipeCleanupHostedService>();
 builder.Services.AddScoped<IExchangeService, ExchangeService>();
 builder.Services.AddScoped<IExchangeMeetingService, ExchangeMeetingService>();
 builder.Services.AddScoped<IInkdropsService, InkdropsService>();
+builder.Services.AddScoped<IStreakService, StreakService>();
+builder.Services.AddHostedService<StreakMaintenanceHostedService>();
 
 builder.Services.AddHostedService<WeeklyFeedbackMailService>();
 // Communities
@@ -200,6 +207,9 @@ builder.Services.AddScoped<IBookspotRepository, BookspotRepository>();
 builder.Services.AddScoped<IBookspotService, BookspotService>();
 builder.Services.AddScoped<IBookspotValidationRepository, BookspotValidationRepository>();
 builder.Services.AddScoped<IBookspotValidationService, BookspotValidationService>();
+
+// Leveling system
+builder.Services.AddScoped<ILevelingService, LevelingService>();
 
 // ===== CONTROLLERS Y SWAGGER =====
 builder.Services.AddControllers()
