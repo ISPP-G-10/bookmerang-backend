@@ -103,6 +103,18 @@ INSERT INTO users (id, rating_mean, finished_exchanges, plan) VALUES
   (u15, 4.5,  8, 'FREE')
 ON CONFLICT (id) DO NOTHING;
 
+-- Actualizar inkdrops mensuales de los usuarios de la comunidad 1 (SOLO ABRIL)
+UPDATE users
+SET inkdrops = CASE
+  WHEN id = u01 THEN 400
+  WHEN id = u03 THEN 300
+  WHEN id = u05 THEN 300
+  WHEN id = u06 THEN 200
+  ELSE inkdrops
+END,
+inkdrops_last_updated = '2026-04'
+WHERE id IN (u01, u03, u05, u06);
+
 -- ==============================================================
 -- 4. USER_PREFERENCES (básicas)
 -- ============================================================== 
@@ -677,13 +689,13 @@ INSERT INTO user_progress (user_id, xp_total, streak_weeks, last_active_date, st
   (u04, 0, 0, NULL, NULL, NULL, now_ts),
   (u08, 0, 0, NULL, NULL, NULL, now_ts),
   
-  -- Racha activa esta semana (no debe cambiar)
-  (u01, 0, 3, now_ts - INTERVAL '2 days', now_ts - INTERVAL '21 days', NULL, now_ts),
-  (u03, 0, 5, now_ts - INTERVAL '1 day',  now_ts - INTERVAL '35 days', NULL, now_ts),
+  -- Con XP TOTAL (marzo + abril): Laura (600), Sofía (500), Elena (500), Pablo (400)
+  (u01, 600, 3, now_ts - INTERVAL '2 days', now_ts - INTERVAL '21 days', NULL, now_ts),
+  (u03, 500, 5, now_ts - INTERVAL '1 day',  now_ts - INTERVAL '35 days', NULL, now_ts),
   
   -- Activo semana pasada (debe incrementar al hacer acción)
   (u02, 0, 2, now_ts - INTERVAL '8 days', now_ts - INTERVAL '16 days', NULL, now_ts),
-  (u05, 0, 4, now_ts - INTERVAL '9 days', now_ts - INTERVAL '28 days', NULL, now_ts),
+  (u05, 500, 4, now_ts - INTERVAL '9 days', now_ts - INTERVAL '28 days', NULL, now_ts),
   
   -- Inactivo, debe decrementar
   (u07, 0, 4, now_ts - INTERVAL '14 days', now_ts - INTERVAL '28 days', NULL, now_ts),
@@ -693,7 +705,7 @@ INSERT INTO user_progress (user_id, xp_total, streak_weeks, last_active_date, st
   (u11, 0, 8, now_ts - INTERVAL '2 days', now_ts - INTERVAL '56 days', NULL, now_ts),
   
   -- Recuperando racha desde nivel bajo
-  (u06, 0, 1, now_ts - INTERVAL '8 days', now_ts - INTERVAL '7 days',  NULL, now_ts),
+  (u06, 400, 1, now_ts - INTERVAL '8 days', now_ts - INTERVAL '7 days',  NULL, now_ts),
   
   -- Resto de usuarios
   (u10, 0, 0, NULL, NULL, NULL, now_ts),
@@ -707,50 +719,51 @@ ON CONFLICT (user_id) DO NOTHING;
 -- INKDROPS RANKING (community_monthly_scores - Abril 2026)
 -- Comunidad 1: Club de Lectura Triana
 -- Miembros: Laura (u01), Sofía (u03), Elena (u05), Pablo (u06)
+-- SOLO SE CUENTAN LAS ACCIONES DE ABRIL
 -- ==============================================================
 INSERT INTO community_monthly_scores (community_id, user_id, month, inkdrops_this_month) VALUES
-  -- Laura Fernández: 2 intercambios completados (200) + 2 meetups asistidos (100) = 300 pts
-  (1, u01, '2026-04', 300),
+  -- Laura Fernández: 2 intercambios (200) + 1 meetup (200) = 400 pts en ABRIL
+  (1, u01, '2026-04', 400),
   
-  -- Sofía Ramos: 1 intercambio completado (100) + 2 meetups asistidos (100) = 200 pts
-  (1, u03, '2026-04', 200),
+  -- Sofía Ramos: 1 intercambio (100) + 1 meetup (200) = 300 pts en ABRIL
+  (1, u03, '2026-04', 300),
   
-  -- Elena Castillo: 1 intercambio completado (100) + 2 meetups asistidos (100) = 200 pts
-  (1, u05, '2026-04', 200),
+  -- Elena Castillo: 1 intercambio (100) + 1 meetup (200) = 300 pts en ABRIL
+  (1, u05, '2026-04', 300),
   
-  -- Pablo Moreno: 2 meetups asistidos (100) = 100 pts
-  (1, u06, '2026-04', 100)
+  -- Pablo Moreno: 1 meetup (200) = 200 pts en ABRIL
+  (1, u06, '2026-04', 200)
 ON CONFLICT (community_id, user_id, month) DO NOTHING;
 
 -- ==============================================================
 -- INKDROPS HISTORY (Histórico de acciones)
 -- ==============================================================
 INSERT INTO inkdrops_history (user_id, action_type, points_granted, related_id, created_at) VALUES
-  -- Laura Fernández (u01) - Intercambios
-  (u01, 'EXCHANGE_COMPLETED', 100, 1, now_ts - INTERVAL '5 days'),   -- Match con Marcos
-  (u01, 'EXCHANGE_COMPLETED', 100, null, now_ts - INTERVAL '2 days'), -- Otro intercambio
+  -- Laura Fernández (u01) - Intercambios (ABRIL)
+  (u01, 'EXCHANGE_COMPLETED', 100, 1, now_ts - INTERVAL '5 days'),   -- April 2
+  (u01, 'EXCHANGE_COMPLETED', 100, null, now_ts - INTERVAL '2 days'), -- April 5
   
-  -- Laura Fernández (u01) - Meetups asistidos
-  (u01, 'MEETUP_ATTENDED', 50, 1, now_ts - INTERVAL '30 days'),  -- Lectura de "Cien Años de Soledad"
-  (u01, 'MEETUP_ATTENDED', 50, 2, now_ts - INTERVAL '20 days'),  -- (próximamente) Intercambio de Novelas Clásicas
+  -- Laura Fernández (u01) - Meetups asistidos (MARZO + ABRIL)
+  (u01, 'MEETUP_ATTENDED', 200, 1, now_ts - INTERVAL '30 days'),  -- Marzo 8
+  (u01, 'MEETUP_ATTENDED', 200, 2, now_ts - INTERVAL '4 days'),  -- April 3
   
-  -- Sofía Ramos (u03) - Intercambio
-  (u03, 'EXCHANGE_COMPLETED', 100, 2, now_ts - INTERVAL '3 days'),   -- Match con Diego
+  -- Sofía Ramos (u03) - Intercambio (ABRIL)
+  (u03, 'EXCHANGE_COMPLETED', 100, 2, now_ts - INTERVAL '3 days'),   -- April 4
   
-  -- Sofía Ramos (u03) - Meetups
-  (u03, 'MEETUP_ATTENDED', 50, 5, now_ts - INTERVAL '15 days'),  -- Mundo de Sanderson
-  (u03, 'MEETUP_ATTENDED', 50, 6, now_ts - INTERVAL '10 days'), -- Viaje por los Multiversos (próximo)
+  -- Sofía Ramos (u03) - Meetups (MARZO + ABRIL)
+  (u03, 'MEETUP_ATTENDED', 200, 5, now_ts - INTERVAL '15 days'),  -- Marzo 23
+  (u03, 'MEETUP_ATTENDED', 200, 6, now_ts - INTERVAL '1 day'), -- April 6
   
-  -- Elena Castillo (u05) - Intercambio
-  (u05, 'EXCHANGE_COMPLETED', 100, 3, now_ts - INTERVAL '1 day'),  -- Match con Andrés
+  -- Elena Castillo (u05) - Intercambio (ABRIL)
+  (u05, 'EXCHANGE_COMPLETED', 100, 3, now_ts - INTERVAL '1 day'),  -- April 6
   
-  -- Elena Castillo (u05) - Meetups
-  (u05, 'MEETUP_ATTENDED', 50, 9, now_ts - INTERVAL '25 days'),  -- Historias de Amor y Desamor
-  (u05, 'MEETUP_ATTENDED', 50, 10, now_ts - INTERVAL '8 days'), -- Debate: Finales Románticos (próximo)
+  -- Elena Castillo (u05) - Meetups (MARZO + ABRIL)
+  (u05, 'MEETUP_ATTENDED', 200, 9, now_ts - INTERVAL '25 days'),  -- Marzo 13
+  (u05, 'MEETUP_ATTENDED', 200, 10, now_ts - INTERVAL '2 days'), -- April 5
   
-  -- Pablo Moreno (u06) - Meetups
-  (u06, 'MEETUP_ATTENDED', 50, 7, now_ts - INTERVAL '18 days'),  -- Encuentro de Apasionados
-  (u06, 'MEETUP_ATTENDED', 50, 8, now_ts - INTERVAL '12 days')  -- Tertulias de Café y Libros (próximo)
+  -- Pablo Moreno (u06) - Meetups (MARZO + ABRIL)
+  (u06, 'MEETUP_ATTENDED', 200, 7, now_ts - INTERVAL '18 days'),  -- Marzo 20
+  (u06, 'MEETUP_ATTENDED', 200, 8, now_ts - INTERVAL '3 days')  -- April 4
 ON CONFLICT DO NOTHING;
 
 END $$;
