@@ -96,6 +96,7 @@ public class BookdropWebApplicationFixture : IAsyncLifetime
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupStatus>("meetup_status", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", t);
+        Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<InkdropsActionType>("inkdrops_action_type", t);
         #pragma warning restore CS0618
     }
 
@@ -109,7 +110,8 @@ public class BookdropWebApplicationFixture : IAsyncLifetime
         foreach (var file in new[]
         {
             "20260222163941_0001_extensions.sql",
-            "20260222164018_0002_schema.sql"
+            "20260222164018_0002_schema.sql",
+            "20260329120000_0008_add_inkdrops.sql"
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

@@ -65,6 +65,7 @@ public class PostgresBooksFixture : IAsyncLifetime
         builder.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
         builder.MapEnum<BookspotStatus>("bookspot_status", t);
         builder.MapEnum<PricingPlan>("pricing_plan", t);
+        builder.MapEnum<InkdropsActionType>("inkdrops_action_type", t);
 
         return builder.Build();
     }

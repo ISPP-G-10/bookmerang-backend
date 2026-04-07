@@ -2,6 +2,9 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.Auth;
 using Bookmerang.Api.Services.Implementation.Bookdrop;
+using Bookmerang.Api.Services.Implementation.Inkdrops;
+using Bookmerang.Api.Services.Implementation.Leveling;
+using Bookmerang.Api.Services.Interfaces.Streaks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
@@ -55,12 +58,18 @@ public class PostgresBookdropFixture : IAsyncLifetime
             })
             .Build();
 
-        return new AuthService(db, config);
+        var levelingService = new LevelingService(db);
+        return new AuthService(db, config, levelingService);
     }
 
     public BookdropService CreateBookdropService(AppDbContext db)
     {
         return new BookdropService(db);
+    }
+
+    public InkdropsService CreateInkdropsService(AppDbContext db, IStreakService streakService)
+    {
+        return new InkdropsService(db, streakService);
     }
 
     private static NpgsqlDataSource BuildDataSource(string connectionString)
@@ -87,6 +96,7 @@ public class PostgresBookdropFixture : IAsyncLifetime
         builder.MapEnum<MeetupStatus>("meetup_status", t);
         builder.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
         builder.MapEnum<PricingPlan>("pricing_plan", t);
+        builder.MapEnum<InkdropsActionType>("inkdrops_action_type", t);
 
         return builder.Build();
     }

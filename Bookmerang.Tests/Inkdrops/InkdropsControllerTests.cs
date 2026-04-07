@@ -153,4 +153,33 @@ public class InkdropsControllerTests : IAsyncLifetime
 
         Assert.IsType<UnauthorizedResult>(result);
     }
+
+    [Fact]
+    public async Task GetInkdropsHistory_AuthenticatedUser_ReturnsOk()
+    {
+        var userId = Guid.NewGuid();
+        var controller = CreateController(userId);
+
+        _inkdropsService
+            .Setup(s => s.GetInkdropsHistoryAsync(userId))
+            .ReturnsAsync(new List<InkdropsHistoryDto>());
+
+        var result = await controller.GetInkdropsHistory();
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task GetInkdropsHistory_NotAuthenticated_ReturnsUnauthorized()
+    {
+        var controller = new InkdropsController(_inkdropsService.Object, _db);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal() }
+        };
+
+        var result = await controller.GetInkdropsHistory();
+
+        Assert.IsType<UnauthorizedResult>(result);
+    }
 }

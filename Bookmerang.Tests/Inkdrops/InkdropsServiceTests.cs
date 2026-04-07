@@ -5,6 +5,8 @@ using Bookmerang.Api.Services.Implementation.Inkdrops;
 using Bookmerang.Tests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Moq;
+using Bookmerang.Api.Services.Interfaces.Streaks;
 
 namespace Bookmerang.Tests.Inkdrops;
 
@@ -12,11 +14,22 @@ public class InkdropsServiceTests : IAsyncLifetime
 {
     private AppDbContext _db = null!;
     private InkdropsService _service = null!;
+    private Mock<IStreakService> _streakService = null!;
 
     public Task InitializeAsync()
     {
         _db = DbContextFactory.CreateInMemory();
-        _service = new InkdropsService(_db);
+        _streakService = new Mock<IStreakService>();
+        
+        // Configure mock to return neutral multiplier (1.0 = no bonus/penalty)
+        _streakService.Setup(s => s.GetStreakLevelAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(0);
+        _streakService.Setup(s => s.GetStreakMultiplier(It.IsAny<int>()))
+            .Returns(1.0m);
+        _streakService.Setup(s => s.RegisterActiveActionAsync(It.IsAny<Guid>()))
+            .Returns(Task.CompletedTask);
+        
+        _service = new InkdropsService(_db, _streakService.Object);
         return Task.CompletedTask;
     }
 
@@ -48,6 +61,16 @@ public class InkdropsServiceTests : IAsyncLifetime
             Plan = plan
         };
         _db.RegularUsers.Add(user);
+        
+        // Add UserProgress for XP tracking
+        _db.UserProgresses.Add(new UserProgress
+        {
+            UserId = userId,
+            XpTotal = 0,
+            StreakWeeks = 0,
+            UpdatedAt = DateTime.UtcNow
+        });
+        
         await _db.SaveChangesAsync();
         return user;
     }
@@ -313,5 +336,94 @@ public class InkdropsServiceTests : IAsyncLifetime
 
         Assert.Single(result.Ranking);
         Assert.Equal(premiumUser.Id, result.Ranking[0].UserId);
+    }
+
+    [Fact]
+    public async Task GrantMeetupInkdrops_UserReceives200()
+    {
+        var user = await CreateTestUser();
+
+        await _service.GrantMeetupInkdropsAsync(user.Id);
+
+        var u = await _db.RegularUsers.FirstAsync(u => u.Id == user.Id);
+        Assert.Equal(200, u.Inkdrops);
+    }
+
+    [Fact]
+    public async Task GrantMeetupInkdrops_RecordsHistory()
+    {
+        var user = await CreateTestUser();
+
+        await _service.GrantMeetupInkdropsAsync(user.Id);
+
+        var history = await _db.InkdropsHistories.FirstOrDefaultAsync(h => h.UserId == user.Id);
+        Assert.NotNull(history);
+        Assert.Equal(InkdropsActionType.MEETUP_ATTENDED, history.ActionType);
+        Assert.Equal(200, history.PointsGranted);
+    }
+
+    [Fact]
+    public async Task GrantExchangeInkdrops_RecordsHistoryForBothUsers()
+    {
+        var user1 = await CreateTestUser();
+        var user2 = await CreateTestUser();
+
+        await _service.GrantExchangeInkdropsAsync(user1.Id, user2.Id);
+
+        var histories = await _db.InkdropsHistories.ToListAsync();
+        Assert.Equal(2, histories.Count);
+        Assert.All(histories, h => Assert.Equal(InkdropsActionType.EXCHANGE_COMPLETED, h.ActionType));
+    }
+
+    [Fact]
+    public async Task GrantInkdrops_UpdatesUserXp()
+    {
+        var user = await CreateTestUser();
+
+        await _service.GrantMeetupInkdropsAsync(user.Id);
+
+        var progress = await _db.UserProgresses.FirstAsync(p => p.UserId == user.Id);
+        Assert.True(progress.XpTotal > 0);
+    }
+
+    [Fact]
+    public async Task GetUserInkdrops_OldMonth_ResetsToZero()
+    {
+        var user = await CreateTestUser();
+        var dbUser = await _db.RegularUsers.FirstAsync(u => u.Id == user.Id);
+        dbUser.Inkdrops = 500;
+        dbUser.InkdropsLastUpdated = "2020-01";
+        _db.RegularUsers.Update(dbUser);
+        await _db.SaveChangesAsync();
+
+        var result = await _service.GetUserInkdropsAsync(user.Id);
+
+        Assert.Equal(0, result.Inkdrops);
+    }
+
+    [Fact]
+    public async Task GetInkdropsHistory_ReturnsOrderedByDateDesc()
+    {
+        var user = await CreateTestUser();
+        _db.InkdropsHistories.AddRange(
+            new InkdropsHistory { UserId = user.Id, ActionType = InkdropsActionType.EXCHANGE_COMPLETED, PointsGranted = 100, CreatedAt = DateTime.UtcNow.AddDays(-2) },
+            new InkdropsHistory { UserId = user.Id, ActionType = InkdropsActionType.MEETUP_ATTENDED, PointsGranted = 200, CreatedAt = DateTime.UtcNow }
+        );
+        await _db.SaveChangesAsync();
+
+        var result = await _service.GetInkdropsHistoryAsync(user.Id);
+
+        Assert.Equal(2, result.Count);
+        Assert.True(result[0].CreatedAt > result[1].CreatedAt);
+    }
+
+    [Fact]
+    public async Task GetInkdropsHistory_EmptyForNewUser_ReturnsEmptyList()
+    {
+        var user = await CreateTestUser();
+
+        var result = await _service.GetInkdropsHistoryAsync(user.Id);
+
+        Assert.Empty(result);
     }
 }
