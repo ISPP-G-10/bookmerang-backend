@@ -182,7 +182,11 @@ public class ExchangeMeetingController : ControllerBase
 
         var oldMeeting = await _meetingService.GetExchangeMeeting(meetingId);
         if (oldMeeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
-        
+
+        // los intercambios BookDrop se completan desde el panel del establecimiento
+        if (oldMeeting.ExchangeMode == ExchangeMode.BOOKDROP)
+            return BadRequest("Los intercambios BookDrop se completan desde el panel del establecimiento.");
+
         UpdateExchangeMeetingDto dto;
         
         if(oldMeeting.ProposerId == userId)

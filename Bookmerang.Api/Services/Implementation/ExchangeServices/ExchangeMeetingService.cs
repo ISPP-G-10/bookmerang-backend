@@ -53,9 +53,15 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         {
             throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próximo a ella");
         }
-        if(exchangeMode == ExchangeMode.BOOKSPOT && bookspotId == null)
+        if((exchangeMode == ExchangeMode.BOOKSPOT || exchangeMode == ExchangeMode.BOOKDROP) && bookspotId == null)
         {
             throw new ArgumentException("Se debe indicar el bookspot en el que se va a producir el encuentro");
+        }
+        if(exchangeMode == ExchangeMode.BOOKDROP)
+        {
+            var bookspot = await _db.Bookspots.FindAsync(bookspotId);
+            if (bookspot == null || !bookspot.IsBookdrop)
+                throw new ArgumentException("El bookspot indicado no es un establecimiento BookDrop.");
         }
         var meeting = new ExchangeMeeting
         {
@@ -93,12 +99,18 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         {
             throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próxima a ella");
         }
-        if(dto.ExchangeMode == ExchangeMode.BOOKSPOT && dto.BookspotId == null)
+        if((dto.ExchangeMode == ExchangeMode.BOOKSPOT || dto.ExchangeMode == ExchangeMode.BOOKDROP) && dto.BookspotId == null)
         {
             throw new ArgumentException("Se debe indicar el bookspot en el que se va a producir el encuentro");
-        }        
+        }
+        if(dto.ExchangeMode == ExchangeMode.BOOKDROP && dto.BookspotId.HasValue)
+        {
+            var bookspot = await _db.Bookspots.FindAsync(dto.BookspotId.Value);
+            if (bookspot == null || !bookspot.IsBookdrop)
+                throw new ArgumentException("El bookspot indicado no es un establecimiento BookDrop.");
+        }
 
-        if (dto.ExchangeMode.HasValue)
+        if (dto.ExchangeMode.HasValue && meeting.BookDropStatus == null)
             meeting.ExchangeMode = dto.ExchangeMode.Value;
 
         if (dto.BookspotId.HasValue)
