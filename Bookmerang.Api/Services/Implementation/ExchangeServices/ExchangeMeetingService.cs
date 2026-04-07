@@ -193,7 +193,7 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
 
         do
         {
-            pin = random.Next(100000, 999999).ToString();
+            pin = random.Next(100000, 1000000).ToString();
             exists = await _db.ExchangeMeetings.AnyAsync(m =>
                 m.BookspotId == bookspotId &&
                 m.Pin == pin &&
