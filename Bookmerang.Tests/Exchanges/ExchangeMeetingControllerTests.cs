@@ -307,7 +307,7 @@ public class ExchangeMeetingControllerTests : IAsyncLifetime
 	{
 		var userId = Guid.NewGuid();
 		var controller = CreateController(userId);
-		var dto = new ExchangeMeetingDto(null, 200, ExchangeMode.CUSTOM, null, new[] { 1.0, 1.0 }, null, null, null, null, null, null);
+		var dto = new ExchangeMeetingDto(null, 200, ExchangeMode.CUSTOM, null, new[] { 1.0, 1.0 }, null, null, null, null, null, null, null, null);
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(200))
@@ -353,7 +353,7 @@ public class ExchangeMeetingControllerTests : IAsyncLifetime
 	{
 		var userId = Guid.NewGuid();
 		var controller = CreateController(userId);
-		var dto = new ExchangeMeetingDto(null, 9999, ExchangeMode.CUSTOM, null, new[] { 1.0, 1.0 }, null, null, null, null, null, null);
+		var dto = new ExchangeMeetingDto(null, 9999, ExchangeMode.CUSTOM, null, new[] { 1.0, 1.0 }, null, null, null, null, null, null, null, null);
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(9999))
@@ -373,7 +373,7 @@ public class ExchangeMeetingControllerTests : IAsyncLifetime
 			HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal() }
 		};
 
-		var dto = new ExchangeMeetingDto(null, 200, ExchangeMode.CUSTOM, null, new[] { 1.0, 1.0 }, null, null, null, null, null, null);
+		var dto = new ExchangeMeetingDto(null, 200, ExchangeMode.CUSTOM, null, new[] { 1.0, 1.0 }, null, null, null, null, null, null, null, null);
 		var result = await controller.CreateExchangeMeeting(dto);
 
 		Assert.IsType<UnauthorizedResult>(result);
@@ -543,7 +543,7 @@ public class ExchangeMeetingControllerTests : IAsyncLifetime
 	{
 		var userId = Guid.NewGuid();
 		var controller = CreateController(userId);
-		var dto = new ExchangeMeetingDto(null, 201, ExchangeMode.CUSTOM, null, new[] { 1.0, 1.0 }, null, null, null, null, null, null);
+		var dto = new ExchangeMeetingDto(null, 201, ExchangeMode.CUSTOM, null, new[] { 1.0, 1.0 }, null, null, null, null, null, null, null, null);
 
 		_exchangeService
 			.Setup(s => s.GetExchangeWithMatch(201))
