@@ -113,7 +113,7 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         if (dto.ExchangeMode.HasValue && meeting.BookDropStatus == null)
             meeting.ExchangeMode = dto.ExchangeMode.Value;
 
-        if (dto.BookspotId.HasValue)
+        if (dto.BookspotId.HasValue && meeting.BookDropStatus == null)
             meeting.BookspotId = dto.BookspotId.Value;
 
         if (dto.CustomLocation != null && dto.CustomLocation.Length >= 2)
@@ -160,7 +160,8 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
                 // Si es BOOKDROP y pasa a ACCEPTED, generar PIN e iniciar ciclo
                 if (dto.MeetingStatus.Value == ExchangeMeetingStatus.ACCEPTED
                     && meeting.ExchangeMode == ExchangeMode.BOOKDROP
-                    && meeting.BookspotId.HasValue)
+                    && meeting.BookspotId.HasValue
+                    && meeting.BookDropStatus == null)
                 {
                     meeting.Pin = await GenerateUniquePin(meeting.BookspotId.Value);
                     meeting.BookDropStatus = BookdropExchangeStatus.AWAITING_DROP_1;

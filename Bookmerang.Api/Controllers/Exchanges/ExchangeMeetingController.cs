@@ -251,6 +251,11 @@ public class ExchangeMeetingController : ControllerBase
 
         if (!IsUserInExchange(userId.Value, oldMeeting.Exchange.Match)) return Forbid();
 
+        if (oldMeeting.ExchangeMode == ExchangeMode.BOOKDROP
+            && oldMeeting.BookDropStatus != null
+            && oldMeeting.BookDropStatus != BookdropExchangeStatus.COMPLETED)
+            return BadRequest("No se puede eliminar un intercambio BookDrop en curso.");
+
         try
         {
             var result = await _meetingService.DeleteExchangeMeeting(meetingId);

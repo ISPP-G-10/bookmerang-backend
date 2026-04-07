@@ -19,7 +19,9 @@ public class BookDropExchangeService(AppDbContext db) : IBookDropExchangeService
                 m.BookspotId == bookspotId &&
                 m.ExchangeMode == ExchangeMode.BOOKDROP &&
                 m.BookDropStatus != null &&
-                m.BookDropStatus != BookdropExchangeStatus.COMPLETED)
+                m.BookDropStatus != BookdropExchangeStatus.COMPLETED &&
+                m.Exchange.Status != ExchangeStatus.REJECTED &&
+                m.Exchange.Status != ExchangeStatus.INCIDENT)
             .ToListAsync();
 
         var result = new List<BookDropExchangeDto>();
@@ -100,6 +102,9 @@ public class BookDropExchangeService(AppDbContext db) : IBookDropExchangeService
                 .ThenInclude(e => e.Match)
             .FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId)
             ?? throw new InvalidOperationException("Meeting no encontrado");
+
+        if (meeting.Exchange.Status == ExchangeStatus.REJECTED || meeting.Exchange.Status == ExchangeStatus.INCIDENT)
+            throw new InvalidOperationException("Este intercambio ha sido cancelado o reportado.");
 
         if (meeting.BookspotId != bookspotId)
             throw new UnauthorizedAccessException("Este intercambio no pertenece a tu establecimiento");
