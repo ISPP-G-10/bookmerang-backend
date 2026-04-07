@@ -60,6 +60,7 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<BookspotStatus>();
         modelBuilder.HasPostgresEnum<PricingPlan>();
         modelBuilder.HasPostgresEnum<BaseUserType>();
+        modelBuilder.HasPostgresEnum<BookdropExchangeStatus>();
 
         modelBuilder.Entity<BaseUser>(entity =>
         {
@@ -373,6 +374,8 @@ public class AppDbContext : DbContext
             e.Property(x => x.MeetingStatus).HasColumnName("status");
             e.Property(x => x.MarkAsCompletedByUser1).HasColumnName("mark_as_completed_by_user1");
             e.Property(x => x.MarkAsCompletedByUser2).HasColumnName("mark_as_completed_by_user2");
+            e.Property(x => x.Pin).HasColumnName("pin");
+            e.Property(x => x.BookDropStatus).HasColumnName("bookdrop_status");
 
             e.HasIndex(x => x.ExchangeId).IsUnique();
         });

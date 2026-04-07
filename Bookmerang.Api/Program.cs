@@ -64,6 +64,7 @@ Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupStatus>("meetup_status", 
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookspotStatus>("bookspot_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookdropExchangeStatus>("bookdrop_exchange_status", new NpgsqlNullNameTranslator());
 #pragma warning restore CS0618
 
 builder.Services.AddDbContext<AppDbContext>(options =>
