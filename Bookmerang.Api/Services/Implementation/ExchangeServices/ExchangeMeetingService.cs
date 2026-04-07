@@ -114,11 +114,15 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         ? DateTime.SpecifyKind(meeting.ScheduledAt.Value, DateTimeKind.Utc)
         : null;
 
-        if (dto.MarkAsCompletedByUser1.HasValue)
-            meeting.MarkAsCompletedByUser1 = dto.MarkAsCompletedByUser1.Value;
+        // En modo BOOKDROP, el completado lo gestiona el establecimiento, no los usuarios
+        if (meeting.ExchangeMode != ExchangeMode.BOOKDROP)
+        {
+            if (dto.MarkAsCompletedByUser1.HasValue)
+                meeting.MarkAsCompletedByUser1 = dto.MarkAsCompletedByUser1.Value;
 
-        if (dto.MarkAsCompletedByUser2.HasValue)
-            meeting.MarkAsCompletedByUser2 = dto.MarkAsCompletedByUser2.Value;
+            if (dto.MarkAsCompletedByUser2.HasValue)
+                meeting.MarkAsCompletedByUser2 = dto.MarkAsCompletedByUser2.Value;
+        }
 
         if (IsCompleted(meeting)) {
             exchange.Status = ExchangeStatus.COMPLETED;
@@ -138,7 +142,18 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         else
         {
             if (dto.MeetingStatus.HasValue)
+            {
                 meeting.MeetingStatus = dto.MeetingStatus.Value;
+
+                // Si es BOOKDROP y pasa a ACCEPTED, generar PIN e iniciar ciclo
+                if (dto.MeetingStatus.Value == ExchangeMeetingStatus.ACCEPTED
+                    && meeting.ExchangeMode == ExchangeMode.BOOKDROP
+                    && meeting.BookspotId.HasValue)
+                {
+                    meeting.Pin = await GenerateUniquePin(meeting.BookspotId.Value);
+                    meeting.BookDropStatus = BookdropExchangeStatus.AWAITING_DROP_1;
+                }
+            }
         }
 
         if(exchange.Status != oldStatus)
@@ -168,6 +183,27 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
 
     private static bool IsCompleted(ExchangeMeeting meeting)
     => meeting.MarkAsCompletedByUser1 && meeting.MarkAsCompletedByUser2;
+
+    /// Genera un PIN de 6 digitos unico entre los intercambios activos del mismo BookDrop
+    private async Task<string> GenerateUniquePin(int bookspotId)
+    {
+        var random = new Random();
+        string pin;
+        bool exists;
+
+        do
+        {
+            pin = random.Next(100000, 999999).ToString();
+            exists = await _db.ExchangeMeetings.AnyAsync(m =>
+                m.BookspotId == bookspotId &&
+                m.Pin == pin &&
+                m.BookDropStatus != null &&
+                m.BookDropStatus != BookdropExchangeStatus.COMPLETED
+            );
+        } while (exists);
+
+        return pin;
+    }
 
     public async Task<bool> DeleteExchangeMeeting(int meetingId)
     {

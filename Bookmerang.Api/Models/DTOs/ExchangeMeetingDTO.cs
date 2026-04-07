@@ -15,7 +15,9 @@ public record ExchangeMeetingDto(
     String? ProposerName,
     ExchangeMeetingStatus? MeetingStatus,
     bool? MarkAsCompletedByUser1,
-    bool? MarkAsCompletedByUser2
+    bool? MarkAsCompletedByUser2,
+    string? Pin,
+    BookdropExchangeStatus? BookDropStatus
 );
 
 public record UpdateExchangeMeetingDto(
@@ -41,6 +43,8 @@ public static class ExchangeMeetingExtensions
         meeting.Proposer?.BaseUser?.Name, //No siempre se incluyen todas las relaciones del proposer
         meeting.MeetingStatus,
         meeting.MarkAsCompletedByUser1,
-        meeting.MarkAsCompletedByUser2
+        meeting.MarkAsCompletedByUser2,
+        meeting.Pin,
+        meeting.BookDropStatus
     );
 }
