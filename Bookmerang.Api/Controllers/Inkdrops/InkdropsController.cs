@@ -52,4 +52,14 @@ public class InkdropsController(IInkdropsService inkdropsService, AppDbContext d
             return BadRequest(ex.Message);
         }
     }
+
+    [HttpGet("history")]
+    public async Task<IActionResult> GetInkdropsHistory()
+    {
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var result = await _inkdropsService.GetInkdropsHistoryAsync(userId.Value);
+        return Ok(result);
+    }
 }
