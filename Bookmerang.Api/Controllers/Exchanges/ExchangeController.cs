@@ -50,8 +50,8 @@ public class ExchangeController : ControllerBase
     }
 
     /// GET /api/exchange/byChat/{chatId}/withMatch
-    [HttpGet("byChat/{chatId:int}/withMatch")]
-    public async Task<IActionResult> GetExchangeByChatIdWithMatchDetails(int chatId)
+    [HttpGet("byChat/{chatId:guid}/withMatch")]
+    public async Task<IActionResult> GetExchangeByChatIdWithMatchDetails(Guid chatId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
