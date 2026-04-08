@@ -66,34 +66,46 @@ public class CommunityLibraryServiceTests : IAsyncLifetime
         });
     }
 
+    // Note: Free/Premium gating was moved from service to [RequirePremium] controller attribute.
+    // The service itself is plan-agnostic; authorization is enforced at the HTTP layer.
+
     [Fact]
-    public async Task GetCommunityLibrary_FreeUser_ThrowsForbidden()
+    public async Task GetCommunityLibrary_FreeUser_ServiceAllowsAccess()
     {
+        // Gating is now at controller level via [RequirePremium].
+        // The service itself does NOT throw for free users.
         var userId = Guid.NewGuid();
         SeedUser(userId, PricingPlan.FREE);
         var comm = SeedCommunity(1);
         _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = userId, Role = CommunityRole.MEMBER });
         await _db.SaveChangesAsync();
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => _service.GetCommunityLibraryAsync(userId, comm.Id));
+        var result = await _service.GetCommunityLibraryAsync(userId, comm.Id);
+        Assert.NotNull(result);
+        Assert.Empty(result); // No books seeded
     }
 
     [Fact]
-    public async Task ToggleLike_FreeUser_ThrowsForbidden()
+    public async Task ToggleLike_FreeUser_ServiceAllowsAccess()
     {
+        // Gating is now at controller level via [RequirePremium].
+        // The service itself does NOT throw for free users.
         var userId = Guid.NewGuid();
         SeedUser(userId, PricingPlan.FREE);
         var comm = SeedCommunity(1);
         _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = userId, Role = CommunityRole.MEMBER });
-        
+
         var ownerId = Guid.NewGuid();
-        SeedUser(ownerId, PricingPlan.FREE);
+        SeedUser(ownerId, PricingPlan.PREMIUM);
         _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = ownerId, Role = CommunityRole.MEMBER });
-        
+
         var book = SeedBook(10, ownerId, BookStatus.PUBLISHED);
         await _db.SaveChangesAsync();
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => _service.ToggleLikeAsync(userId, comm.Id, book.Id));
+        // Should succeed without throwing
+        await _service.ToggleLikeAsync(userId, comm.Id, book.Id);
+        var library = await _service.GetCommunityLibraryAsync(userId, comm.Id);
+        Assert.Equal(1, library[0].LikesCount);
     }
 
     [Fact]
