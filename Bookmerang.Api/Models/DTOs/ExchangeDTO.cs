@@ -5,7 +5,7 @@ namespace Bookmerang.Api.Models.DTOs;
 
 public record ExchangeDto(
     int? ExchangeId,
-    int? ChatId,
+    Guid? ChatId,
     int? MatchId,
     ExchangeStatus? Status,
     DateTime? CreatedAt,
@@ -14,7 +14,7 @@ public record ExchangeDto(
 
 public record ExchangeWithMatchDto(
     int? ExchangeId,
-    int? ChatId,
+    Guid? ChatId,
     int? MatchId,
     Guid? User1Id,
     Guid? User2Id,

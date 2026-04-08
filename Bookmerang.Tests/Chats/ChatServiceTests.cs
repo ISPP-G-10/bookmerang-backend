@@ -2,6 +2,7 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.Chats;
+using Bookmerang.Api.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 using Xunit;
@@ -84,7 +85,7 @@ public class ChatServiceTests
     }
 
     [Fact]
-    public async Task GetChatById_ShouldReturnNull_WhenUserIsNotParticipant()
+    public async Task GetChatById_ShouldThrowForbidden_WhenUserIsNotParticipant()
     {
         await using var db = CreateDbContext();
         var service = CreateService(db);
@@ -97,9 +98,7 @@ public class ChatServiceTests
         db.ChatParticipants.Add(new ChatParticipant { ChatId = chat.Id, UserId = u2Id, JoinedAt = DateTime.UtcNow });
         await db.SaveChangesAsync();
 
-        var result = await service.GetChatById(chat.Id, u1Id);
-
-        Assert.Null(result);
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.GetChatById(chat.Id, u1Id));
     }
 
     [Fact]

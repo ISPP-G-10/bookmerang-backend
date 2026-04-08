@@ -341,7 +341,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Chat>(e =>
         {
             e.ToTable("chats");
-            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             e.Property(x => x.Type).HasColumnName("type");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
         });

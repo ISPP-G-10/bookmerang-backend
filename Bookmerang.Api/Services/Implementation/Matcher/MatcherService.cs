@@ -206,7 +206,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
     }
 
     // TODO: Reemplazar por el método de creación del módulo de exchanges cuando esté implementado
-    private void CreateExchange(int chatId, int matchId, DateTime now)
+    private void CreateExchange(Guid chatId, int matchId, DateTime now)
     {
         _db.Exchanges.Add(new Exchange
         {
@@ -249,7 +249,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
     /// donde ya conocemos chatId y otherUserId).
     /// </summary>
     private async Task<MatchCreatedDto> BuildMatchCreatedDto(
-        Match match, int chatId, Guid otherUserId)
+        Match match, Guid chatId, Guid otherUserId)
     {
         // Fix audit #6: FirstOrDefaultAsync para evitar crash si el usuario fue eliminado
         var otherUsername = await _db.Users
