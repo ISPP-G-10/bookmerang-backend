@@ -29,10 +29,11 @@ public class ExchangeServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task CreateExchange_MatchDoesNotExist_ThrowsInvalidOperationException()
 	{
-		_db.Chats.Add(new Chat { Id = 10, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow });
+		var chatId = Guid.NewGuid();
+		_db.Chats.Add(new Chat { Id = chatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow });
 		await _db.SaveChangesAsync();
 
-		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateExchange(10, 999));
+		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateExchange(chatId, 999));
 
 		Assert.Contains("Match con id 999 no existe", ex.Message);
 	}
@@ -40,6 +41,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task CreateExchange_ChatDoesNotExist_ThrowsInvalidOperationException()
 	{
+		var chatId = Guid.NewGuid();
 		_db.Matches.Add(new Match
 		{
 			Id = 44,
@@ -52,15 +54,16 @@ public class ExchangeServiceTests : IAsyncLifetime
 		});
 		await _db.SaveChangesAsync();
 
-		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateExchange(321, 44));
+		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateExchange(chatId, 44));
 
-		Assert.Contains("Chat con id 321 no existe", ex.Message);
+		Assert.Contains($"Chat con id {chatId} no existe", ex.Message);
 	}
 
 	[Fact]
 	public async Task CreateExchange_ValidChatAndMatch_CreatesExchangeInNegotiating()
 	{
-		_db.Chats.Add(new Chat { Id = 11, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow });
+		var chatId = Guid.NewGuid();
+		_db.Chats.Add(new Chat { Id = chatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow });
 		_db.Matches.Add(new Match
 		{
 			Id = 55,
@@ -73,10 +76,10 @@ public class ExchangeServiceTests : IAsyncLifetime
 		});
 		await _db.SaveChangesAsync();
 
-		var created = await _service.CreateExchange(11, 55);
+		var created = await _service.CreateExchange(chatId, 55);
 
 		Assert.True(created.ExchangeId > 0);
-		Assert.Equal(11, created.ChatId);
+		Assert.Equal(chatId, created.ChatId);
 		Assert.Equal(55, created.MatchId);
 		Assert.Equal(ExchangeStatus.NEGOTIATING, created.Status);
 		Assert.Equal(1, await _db.Exchanges.CountAsync());
@@ -87,7 +90,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 	{
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 20,
+			ChatId = Guid.NewGuid(),
 			MatchId = 21,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow.AddMinutes(-20),
@@ -110,7 +113,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 	{
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 31,
+			ChatId = Guid.NewGuid(),
 			MatchId = 32,
 			Status = ExchangeStatus.REJECTED,
 			CreatedAt = DateTime.UtcNow,
@@ -131,7 +134,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 	{
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 50,
+			ChatId = Guid.NewGuid(),
 			MatchId = 51,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -144,7 +147,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 
 		Assert.NotNull(result);
 		Assert.Equal(exchange.ExchangeId, result.ExchangeId);
-		Assert.Equal(50, result.ChatId);
+		Assert.Equal(exchange.ChatId, result.ChatId);
 	}
 
 	[Fact]
@@ -167,7 +170,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task GetExchangeByChatIdWithMatch_ChatDoesNotExist_ReturnsNull()
 	{
-		var result = await _service.GetExchangeByChatIdWithMatch(9999);
+		var result = await _service.GetExchangeByChatIdWithMatch(Guid.NewGuid());
 
 		Assert.Null(result);
 	}
@@ -186,7 +189,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 	{
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 77,
+			ChatId = Guid.NewGuid(),
 			MatchId = 78,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -214,7 +217,8 @@ public class ExchangeServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task CreateExchange_ChatAndMatchAlreadyUsedTogether_ThrowsInvalidOperationException()
 	{
-		var chat = new Chat { Id = 110, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+		var chatId = Guid.NewGuid();
+		var chat = new Chat { Id = chatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
 		_db.Chats.Add(chat);
 
 		var match = new Match
@@ -231,7 +235,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 110,
+			ChatId = chatId,
 			MatchId = 110,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -241,7 +245,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-			_service.CreateExchange(110, 110));
+			_service.CreateExchange(chatId, 110));
 
 		Assert.Contains("ya usado", ex.Message);
 	}
@@ -249,7 +253,8 @@ public class ExchangeServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task CreateExchange_ChatAlreadyUsedInOtherExchange_ThrowsInvalidOperationException()
 	{
-		var chat = new Chat { Id = 120, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+		var chatId = Guid.NewGuid();
+		var chat = new Chat { Id = chatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
 		_db.Chats.Add(chat);
 
 		_db.Matches.AddRange(
@@ -277,7 +282,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 120,
+			ChatId = chatId,
 			MatchId = 120,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -287,7 +292,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-			_service.CreateExchange(120, 121));
+			_service.CreateExchange(chatId, 121));
 
 		Assert.Contains("ya usado en otro exchange", ex.Message);
 	}
@@ -295,9 +300,11 @@ public class ExchangeServiceTests : IAsyncLifetime
 	[Fact]
 	public async Task CreateExchange_MatchAlreadyUsedInOtherExchange_ThrowsInvalidOperationException()
 	{
+		var usedChatId = Guid.NewGuid();
+		var newChatId = Guid.NewGuid();
 		_db.Chats.AddRange(
-			new Chat { Id = 130, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow },
-			new Chat { Id = 131, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow }
+			new Chat { Id = usedChatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow },
+			new Chat { Id = newChatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow }
 		);
 
 		var match = new Match
@@ -314,7 +321,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 130,
+			ChatId = usedChatId,
 			MatchId = 130,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -324,7 +331,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 		await _db.SaveChangesAsync();
 
 		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-			_service.CreateExchange(131, 130));
+			_service.CreateExchange(newChatId, 130));
 
 		Assert.Contains("ya usado en otro exchange", ex.Message);
 	}
@@ -335,7 +342,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 	{
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 140,
+			ChatId = Guid.NewGuid(),
 			MatchId = 141,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -354,7 +361,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 	{
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 150,
+			ChatId = Guid.NewGuid(),
 			MatchId = 151,
 			Status = ExchangeStatus.ACCEPTED_BY_1,
 			CreatedAt = DateTime.UtcNow,
@@ -373,7 +380,7 @@ public class ExchangeServiceTests : IAsyncLifetime
 	{
 		var exchange = new Api.Models.Entities.Exchange
 		{
-			ChatId = 160,
+			ChatId = Guid.NewGuid(),
 			MatchId = 161,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
