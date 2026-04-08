@@ -10,6 +10,9 @@ using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Npgsql.NameTranslation;
 using Testcontainers.PostgreSql;
+using Moq;
+using Bookmerang.Api.Models.DTOs;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Xunit;
 
 namespace Bookmerang.Tests.Helpers;
@@ -59,7 +62,12 @@ public class PostgresBookdropFixture : IAsyncLifetime
             .Build();
 
         var levelingService = new LevelingService(db);
-        return new AuthService(db, config, levelingService);
+        
+        var inkdropsServiceMock = new Mock<IInkdropsService>();
+        inkdropsServiceMock.Setup(s => s.GetUserInkdropsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(new InkdropsDto(Guid.Empty, 0, DateTime.UtcNow.ToString("yyyy-MM")));
+            
+        return new AuthService(db, config, levelingService, inkdropsServiceMock.Object);
     }
 
     public BookdropService CreateBookdropService(AppDbContext db)

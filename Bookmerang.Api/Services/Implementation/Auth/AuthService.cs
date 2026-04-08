@@ -5,6 +5,7 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Interfaces.Leveling;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using NetTopologySuite.Geometries;
@@ -16,11 +17,12 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Bookmerang.Api.Services.Implementation.Auth;
 
-public class AuthService(AppDbContext db, IConfiguration config, ILevelingService levelingService) : IAuthService
+public class AuthService(AppDbContext db, IConfiguration config, ILevelingService levelingService, IInkdropsService inkdropsService) : IAuthService
 {
     private readonly AppDbContext _db = db;
     private readonly IConfiguration _config = config;
     private readonly ILevelingService _levelingService = levelingService;
+    private readonly IInkdropsService _inkdropsService = inkdropsService;
 
     public async Task<ProfileDto?> GetPerfil(string supabaseId)
     {
@@ -39,7 +41,8 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
         var streak = progress?.StreakWeeks ?? 0;
         var bonus = Math.Min(streak * 4, 20);
 
-        var monthlyInkDrops = regularUser.Inkdrops;
+        var inkdropsData = await _inkdropsService.GetUserInkdropsAsync(user.Id);
+        var monthlyInkDrops = inkdropsData.Inkdrops;
         var daysUntilReset = DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month) - DateTime.UtcNow.Day;
 
         return new ProfileDto

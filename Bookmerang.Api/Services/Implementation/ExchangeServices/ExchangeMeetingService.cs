@@ -122,7 +122,7 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         if (dto.MarkAsCompletedByUser2.HasValue)
             meeting.MarkAsCompletedByUser2 = dto.MarkAsCompletedByUser2.Value;
 
-        if (IsCompleted(meeting)) {
+        if (IsCompleted(meeting) && oldStatus != ExchangeStatus.COMPLETED) {
             exchange.Status = ExchangeStatus.COMPLETED;
 
             if (exchange.Match == null)

@@ -80,6 +80,22 @@ public class InkdropsControllerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetMyInkdrops_UserNotInRegularUsers_ReturnsNotFound()
+    {
+        var userId = Guid.NewGuid();
+        var controller = CreateController(userId);
+
+        _inkdropsService
+            .Setup(s => s.GetUserInkdropsAsync(userId))
+            .ThrowsAsync(new InvalidOperationException("Usuario no encontrado"));
+
+        var result = await controller.GetMyInkdrops();
+
+        var objectResult = Assert.IsType<NotFoundObjectResult>(result);
+        Assert.Equal("Usuario no encontrado", objectResult.Value);
+    }
+
+    [Fact]
     public async Task GetMyInkdrops_NotAuthenticated_ReturnsUnauthorized()
     {
         var controller = new InkdropsController(_inkdropsService.Object, _db);

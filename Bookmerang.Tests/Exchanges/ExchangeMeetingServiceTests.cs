@@ -99,6 +99,66 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 	}
 
 	[Fact]
+	public async Task UpdateExchangeMeeting_AlreadyCompleted_DoesNotDuplicateInkdrops()
+	{
+		var user1Id = Guid.NewGuid();
+		var user2Id = Guid.NewGuid();
+		var match = new Api.Models.Entities.Match
+		{
+			Id = 32,
+			User1Id = user1Id,
+			User2Id = user2Id,
+			Book1Id = 321,
+			Book2Id = 322,
+			Status = MatchStatus.NEW,
+			CreatedAt = DateTime.UtcNow
+		};
+
+		_db.Matches.Add(match);
+		_db.Books.AddRange(
+			new Book { Id = 321, OwnerId = user1Id, Status = BookStatus.PUBLISHED },
+			new Book { Id = 322, OwnerId = user2Id, Status = BookStatus.PUBLISHED }
+		);
+
+		var exchange = new Api.Models.Entities.Exchange
+		{
+			ExchangeId = 12,
+			ChatId = 22,
+			MatchId = 32,
+			Match = match,
+			Status = ExchangeStatus.COMPLETED,
+			CreatedAt = DateTime.UtcNow,
+			UpdatedAt = DateTime.UtcNow
+		};
+
+		var meeting = new ExchangeMeeting
+		{
+			ExchangeMeetingId = 13,
+			ExchangeId = 12,
+			ExchangeMode = ExchangeMode.CUSTOM,
+			CustomLocation = new Point(0, 0) { SRID = 4326 },
+			ProposerId = Guid.NewGuid(),
+			MeetingStatus = ExchangeMeetingStatus.PROPOSAL,
+			MarkAsCompletedByUser1 = true,
+			MarkAsCompletedByUser2 = true
+		};
+
+		_db.Exchanges.Add(exchange);
+		_db.ExchangeMeetings.Add(meeting);
+		await _db.SaveChangesAsync();
+
+		_exchangeService
+			.Setup(s => s.GetExchangeWithMatch(12))
+			.ReturnsAsync(exchange);
+
+		var dto = new UpdateExchangeMeetingDto(null, null, null, null, null, true, true);
+
+		var updatedMeeting = await _service.UpdateExchangeMeeting(13, dto);
+
+		_inkdropsService.Verify(s => s.GrantExchangeInkdropsAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
+	}
+
+	[Fact]
 	public async Task CreateExchangeMeeting_ScheduledAtTooSoon_ThrowsArgumentException()
 	{
 		var ex = await Assert.ThrowsAsync<ArgumentException>(() =>

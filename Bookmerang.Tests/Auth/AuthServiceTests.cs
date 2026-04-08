@@ -11,6 +11,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Moq;
+using Bookmerang.Api.Services.Implementation.Inkdrops;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
+using Bookmerang.Api.Services.Interfaces.Streaks;
 
 namespace Bookmerang.Tests.Auth;
 
@@ -32,7 +36,9 @@ public class AuthServiceTests
             .Build();
 
         var levelingService = new LevelingService(db);
-        return new AuthService(db, config, levelingService);
+        var streakServiceMock = new Mock<IStreakService>();
+        var inkdropsService = new InkdropsService(db, streakServiceMock.Object);
+        return new AuthService(db, config, levelingService, inkdropsService);
     }
 
     [Fact]
@@ -271,7 +277,7 @@ public class AuthServiceTests
             Location = new Point(0, 0) { SRID = 4326 }
         });
 
-        db.Matches.Add(new Match
+        db.Matches.Add(new Bookmerang.Api.Models.Entities.Match
         {
             Id = 10,
             User1Id = userId,
@@ -359,7 +365,7 @@ public class AuthServiceTests
         db.TypingIndicators.Add(new TypingIndicator { Id = 1, ChatId = chatId, UserId = userId, StartedAt = DateTime.UtcNow });
 
         var matchId = 10;
-        db.Matches.Add(new Match { Id = matchId, User1Id = userId, User2Id = Guid.NewGuid(), Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow });
+        db.Matches.Add(new Bookmerang.Api.Models.Entities.Match { Id = matchId, User1Id = userId, User2Id = Guid.NewGuid(), Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow });
         db.Exchanges.Add(new Exchange { ExchangeId = 200, ChatId = chatId, MatchId = matchId, Status = ExchangeStatus.COMPLETED, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
 
         await db.SaveChangesAsync();
@@ -993,7 +999,8 @@ public class AuthServiceTests
         var regularUser = new User 
         { 
             Id = userId,
-            Inkdrops = 250 // Monthly inkdrops
+            Inkdrops = 250, // Monthly inkdrops
+            InkdropsLastUpdated = DateTime.UtcNow.ToString("yyyy-MM")
         };
         db.RegularUsers.Add(regularUser);
 

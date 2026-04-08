@@ -30,8 +30,15 @@ public class InkdropsController(IInkdropsService inkdropsService, AppDbContext d
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var result = await _inkdropsService.GetUserInkdropsAsync(userId.Value);
-        return Ok(result);
+        try
+        {
+            var result = await _inkdropsService.GetUserInkdropsAsync(userId.Value);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(ex.Message);
+        }
     }
 
     [HttpGet("community/{communityId}/ranking")]
