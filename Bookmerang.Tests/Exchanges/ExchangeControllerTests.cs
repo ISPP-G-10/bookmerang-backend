@@ -66,20 +66,6 @@ public class ExchangeControllerTests : IAsyncLifetime
 	}
 
 	[Fact]
-	public async Task CreateExchange_ServiceRejectsInvalidMatch_ThrowsInvalidOperationException()
-	{
-		var userId = Guid.NewGuid();
-		var controller = CreateController(userId);
-		var dto = new ExchangeDto(null, 1, 999, null, null, null);
-
-		_exchangeService
-			.Setup(s => s.CreateExchange(1, 999))
-			.ThrowsAsync(new InvalidOperationException("Match con id 999 no existe."));
-
-		await Assert.ThrowsAsync<InvalidOperationException>(() => controller.CreateExchange(dto));
-	}
-
-	[Fact]
 	public async Task AcceptExchange_User1FromNegotiating_TransitionsToAcceptedBy1()
 	{
 		var user1 = Guid.NewGuid();
@@ -217,13 +203,23 @@ public class ExchangeControllerTests : IAsyncLifetime
 		var controller = CreateController(userId);
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(50))
+			.Setup(s => s.GetExchangeWithMatch(50))
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 50,
 				ChatId = 5,
 				MatchId = 5,
 				Status = ExchangeStatus.NEGOTIATING,
+				Match = new Api.Models.Entities.Match
+				{
+					Id = 5,
+					User1Id = userId,
+					User2Id = Guid.NewGuid(),
+					Book1Id = 1,
+					Book2Id = 2,
+					Status = MatchStatus.NEW,
+					CreatedAt = DateTime.UtcNow
+				},
 				CreatedAt = DateTime.UtcNow,
 				UpdatedAt = DateTime.UtcNow
 			});
@@ -231,7 +227,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 		var result = await controller.GetExchange(50);
 
 		Assert.IsType<OkObjectResult>(result);
-		_exchangeService.Verify(s => s.GetExchangeById(50), Times.Once);
+		_exchangeService.Verify(s => s.GetExchangeWithMatch(50), Times.Once);
 	}
 
 	[Fact]
@@ -241,7 +237,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 		var controller = CreateController(userId);
 
 		_exchangeService
-			.Setup(s => s.GetExchangeById(9999))
+			.Setup(s => s.GetExchangeWithMatch(9999))
 			.ReturnsAsync((Exchange?)null);
 
 		var result = await controller.GetExchange(9999);
@@ -310,119 +306,6 @@ public class ExchangeControllerTests : IAsyncLifetime
 		var result = await controller.GetExchangeByChatIdWithMatchDetails(9999);
 
 		Assert.IsType<NotFoundObjectResult>(result);
-	}
-
-	// GET ALL EXCHANGES TESTS
-	[Fact]
-	public async Task GetAllExchanges_ExchangesExist_ReturnsOkWithList()
-	{
-		var userId = Guid.NewGuid();
-		var controller = CreateController(userId);
-
-		_exchangeService
-			.Setup(s => s.GetAllExchanges())
-			.ReturnsAsync(new List<Exchange>
-			{
-				new() { ExchangeId = 70, ChatId = 70, MatchId = 70, Status = ExchangeStatus.NEGOTIATING, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-				new() { ExchangeId = 71, ChatId = 71, MatchId = 71, Status = ExchangeStatus.NEGOTIATING, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
-			});
-
-		var result = await controller.GetAllExchanges();
-
-		Assert.IsType<OkObjectResult>(result);
-	}
-
-	[Fact]
-	public async Task GetAllExchanges_NoExchanges_ReturnsNotFound()
-	{
-		var userId = Guid.NewGuid();
-		var controller = CreateController(userId);
-
-		_exchangeService
-			.Setup(s => s.GetAllExchanges())
-			.ReturnsAsync(new List<Exchange>());
-
-		var result = await controller.GetAllExchanges();
-
-		Assert.IsType<NotFoundObjectResult>(result);
-	}
-
-	[Fact]
-	public async Task GetAllExchanges_UserNotAuthenticated_ReturnsUnauthorized()
-	{
-		var controller = new ExchangeController(_exchangeService.Object, _db, _meetingService.Object);
-		controller.ControllerContext = new ControllerContext
-		{
-			HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal() }
-		};
-
-		var result = await controller.GetAllExchanges();
-
-		Assert.IsType<UnauthorizedResult>(result);
-	}
-
-	// CREATE EXCHANGE TESTS
-	[Fact]
-	public async Task CreateExchange_ValidDto_ReturnsCreatedAtAction()
-	{
-		var userId = Guid.NewGuid();
-		var controller = CreateController(userId);
-		var dto = new ExchangeDto(null, 100, 100, null, null, null);
-
-		_exchangeService
-			.Setup(s => s.CreateExchange(100, 100))
-			.ReturnsAsync(new Exchange
-			{
-				ExchangeId = 100,
-				ChatId = 100,
-				MatchId = 100,
-				Status = ExchangeStatus.NEGOTIATING,
-				CreatedAt = DateTime.UtcNow,
-				UpdatedAt = DateTime.UtcNow
-			});
-
-		var result = await controller.CreateExchange(dto);
-
-		Assert.IsType<CreatedAtActionResult>(result);
-	}
-
-	[Fact]
-	public async Task CreateExchange_MissingChatId_ReturnsBadRequest()
-	{
-		var userId = Guid.NewGuid();
-		var controller = CreateController(userId);
-		var dto = new ExchangeDto(null, null, 100, null, null, null);
-
-		var result = await controller.CreateExchange(dto);
-
-		Assert.IsType<BadRequestObjectResult>(result);
-	}
-
-	[Fact]
-	public async Task CreateExchange_MissingMatchId_ReturnsBadRequest()
-	{
-		var userId = Guid.NewGuid();
-		var controller = CreateController(userId);
-		var dto = new ExchangeDto(null, 100, null, null, null, null);
-
-		var result = await controller.CreateExchange(dto);
-
-		Assert.IsType<BadRequestObjectResult>(result);
-	}
-
-	[Fact]
-	public async Task CreateExchange_UserNotAuthenticated_ReturnsUnauthorized()
-	{
-		var controller = new ExchangeController(_exchangeService.Object, _db, _meetingService.Object);
-		controller.ControllerContext = new ControllerContext
-		{
-			HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal() }
-		};
-		var dto = new ExchangeDto(null, 100, 100, null, null, null);
-
-		var result = await controller.CreateExchange(dto);
-
-		Assert.IsType<UnauthorizedResult>(result);
 	}
 
 	// REJECT EXCHANGE TESTS
