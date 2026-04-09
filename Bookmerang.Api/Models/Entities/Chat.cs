@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using Bookmerang.Api.Models.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
+using Bookmerang.Api.Models.Enums;
 
 namespace Bookmerang.Api.Models.Entities;
 
@@ -9,8 +9,7 @@ public class Chat
 {
     [Key]
     [Column("id")]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
     [Required]
     [Column("type")]

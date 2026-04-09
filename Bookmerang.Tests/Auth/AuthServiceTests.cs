@@ -289,7 +289,7 @@ public class AuthServiceTests
         db.Exchanges.Add(new Exchange
         {
             ExchangeId = 20,
-            ChatId = 30,
+            ChatId = Guid.NewGuid(),
             MatchId = 10,
             Status = ExchangeStatus.ACCEPTED,
             CreatedAt = DateTime.UtcNow,
@@ -358,7 +358,7 @@ public class AuthServiceTests
         db.Swipes.Add(new Swipe { Id = 1, SwiperId = userId, BookId = 999, Direction = Bookmerang.Api.Models.Enums.SwipeDirection.RIGHT, CreatedAt = DateTime.UtcNow });
         db.Swipes.Add(new Swipe { Id = 2, SwiperId = Guid.NewGuid(), BookId = bookId, Direction = Bookmerang.Api.Models.Enums.SwipeDirection.LEFT, CreatedAt = DateTime.UtcNow });
 
-        var chatId = 777;
+        var chatId = Guid.NewGuid();
         db.Chats.Add(new Chat { Id = chatId, Type = Bookmerang.Api.Models.Enums.ChatType.EXCHANGE });
         db.Messages.Add(new Message { Id = 1, ChatId = chatId, SenderId = userId, Body = "hi", SentAt = DateTime.UtcNow });
         db.ChatParticipants.Add(new ChatParticipant { ChatId = chatId, UserId = userId, JoinedAt = DateTime.UtcNow });

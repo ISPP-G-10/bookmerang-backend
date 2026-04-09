@@ -70,10 +70,11 @@ public class ExchangeControllerTests : IAsyncLifetime
 	{
 		var userId = Guid.NewGuid();
 		var controller = CreateController(userId);
-		var dto = new ExchangeDto(null, 1, 999, null, null, null);
+		var chatId = Guid.NewGuid();
+		var dto = new ExchangeDto(null, chatId, 999, null, null, null);
 
 		_exchangeService
-			.Setup(s => s.CreateExchange(1, 999))
+			.Setup(s => s.CreateExchange(chatId, 999))
 			.ThrowsAsync(new InvalidOperationException("Match con id 999 no existe."));
 
 		await Assert.ThrowsAsync<InvalidOperationException>(() => controller.CreateExchange(dto));
@@ -91,7 +92,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 100,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.NEGOTIATING,
 				Match = new Api.Models.Entities.Match
@@ -111,7 +112,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 100,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED_BY_1,
 				Match = new Api.Models.Entities.Match
@@ -144,7 +145,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 200,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED_BY_2,
 				Match = new Api.Models.Entities.Match
@@ -164,7 +165,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 200,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED
 			});
@@ -187,7 +188,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 300,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED_BY_1,
 				Match = new Api.Models.Entities.Match
@@ -221,7 +222,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 50,
-				ChatId = 5,
+				ChatId = Guid.NewGuid(),
 				MatchId = 5,
 				Status = ExchangeStatus.NEGOTIATING,
 				CreatedAt = DateTime.UtcNow,
@@ -269,13 +270,14 @@ public class ExchangeControllerTests : IAsyncLifetime
 	{
 		var userId = Guid.NewGuid();
 		var controller = CreateController(userId);
+		var chatId = Guid.NewGuid();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeByChatIdWithMatch(60))
+			.Setup(s => s.GetExchangeByChatIdWithMatch(chatId))
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 60,
-				ChatId = 60,
+				ChatId = chatId,
 				MatchId = 60,
 				Status = ExchangeStatus.NEGOTIATING,
 				Match = new Api.Models.Entities.Match
@@ -292,7 +294,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 				UpdatedAt = DateTime.UtcNow
 			});
 
-		var result = await controller.GetExchangeByChatIdWithMatchDetails(60);
+		var result = await controller.GetExchangeByChatIdWithMatchDetails(chatId);
 
 		Assert.IsType<OkObjectResult>(result);
 	}
@@ -302,12 +304,13 @@ public class ExchangeControllerTests : IAsyncLifetime
 	{
 		var userId = Guid.NewGuid();
 		var controller = CreateController(userId);
+		var chatId = Guid.NewGuid();
 
 		_exchangeService
-			.Setup(s => s.GetExchangeByChatIdWithMatch(9999))
+			.Setup(s => s.GetExchangeByChatIdWithMatch(chatId))
 			.ReturnsAsync((Exchange?)null);
 
-		var result = await controller.GetExchangeByChatIdWithMatchDetails(9999);
+		var result = await controller.GetExchangeByChatIdWithMatchDetails(chatId);
 
 		Assert.IsType<NotFoundObjectResult>(result);
 	}
@@ -323,8 +326,8 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.Setup(s => s.GetAllExchanges())
 			.ReturnsAsync(new List<Exchange>
 			{
-				new() { ExchangeId = 70, ChatId = 70, MatchId = 70, Status = ExchangeStatus.NEGOTIATING, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-				new() { ExchangeId = 71, ChatId = 71, MatchId = 71, Status = ExchangeStatus.NEGOTIATING, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
+				new() { ExchangeId = 70, ChatId = Guid.NewGuid(), MatchId = 70, Status = ExchangeStatus.NEGOTIATING, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+				new() { ExchangeId = 71, ChatId = Guid.NewGuid(), MatchId = 71, Status = ExchangeStatus.NEGOTIATING, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
 			});
 
 		var result = await controller.GetAllExchanges();
@@ -367,14 +370,15 @@ public class ExchangeControllerTests : IAsyncLifetime
 	{
 		var userId = Guid.NewGuid();
 		var controller = CreateController(userId);
-		var dto = new ExchangeDto(null, 100, 100, null, null, null);
+		var chatId = Guid.NewGuid();
+		var dto = new ExchangeDto(null, chatId, 100, null, null, null);
 
 		_exchangeService
-			.Setup(s => s.CreateExchange(100, 100))
+			.Setup(s => s.CreateExchange(chatId, 100))
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 100,
-				ChatId = 100,
+				ChatId = chatId,
 				MatchId = 100,
 				Status = ExchangeStatus.NEGOTIATING,
 				CreatedAt = DateTime.UtcNow,
@@ -403,7 +407,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 	{
 		var userId = Guid.NewGuid();
 		var controller = CreateController(userId);
-		var dto = new ExchangeDto(null, 100, null, null, null, null);
+		var dto = new ExchangeDto(null, Guid.NewGuid(), null, null, null, null);
 
 		var result = await controller.CreateExchange(dto);
 
@@ -418,7 +422,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 		{
 			HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal() }
 		};
-		var dto = new ExchangeDto(null, 100, 100, null, null, null);
+		var dto = new ExchangeDto(null, Guid.NewGuid(), 100, null, null, null);
 
 		var result = await controller.CreateExchange(dto);
 
@@ -441,7 +445,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 110,
-				ChatId = 110,
+				ChatId = Guid.NewGuid(),
 				MatchId = 110,
 				Status = ExchangeStatus.REJECTED,
 				CreatedAt = DateTime.UtcNow,
@@ -496,7 +500,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 112,
-				ChatId = 112,
+				ChatId = Guid.NewGuid(),
 				MatchId = 112,
 				Status = ExchangeStatus.NEGOTIATING,
 				CreatedAt = DateTime.UtcNow,
@@ -538,7 +542,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 120,
-				ChatId = 120,
+				ChatId = Guid.NewGuid(),
 				MatchId = 120,
 				Status = ExchangeStatus.INCIDENT,
 				CreatedAt = DateTime.UtcNow,
@@ -653,7 +657,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 400,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.NEGOTIATING,
 				Match = new Api.Models.Entities.Match
@@ -673,7 +677,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 400,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED_BY_2
 			});
@@ -696,7 +700,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 401,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED_BY_2,
 				Match = new Api.Models.Entities.Match
@@ -729,7 +733,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 402,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED_BY_2,
 				Match = new Api.Models.Entities.Match
@@ -749,7 +753,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 402,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED
 			});
@@ -772,7 +776,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 403,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED_BY_1,
 				Match = new Api.Models.Entities.Match
@@ -792,7 +796,7 @@ public class ExchangeControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Exchange
 			{
 				ExchangeId = 403,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 10,
 				Status = ExchangeStatus.ACCEPTED
 			});

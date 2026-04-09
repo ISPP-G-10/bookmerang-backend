@@ -63,7 +63,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 10,
-			ChatId = 20,
+			ChatId = Guid.NewGuid(),
 			MatchId = 30,
 			Match = match,
 			Status = ExchangeStatus.NEGOTIATING,
@@ -239,7 +239,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 200,
-			ChatId = 1,
+			ChatId = Guid.NewGuid(),
 			MatchId = 1,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -480,7 +480,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 70,
-			ChatId = 7,
+			ChatId = Guid.NewGuid(),
 			MatchId = 7,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -519,7 +519,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 71,
-			ChatId = 8,
+			ChatId = Guid.NewGuid(),
 			MatchId = 8,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -559,7 +559,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 72,
-			ChatId = 9,
+			ChatId = Guid.NewGuid(),
 			MatchId = 9,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -598,7 +598,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 73,
-			ChatId = 10,
+			ChatId = Guid.NewGuid(),
 			MatchId = 10,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -654,7 +654,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 74,
-			ChatId = 11,
+			ChatId = Guid.NewGuid(),
 			MatchId = 11,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -713,7 +713,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 75,
-			ChatId = 12,
+			ChatId = Guid.NewGuid(),
 			MatchId = 12,
 			Match = match,
 			Status = ExchangeStatus.ACCEPTED,
@@ -756,7 +756,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 76,
-			ChatId = 13,
+			ChatId = Guid.NewGuid(),
 			MatchId = 13,
 			Status = ExchangeStatus.ACCEPTED,
 			CreatedAt = DateTime.UtcNow,

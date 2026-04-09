@@ -15,7 +15,7 @@ public class ExchangeService(AppDbContext db): IExchangeService
         return await _db.Exchanges.FirstOrDefaultAsync(e => e.ExchangeId == exchangeId);
     }
     
-    public async Task<Exchange?> GetExchangeByChatIdWithMatch(int chatId)
+    public async Task<Exchange?> GetExchangeByChatIdWithMatch(Guid chatId)
     {
         return await _db.Exchanges
             .Include(e => e.Match)
@@ -34,7 +34,7 @@ public class ExchangeService(AppDbContext db): IExchangeService
         return await _db.Exchanges.ToListAsync();
     }
 
-    public async Task<Exchange> CreateExchange(int chatId, int matchId)
+    public async Task<Exchange> CreateExchange(Guid chatId, int matchId)
     {
         await ValidateChatAndMatchExist(chatId, matchId);
         await ValidateExchangeUniqueness(chatId, matchId);
@@ -51,7 +51,7 @@ public class ExchangeService(AppDbContext db): IExchangeService
         return exchange;
     }
 
-    private async Task ValidateChatAndMatchExist(int chatId, int matchId)
+    private async Task ValidateChatAndMatchExist(Guid chatId, int matchId)
     {
         if (!await _db.Chats.AnyAsync(c => c.Id == chatId))
         {
@@ -64,7 +64,7 @@ public class ExchangeService(AppDbContext db): IExchangeService
         }
     }
 
-    private async Task ValidateExchangeUniqueness(int chatId, int matchId)
+    private async Task ValidateExchangeUniqueness(Guid chatId, int matchId)
     {
         // Verificar si ya existe un exchange con el mismo chatId o matchId
         if (await _db.Exchanges.AnyAsync(e => e.ChatId == chatId && e.MatchId == matchId))

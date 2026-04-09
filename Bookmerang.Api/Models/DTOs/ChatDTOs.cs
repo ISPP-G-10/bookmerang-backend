@@ -6,7 +6,7 @@ namespace Bookmerang.Api.Models.DTOs;
 // ===== Response DTOs =====
 
 public record ChatDto(
-    int Id,
+    Guid Id,
     string Type,
     DateTime CreatedAt,
     List<ChatParticipantDto> Participants,
@@ -24,7 +24,7 @@ public record ChatParticipantDto(
 
 public record MessageDto(
     int Id,
-    int ChatId,
+    Guid ChatId,
     Guid SenderId,
     string SenderUsername,
     string Body,

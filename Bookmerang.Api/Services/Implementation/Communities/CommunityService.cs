@@ -483,7 +483,7 @@ public class CommunityService(
         }
     }
 
-    private async Task CleanupUserCommunityDataAsync(Guid userId, int communityId, int? communityChatId)
+    private async Task CleanupUserCommunityDataAsync(Guid userId, int communityId, Guid? communityChatId)
     {
         if (communityChatId.HasValue)
         {

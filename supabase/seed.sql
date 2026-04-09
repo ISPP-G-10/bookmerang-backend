@@ -486,70 +486,70 @@ ON CONFLICT (community_id, user_id) DO NOTHING;
 
 -- Chats para las comunidades (tipo COMMUNITY)
 INSERT INTO chats (id, type, created_at) VALUES
-  (1001, 'COMMUNITY', now_ts - INTERVAL '30 days'),
-  (1002, 'COMMUNITY', now_ts - INTERVAL '25 days'),
-  (1003, 'COMMUNITY', now_ts - INTERVAL '20 days'),
-  (1004, 'COMMUNITY', now_ts - INTERVAL '15 days'),
-  (1005, 'COMMUNITY', now_ts - INTERVAL '10 days')
+  ('11111111-1111-1111-1111-111111111001'::uuid, 'COMMUNITY', now_ts - INTERVAL '30 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, 'COMMUNITY', now_ts - INTERVAL '25 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, 'COMMUNITY', now_ts - INTERVAL '20 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, 'COMMUNITY', now_ts - INTERVAL '15 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, 'COMMUNITY', now_ts - INTERVAL '10 days')
 ON CONFLICT (id) DO NOTHING;
 
 -- Relación comunidad-chat
 INSERT INTO community_chats (community_id, chat_id) VALUES
-  (1, 1001),
-  (2, 1002),
-  (3, 1003),
-  (4, 1004),
-  (5, 1005)
+  (1, '11111111-1111-1111-1111-111111111001'::uuid),
+  (2, '11111111-1111-1111-1111-111111111002'::uuid),
+  (3, '11111111-1111-1111-1111-111111111003'::uuid),
+  (4, '11111111-1111-1111-1111-111111111004'::uuid),
+  (5, '11111111-1111-1111-1111-111111111005'::uuid)
 ON CONFLICT (community_id) DO NOTHING;
 
 -- Participantes en los chats de comunidades (todos los miembros)
 INSERT INTO chat_participants (chat_id, user_id, joined_at) VALUES
   -- Chat comunidad 1
-  (1001, u01, now_ts - INTERVAL '30 days'),
-  (1001, u03, now_ts - INTERVAL '28 days'),
-  (1001, u05, now_ts - INTERVAL '26 days'),
-  (1001, u06, now_ts - INTERVAL '24 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u01, now_ts - INTERVAL '30 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u03, now_ts - INTERVAL '28 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u05, now_ts - INTERVAL '26 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u06, now_ts - INTERVAL '24 days'),
   -- Chat comunidad 2
-  (1002, u02, now_ts - INTERVAL '25 days'),
-  (1002, u09, now_ts - INTERVAL '23 days'),
-  (1002, u13, now_ts - INTERVAL '21 days'),
-  (1002, u14, now_ts - INTERVAL '19 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u02, now_ts - INTERVAL '25 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u09, now_ts - INTERVAL '23 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u13, now_ts - INTERVAL '21 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u14, now_ts - INTERVAL '19 days'),
   -- Chat comunidad 3
-  (1003, u03, now_ts - INTERVAL '20 days'),
-  (1003, u08, now_ts - INTERVAL '18 days'),
-  (1003, u11, now_ts - INTERVAL '16 days'),
-  (1003, u12, now_ts - INTERVAL '14 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u03, now_ts - INTERVAL '20 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u08, now_ts - INTERVAL '18 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u11, now_ts - INTERVAL '16 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u12, now_ts - INTERVAL '14 days'),
   -- Chat comunidad 4
-  (1004, u04, now_ts - INTERVAL '15 days'),
-  (1004, u06, now_ts - INTERVAL '13 days'),
-  (1004, u08, now_ts - INTERVAL '11 days'),
-  (1004, u10, now_ts - INTERVAL '9 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u04, now_ts - INTERVAL '15 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u06, now_ts - INTERVAL '13 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u08, now_ts - INTERVAL '11 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u10, now_ts - INTERVAL '9 days'),
   -- Chat comunidad 5
-  (1005, u05, now_ts - INTERVAL '10 days'),
-  (1005, u07, now_ts - INTERVAL '8 days'),
-  (1005, u11, now_ts - INTERVAL '6 days'),
-  (1005, u15, now_ts - INTERVAL '4 days')
+  ('11111111-1111-1111-1111-111111111005'::uuid, u05, now_ts - INTERVAL '10 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u07, now_ts - INTERVAL '8 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u11, now_ts - INTERVAL '6 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u15, now_ts - INTERVAL '4 days')
 ON CONFLICT (chat_id, user_id) DO NOTHING;
 
 -- Algunos mensajes de prueba en los chats de comunidades
 INSERT INTO messages (chat_id, sender_id, body, sent_at) VALUES
-  (1001, u01, '¡Bienvenidos al Club de Lectura Triana! Este mes leeremos "Cien años de soledad"', now_ts - INTERVAL '30 days'),
-  (1001, u03, '¡Qué buena elección! Me encanta García Márquez', now_ts - INTERVAL '29 days'),
-  (1001, u05, '¿Nos vemos el sábado en la biblioteca para comentarlo?', now_ts - INTERVAL '28 days'),
-  
-  (1002, u02, 'Acabamos de terminar "La chica del tren". ¿Qué os ha parecido?', now_ts - INTERVAL '20 days'),
-  (1002, u09, 'El final me dejó con la boca abierta', now_ts - INTERVAL '19 days'),
-  
-  (1003, u03, '¿Habéis leído la nueva de Brandon Sanderson?', now_ts - INTERVAL '15 days'),
-  (1003, u08, 'Sí, increíble como siempre. Sus sistemas de magia son geniales', now_ts - INTERVAL '14 days'),
-  (1003, u11, 'Yo estoy esperando a que salga en español', now_ts - INTERVAL '13 days'),
-  
-  (1004, u04, 'Propongo que hagamos un intercambio de libros este fin de semana', now_ts - INTERVAL '10 days'),
-  (1004, u06, 'Me apunto! Tengo varios que ya he leído', now_ts - INTERVAL '9 days'),
-  
-  (1005, u05, '¿Alguien ha leído "It Ends With Us"?', now_ts - INTERVAL '5 days'),
-  (1005, u15, 'Yo, y lloré muchísimo con el final', now_ts - INTERVAL '4 days'),
-  (1005, u07, 'Está en mi lista de pendientes', now_ts - INTERVAL '3 days')
+  ('11111111-1111-1111-1111-111111111001'::uuid, u01, '¡Bienvenidos al Club de Lectura Triana! Este mes leeremos "Cien años de soledad"', now_ts - INTERVAL '30 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u03, '¡Qué buena elección! Me encanta García Márquez', now_ts - INTERVAL '29 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u05, '¿Nos vemos el sábado en la biblioteca para comentarlo?', now_ts - INTERVAL '28 days'),
+
+  ('11111111-1111-1111-1111-111111111002'::uuid, u02, 'Acabamos de terminar "La chica del tren". ¿Qué os ha parecido?', now_ts - INTERVAL '20 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u09, 'El final me dejó con la boca abierta', now_ts - INTERVAL '19 days'),
+
+  ('11111111-1111-1111-1111-111111111003'::uuid, u03, '¿Habéis leído la nueva de Brandon Sanderson?', now_ts - INTERVAL '15 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u08, 'Sí, increíble como siempre. Sus sistemas de magia son geniales', now_ts - INTERVAL '14 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u11, 'Yo estoy esperando a que salga en español', now_ts - INTERVAL '13 days'),
+
+  ('11111111-1111-1111-1111-111111111004'::uuid, u04, 'Propongo que hagamos un intercambio de libros este fin de semana', now_ts - INTERVAL '10 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u06, 'Me apunto! Tengo varios que ya he leído', now_ts - INTERVAL '9 days'),
+
+  ('11111111-1111-1111-1111-111111111005'::uuid, u05, '¿Alguien ha leído "It Ends With Us"?', now_ts - INTERVAL '5 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u15, 'Yo, y lloré muchísimo con el final', now_ts - INTERVAL '4 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u07, 'Está en mi lista de pendientes', now_ts - INTERVAL '3 days')
 ON CONFLICT DO NOTHING;
 
 -- ==============================================================

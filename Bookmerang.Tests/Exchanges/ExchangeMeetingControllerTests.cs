@@ -314,7 +314,7 @@ public class ExchangeMeetingControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Api.Models.Entities.Exchange
 			{
 				ExchangeId = 200,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 1,
 				Status = ExchangeStatus.NEGOTIATING,
 				Match = new Api.Models.Entities.Match
@@ -550,7 +550,7 @@ public class ExchangeMeetingControllerTests : IAsyncLifetime
 			.ReturnsAsync(new Api.Models.Entities.Exchange
 			{
 				ExchangeId = 201,
-				ChatId = 1,
+				ChatId = Guid.NewGuid(),
 				MatchId = 1,
 				Status = ExchangeStatus.NEGOTIATING,
 				Match = new Api.Models.Entities.Match

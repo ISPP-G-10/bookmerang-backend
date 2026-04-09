@@ -46,22 +46,21 @@ public class ChatController : ControllerBase
 
     /// Obtiene un chat específico por ID.
     /// GET /api/chat/{chatId}
-    [HttpGet("{chatId:int}")]
-    public async Task<IActionResult> GetChat(int chatId)
+    [HttpGet("{chatId:guid}")]
+    public async Task<IActionResult> GetChat(Guid chatId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
+        // NotFoundException y ForbiddenException son capturadas por el ExceptionMiddleware
         var chat = await _chatService.GetChatById(chatId, userId.Value);
-        if (chat == null) return NotFound("Chat no encontrado o no tienes acceso.");
-
         return Ok(chat);
     }
 
     /// Obtiene los mensajes de un chat con paginación.
     /// GET /api/chat/{chatId}/messages?page=1&pageSize=50
-    [HttpGet("{chatId:int}/messages")]
-    public async Task<IActionResult> GetMessages(int chatId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+    [HttpGet("{chatId:guid}/messages")]
+    public async Task<IActionResult> GetMessages(Guid chatId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
@@ -75,8 +74,8 @@ public class ChatController : ControllerBase
 
     /// Envía un mensaje a un chat.
     /// POST /api/chat/{chatId}/messages
-    [HttpPost("{chatId:int}/messages")]
-    public async Task<IActionResult> SendMessage(int chatId, [FromBody] SendMessageRequest request)
+    [HttpPost("{chatId:guid}/messages")]
+    public async Task<IActionResult> SendMessage(Guid chatId, [FromBody] SendMessageRequest request)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
@@ -114,8 +113,8 @@ public class ChatController : ControllerBase
 
     /// Marca que el usuario está escribiendo en un chat.
     /// POST /api/chat/{chatId}/typing
-    [HttpPost("{chatId:int}/typing")]
-    public async Task<IActionResult> StartTyping(int chatId)
+    [HttpPost("{chatId:guid}/typing")]
+    public async Task<IActionResult> StartTyping(Guid chatId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
@@ -128,8 +127,8 @@ public class ChatController : ControllerBase
 
     /// Marca que el usuario dejó de escribir en un chat.
     /// DELETE /api/chat/{chatId}/typing
-    [HttpDelete("{chatId:int}/typing")]
-    public async Task<IActionResult> StopTyping(int chatId)
+    [HttpDelete("{chatId:guid}/typing")]
+    public async Task<IActionResult> StopTyping(Guid chatId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
@@ -140,8 +139,8 @@ public class ChatController : ControllerBase
 
     /// Obtiene los usuarios que están escribiendo en un chat.
     /// GET /api/chat/{chatId}/typing
-    [HttpGet("{chatId:int}/typing")]
-    public async Task<IActionResult> GetTypingUsers(int chatId)
+    [HttpGet("{chatId:guid}/typing")]
+    public async Task<IActionResult> GetTypingUsers(Guid chatId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
