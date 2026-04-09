@@ -12,6 +12,8 @@ public class BookDropExchangeService(AppDbContext db) : IBookDropExchangeService
 
     public async Task<List<BookDropExchangeDto>> GetActiveExchanges(int bookspotId)
     {
+        await ValidateBookspotIsActive(bookspotId);
+
         var meetings = await _db.ExchangeMeetings
             .Include(m => m.Exchange)
                 .ThenInclude(e => e.Match)
@@ -37,7 +39,6 @@ public class BookDropExchangeService(AppDbContext db) : IBookDropExchangeService
 
             result.Add(new BookDropExchangeDto(
                 m.ExchangeMeetingId,
-                m.Pin!,
                 m.BookDropStatus!.Value,
                 book1?.Titulo,
                 book2?.Titulo,
@@ -74,6 +75,7 @@ public class BookDropExchangeService(AppDbContext db) : IBookDropExchangeService
         var meeting = await GetAndValidateMeeting(meetingId, pin, bookspotId, BookdropExchangeStatus.BOOK_2_HELD);
 
         meeting.BookDropStatus = BookdropExchangeStatus.COMPLETED;
+        meeting.Pin = null;
 
         var exchange = await _db.Exchanges
             .Include(e => e.Match)
@@ -97,6 +99,8 @@ public class BookDropExchangeService(AppDbContext db) : IBookDropExchangeService
     private async Task<Models.Entities.ExchangeMeeting> GetAndValidateMeeting(
         int meetingId, string pin, int bookspotId, BookdropExchangeStatus expectedStatus)
     {
+        await ValidateBookspotIsActive(bookspotId);
+
         var meeting = await _db.ExchangeMeetings
             .Include(m => m.Exchange)
                 .ThenInclude(e => e.Match)
@@ -133,7 +137,6 @@ public class BookDropExchangeService(AppDbContext db) : IBookDropExchangeService
 
         return new BookDropExchangeDto(
             meeting.ExchangeMeetingId,
-            meeting.Pin!,
             meeting.BookDropStatus!.Value,
             book1?.Titulo,
             book2?.Titulo,
@@ -141,5 +144,14 @@ public class BookDropExchangeService(AppDbContext db) : IBookDropExchangeService
             user2?.Name,
             meeting.ScheduledAt
         );
+    }
+
+    private async Task ValidateBookspotIsActive(int bookspotId)
+    {
+        var bookspot = await _db.Bookspots.FindAsync(bookspotId)
+            ?? throw new UnauthorizedAccessException("Tu establecimiento no está disponible.");
+
+        if (bookspot.Status != BookspotStatus.ACTIVE)
+            throw new UnauthorizedAccessException("Tu establecimiento no está activo actualmente.");
     }
 }

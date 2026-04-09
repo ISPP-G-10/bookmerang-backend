@@ -69,8 +69,12 @@ public class BookdropController(IBookdropService bookdropService, IBookDropExcha
         var bookspotId = await GetBookspotId();
         if (bookspotId == null) return Unauthorized();
 
-        var exchanges = await _exchangeService.GetActiveExchanges(bookspotId.Value);
-        return Ok(exchanges);
+        try
+        {
+            var exchanges = await _exchangeService.GetActiveExchanges(bookspotId.Value);
+            return Ok(exchanges);
+        }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new { message = ex.Message }); }
     }
 
     [HttpPost("exchanges/{meetingId}/confirm-drop")]
@@ -84,9 +88,9 @@ public class BookdropController(IBookdropService bookdropService, IBookDropExcha
             var result = await _exchangeService.ConfirmDrop(meetingId, request.Pin, bookspotId.Value);
             return Ok(result);
         }
-        catch (UnauthorizedAccessException ex) { return StatusCode(403, ex.Message); }
-        catch (ArgumentException ex) { return BadRequest(ex.Message); }
-        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new { message = ex.Message }); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpPost("exchanges/{meetingId}/confirm-swap")]
@@ -100,9 +104,9 @@ public class BookdropController(IBookdropService bookdropService, IBookDropExcha
             var result = await _exchangeService.ConfirmSwap(meetingId, request.Pin, bookspotId.Value);
             return Ok(result);
         }
-        catch (UnauthorizedAccessException ex) { return StatusCode(403, ex.Message); }
-        catch (ArgumentException ex) { return BadRequest(ex.Message); }
-        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new { message = ex.Message }); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpPost("exchanges/{meetingId}/confirm-pickup")]
@@ -116,8 +120,8 @@ public class BookdropController(IBookdropService bookdropService, IBookDropExcha
             var result = await _exchangeService.ConfirmPickup(meetingId, request.Pin, bookspotId.Value);
             return Ok(result);
         }
-        catch (UnauthorizedAccessException ex) { return StatusCode(403, ex.Message); }
-        catch (ArgumentException ex) { return BadRequest(ex.Message); }
-        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new { message = ex.Message }); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 }
