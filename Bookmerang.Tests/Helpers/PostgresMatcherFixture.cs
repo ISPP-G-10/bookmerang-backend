@@ -1,6 +1,7 @@
 using Bookmerang.Api.Configuration;
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Enums;
+using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Services.Implementation.Matcher;
 using Bookmerang.Api.Services.Interfaces.Chats;
 using Microsoft.EntityFrameworkCore;
@@ -82,13 +83,15 @@ public class PostgresMatcherFixture : IAsyncLifetime
         new(db,
             Options.Create(Settings),
             new Mock<ILogger<MatcherService>>().Object,
-            new Mock<IChatService>().Object);
+            new Mock<IChatService>().Object,
+            new ExchangeService(db));
 
     public MatcherService CreateServiceWithChat(AppDbContext db, IChatService chatService) =>
         new(db,
             Options.Create(Settings),
             new Mock<ILogger<MatcherService>>().Object,
-            chatService);
+            chatService,
+            new ExchangeService(db));
 
     // Construcción del NpgsqlDataSource
 

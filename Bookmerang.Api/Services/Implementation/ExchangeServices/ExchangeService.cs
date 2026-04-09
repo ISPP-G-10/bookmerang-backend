@@ -1,4 +1,6 @@
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Exceptions;
+using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Models.Entities;
@@ -6,9 +8,10 @@ using Bookmerang.Api.Models.Enums;
 
 namespace Bookmerang.Api.Services.Implementation.ExchangeServices;
 
-public class ExchangeService(AppDbContext db): IExchangeService
+public class ExchangeService(AppDbContext db, IChatService chatService): IExchangeService
 {
     private readonly AppDbContext _db = db;
+    private readonly IChatService _chatService = chatService;
 
     public async Task<Exchange?> GetExchangeById(int exchangeId)
     {
@@ -81,54 +84,56 @@ public class ExchangeService(AppDbContext db): IExchangeService
         }
     }
 
-    // Update que actualiza solo los campos que se proporcionen.
-    public async Task<Exchange> UpdateExchangeStatus(int exchangeId, ExchangeStatus newStatus)
+    public async Task<Exchange> UpdateExchangeStatus(Exchange exchange, ExchangeStatus newStatus)
     {
-        var exchange = await _db.Exchanges.FirstOrDefaultAsync(e => e.ExchangeId == exchangeId);
-        if (exchange == null)
-            throw new InvalidOperationException($"Exchange con id {exchangeId} no encontrado");
-        if(exchange.Status == ExchangeStatus.REJECTED)
-        {
-            throw new InvalidOperationException("No se puede modificar un intercambio ya rechazado");
-        }
-
         exchange.Status = newStatus;
+        exchange.UpdatedAt = DateTime.UtcNow;
 
-        exchange.CreatedAt = DateTime.SpecifyKind(exchange.CreatedAt, DateTimeKind.Utc); // Aseguramos que CreatedAt se mantenga igual en UTC
-        exchange.UpdatedAt = DateTime.UtcNow; //Siempre se actualiza la fecha de actualización
-
-        _db.Exchanges.Update(exchange);
         await _db.SaveChangesAsync();
-
         return exchange;
     }
-    
+
+    public async Task<Exchange> AcceptExchange(int exchangeId, Guid userId)
+    {
+        var exchange = await GetExchangeWithMatch(exchangeId)
+            ?? throw new NotFoundException($"Intercambio con id {exchangeId} no encontrado.");
+
+        var isUser1 = exchange.Match.User1Id == userId;
+        var isUser2 = exchange.Match.User2Id == userId;
+
+        var newStatus = (exchange.Status, isUser1, isUser2) switch
+        {
+            (ExchangeStatus.NEGOTIATING,   true,  _)   => ExchangeStatus.ACCEPTED_BY_1,
+            (ExchangeStatus.NEGOTIATING,   _,    true) => ExchangeStatus.ACCEPTED_BY_2,
+            (ExchangeStatus.ACCEPTED_BY_1, _,    true) => ExchangeStatus.ACCEPTED,
+            (ExchangeStatus.ACCEPTED_BY_2, true, _)    => ExchangeStatus.ACCEPTED,
+            _ => throw new ValidationException(
+                "No se puede aceptar el intercambio en su estado actual.")
+        };
+
+        return await UpdateExchangeStatus(exchange, newStatus);
+    }
+
+    // TODO: A futuro, el borrado debería iniciarse desde el Match (Match -> Exchange -> Chat)
+    // para liberar también el match y sus swipes asociados. Requiere MatchService + AdminMatchController.
     public async Task<bool> DeleteExchange(int exchangeId)
     {
-        var exchange = await _db.Exchanges.FindAsync(exchangeId) ?? throw new Exception($"Intercambio con id {exchangeId} no encontrado");
-        
-        // Eliminar primero los ExchangeMeetings asociados para evitar restricciones de clave foránea
-        var exchangeMeetings = await _db.ExchangeMeetings.Where(em => em.ExchangeId == exchangeId).ToListAsync();
-        if (exchangeMeetings.Any())
-            _db.ExchangeMeetings.RemoveRange(exchangeMeetings);
-        
-        // Eliminar dependencias del chat asociado
-        var chatId = exchange.ChatId;
-        var messages = await _db.Messages.Where(m => m.ChatId == chatId).ToListAsync();
-        if (messages.Any()) _db.Messages.RemoveRange(messages);
+        var exchange = await _db.Exchanges.FindAsync(exchangeId)
+            ?? throw new NotFoundException($"Intercambio con id {exchangeId} no encontrado.");
 
-        var participants = await _db.ChatParticipants.Where(cp => cp.ChatId == chatId).ToListAsync();
-        if (participants.Any()) _db.ChatParticipants.RemoveRange(participants);
-
-        var typingIndicators = await _db.TypingIndicators.Where(t => t.ChatId == chatId).ToListAsync();
-        if (typingIndicators.Any()) _db.TypingIndicators.RemoveRange(typingIndicators);
-
-        var chat = await _db.Chats.FindAsync(chatId);
-        if (chat != null) _db.Chats.Remove(chat);
+        await RemoveExchangeMeetings(exchangeId);
+        await _chatService.DeleteChat(exchange.ChatId);
 
         _db.Exchanges.Remove(exchange);
         await _db.SaveChangesAsync();
-        
         return true;
+    }
+
+    private async Task RemoveExchangeMeetings(int exchangeId)
+    {
+        var meetings = await _db.ExchangeMeetings
+            .Where(em => em.ExchangeId == exchangeId)
+            .ToListAsync();
+        _db.ExchangeMeetings.RemoveRange(meetings);
     }
 }

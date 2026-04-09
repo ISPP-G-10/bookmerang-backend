@@ -22,4 +22,15 @@ public class AdminExchangeController(IExchangeService exchangeService) : Control
 
         return Ok(exchanges.Select(e => e.ToDto()));
     }
+
+    /// DELETE /api/admin/exchanges/{exchangeId}
+    [HttpDelete("{exchangeId}")]
+    public async Task<IActionResult> Delete(int exchangeId)
+    {
+        var exchange = await _exchangeService.GetExchangeById(exchangeId);
+        if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
+
+        await _exchangeService.DeleteExchange(exchangeId);
+        return NoContent();
+    }
 }

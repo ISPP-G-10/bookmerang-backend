@@ -11,6 +11,7 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.Matcher;
 using Bookmerang.Api.Services.Interfaces.Chats;
+using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Tests.Helpers;
 using Bookmerang.Api.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
@@ -786,7 +787,8 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
             _db,
             Options.Create(badSettings),
             new Mock<ILogger<MatcherService>>().Object,
-            new Mock<IChatService>().Object);
+            new Mock<IChatService>().Object,
+            new Mock<IExchangeService>().Object);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => badService.GetFeedAsync(UserA, page: 0, pageSize: 20));
