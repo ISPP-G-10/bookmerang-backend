@@ -123,7 +123,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 12,
-			ChatId = 22,
+			ChatId = Guid.NewGuid(),
 			MatchId = 32,
 			Match = match,
 			Status = ExchangeStatus.COMPLETED,

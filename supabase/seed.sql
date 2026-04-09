@@ -652,27 +652,27 @@ ON CONFLICT DO NOTHING;
 -- CHATS EXCHANGE (para los intercambios)
 -- ==============================================================
 INSERT INTO chats (id, type, created_at) VALUES
-  (2001, 'EXCHANGE', now_ts - INTERVAL '39 days'),  -- Laura + Marcos
-  (2002, 'EXCHANGE', now_ts - INTERVAL '34 days'),  -- Sofía + Diego
-  (2003, 'EXCHANGE', now_ts - INTERVAL '29 days')   -- Elena + Andrés
+  ('22222222-2222-2222-2222-222222222001'::uuid, 'EXCHANGE', now_ts - INTERVAL '39 days'),  -- Laura + Marcos
+  ('22222222-2222-2222-2222-222222222002'::uuid, 'EXCHANGE', now_ts - INTERVAL '34 days'),  -- Sofía + Diego
+  ('22222222-2222-2222-2222-222222222003'::uuid, 'EXCHANGE', now_ts - INTERVAL '29 days')   -- Elena + Andrés
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO chat_participants (chat_id, user_id, joined_at) VALUES
-  (2001, u01, now_ts - INTERVAL '39 days'),
-  (2001, u02, now_ts - INTERVAL '39 days'),
-  (2002, u03, now_ts - INTERVAL '34 days'),
-  (2002, u08, now_ts - INTERVAL '34 days'),
-  (2003, u05, now_ts - INTERVAL '29 days'),
-  (2003, u12, now_ts - INTERVAL '29 days')
+  ('22222222-2222-2222-2222-222222222001'::uuid, u01, now_ts - INTERVAL '39 days'),
+  ('22222222-2222-2222-2222-222222222001'::uuid, u02, now_ts - INTERVAL '39 days'),
+  ('22222222-2222-2222-2222-222222222002'::uuid, u03, now_ts - INTERVAL '34 days'),
+  ('22222222-2222-2222-2222-222222222002'::uuid, u08, now_ts - INTERVAL '34 days'),
+  ('22222222-2222-2222-2222-222222222003'::uuid, u05, now_ts - INTERVAL '29 days'),
+  ('22222222-2222-2222-2222-222222222003'::uuid, u12, now_ts - INTERVAL '29 days')
 ON CONFLICT (chat_id, user_id) DO NOTHING;
 
 -- ==============================================================
 -- EXCHANGES (Intercambios COMPLETADOS - cada uno genera 100 puntos)
 -- ==============================================================
 INSERT INTO exchanges (match_id, chat_id, status, created_at, updated_at) VALUES
-  (1, 2001, 'COMPLETED', now_ts - INTERVAL '39 days', now_ts - INTERVAL '5 days'),
-  (2, 2002, 'COMPLETED', now_ts - INTERVAL '34 days', now_ts - INTERVAL '3 days'),
-  (3, 2003, 'COMPLETED', now_ts - INTERVAL '29 days', now_ts - INTERVAL '1 day')
+  (1, '22222222-2222-2222-2222-222222222001'::uuid, 'COMPLETED', now_ts - INTERVAL '39 days', now_ts - INTERVAL '5 days'),
+  (2, '22222222-2222-2222-2222-222222222002'::uuid, 'COMPLETED', now_ts - INTERVAL '34 days', now_ts - INTERVAL '3 days'),
+  (3, '22222222-2222-2222-2222-222222222003'::uuid, 'COMPLETED', now_ts - INTERVAL '29 days', now_ts - INTERVAL '1 day')
 ON CONFLICT DO NOTHING;
 
 -- ==============================================================
