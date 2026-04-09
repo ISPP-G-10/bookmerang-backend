@@ -10,7 +10,7 @@ public class CommunityChat
     public int CommunityId { get; set; }
 
     [Column("chat_id")]
-    public int ChatId { get; set; }
+    public Guid ChatId { get; set; }
 
     [ForeignKey("CommunityId")]
     public Community Community { get; set; } = null!;

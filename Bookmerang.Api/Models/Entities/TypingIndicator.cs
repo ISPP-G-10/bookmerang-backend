@@ -13,7 +13,7 @@ public class TypingIndicator
 
     [Required]
     [Column("chat_id")]
-    public int ChatId { get; set; }
+    public Guid ChatId { get; set; }
 
     [Required]
     [Column("user_id")]

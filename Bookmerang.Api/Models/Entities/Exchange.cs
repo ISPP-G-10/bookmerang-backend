@@ -16,7 +16,7 @@ public class Exchange {
     //chat_id int [not null, unique, note: '1 chat = 1 exchange']
     [Required]
     [Column("chat_id")]
-    public int ChatId { get; set; }
+    public Guid ChatId { get; set; }
     [ForeignKey(nameof(ChatId))]
     public Chat? Chat { get; set; } // Navigation property -> relación 1:1 es la interrrogación
   

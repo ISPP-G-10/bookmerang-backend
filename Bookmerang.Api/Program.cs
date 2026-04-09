@@ -246,10 +246,10 @@ using (var scope = app.Services.CreateScope())
         "SELECT setval('book_photos_id_seq',       COALESCE((SELECT MAX(id) FROM book_photos), 0) + 1, false)",
         "SELECT setval('swipes_id_seq',            COALESCE((SELECT MAX(id) FROM swipes), 0) + 1, false)",
         "SELECT setval('matches_id_seq',           COALESCE((SELECT MAX(id) FROM matches), 0) + 1, false)",
-        "SELECT setval('chats_id_seq',             COALESCE((SELECT MAX(id) FROM chats), 0) + 1, false)",
         "SELECT setval('messages_id_seq',          COALESCE((SELECT MAX(id) FROM messages), 0) + 1, false)",
         "SELECT setval('exchanges_id_seq',         COALESCE((SELECT MAX(id) FROM exchanges), 0) + 1, false)",
         "SELECT setval('user_preferences_id_seq',  COALESCE((SELECT MAX(id) FROM user_preferences), 0) + 1, false)",
+        "SELECT setval('communities_id_seq',       COALESCE((SELECT MAX(id) FROM communities), 0) + 1, false)",
     };
     foreach (var sql in sequences)
         db.Database.ExecuteSqlRaw(sql);
