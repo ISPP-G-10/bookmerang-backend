@@ -30,14 +30,12 @@ public record ExchangeMeetingDto(
     BookdropExchangeStatus? BookDropStatus
 );
 
-public record UpdateExchangeMeetingDto(
-    ExchangeMode? ExchangeMode,
+public record CounterProposeMeetingDto(
+    ExchangeMode ExchangeMode,
     int? BookspotId,
-    double[]? CustomLocation,
-    DateTime? ScheduledAt,
-    ExchangeMeetingStatus? MeetingStatus,
-    bool? MarkAsCompletedByUser1,
-    bool? MarkAsCompletedByUser2
+    [Range(-90, 90)] double? Latitud,
+    [Range(-180, 180)] double? Longitud,
+    DateTime ScheduledAt
 );
 
 public static class ExchangeMeetingExtensions

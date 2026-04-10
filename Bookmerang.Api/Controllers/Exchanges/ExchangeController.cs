@@ -15,9 +15,26 @@ namespace Bookmerang.Api.Controllers.Exchanges;
 [Route("api/[controller]")]
 [Authorize(Policy = "UserOnly")]
 
-public class ExchangeController(IExchangeService service, AppDbContext db) : ControllerBase
+/// Flujo general de intercambio:
+///
+/// 1. NEGOCIACION  — Match genera Chat + Exchange (NEGOTIATING)
+///    - Cada usuario acepta  -> ACCEPTED_BY_1 / ACCEPTED_BY_2
+///    - Ambos aceptan        -> ACCEPTED
+///    - Cualquiera rechaza   -> REJECTED  (solo durante negociacion)
+///
+/// 2. QUEDADA  — Ver ExchangeMeetingController
+///    - Un usuario propone meeting (PROPOSAL)
+///    - El otro acepta o contra-propone
+///    - Ambos aceptan meeting -> meeting ACCEPTED
+///      (si es BOOKDROP se genera PIN y se gestiona desde el panel)
+///
+/// 3. CIERRE
+///    - Cada usuario marca como completado -> COMPLETED (se intercambian libros)
+///    - Cualquiera puede reportar (solo con meeting ACCEPTED) -> INCIDENT
+public class ExchangeController(IExchangeService service, IExchangeMeetingService meetingService, AppDbContext db) : ControllerBase
 {
     private readonly IExchangeService _service = service;
+    private readonly IExchangeMeetingService _meetingService = meetingService;
     private readonly AppDbContext _db = db;
 
     /// Obtiene el Guid del usuario autenticado
@@ -115,6 +132,10 @@ public class ExchangeController(IExchangeService service, AppDbContext db) : Con
 
         if (exchange.Status != ExchangeStatus.ACCEPTED)
             return BadRequest("Solo se puede reportar un intercambio que esté en curso.");
+
+        var meeting = await _meetingService.GetMeetingByExchangeId(exchangeId);
+        if (meeting == null || meeting.MeetingStatus != ExchangeMeetingStatus.ACCEPTED)
+            return BadRequest("Solo se puede reportar cuando el meeting ha sido aceptado.");
 
         var updated = await _service.UpdateExchangeStatus(exchange, ExchangeStatus.INCIDENT);
         return Ok(updated.ToDto());

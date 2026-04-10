@@ -8,9 +8,10 @@ namespace Bookmerang.Api.Controllers.Admin;
 [ApiController]
 [Route("api/admin/exchanges")]
 [Authorize(Policy = "AdminOnly")]
-public class AdminExchangeController(IExchangeService exchangeService) : ControllerBase
+public class AdminExchangeController(IExchangeService exchangeService, IExchangeMeetingService meetingService) : ControllerBase
 {
     private readonly IExchangeService _exchangeService = exchangeService;
+    private readonly IExchangeMeetingService _meetingService = meetingService;
 
     /// GET /api/admin/exchanges
     [HttpGet]
@@ -32,5 +33,27 @@ public class AdminExchangeController(IExchangeService exchangeService) : Control
 
         await _exchangeService.DeleteExchange(exchangeId);
         return NoContent();
+    }
+
+    /// GET /api/admin/exchanges/meetings
+    [HttpGet("meetings")]
+    public async Task<IActionResult> GetAllMeetings()
+    {
+        var meetings = await _meetingService.GetAllExchangeMeetings();
+        if (meetings == null || meetings.Count == 0)
+            return NotFound("No se encontraron ExchangeMeetings.");
+
+        return Ok(meetings.Select(m => m.ToDto()));
+    }
+
+    /// GET /api/admin/exchanges/meetings/byUser/{proposerId}
+    [HttpGet("meetings/byUser/{proposerId:guid}")]
+    public async Task<IActionResult> GetMeetingsByUserId(Guid proposerId)
+    {
+        var meetings = await _meetingService.GetMeetingsByUserId(proposerId);
+        if (meetings == null || meetings.Count == 0)
+            return NotFound($"No se encontraron ExchangeMeetings para el usuario con id: {proposerId}");
+
+        return Ok(meetings.Select(m => m.ToDto()));
     }
 }
