@@ -103,6 +103,18 @@ INSERT INTO users (id, rating_mean, finished_exchanges, plan) VALUES
   (u15, 4.5,  8, 'FREE')
 ON CONFLICT (id) DO NOTHING;
 
+-- Actualizar inkdrops mensuales de los usuarios de la comunidad 1 (SOLO ABRIL)
+UPDATE users
+SET inkdrops = CASE
+  WHEN id = u01 THEN 400
+  WHEN id = u03 THEN 300
+  WHEN id = u05 THEN 300
+  WHEN id = u06 THEN 200
+  ELSE inkdrops
+END,
+inkdrops_last_updated = '2026-04'
+WHERE id IN (u01, u03, u05, u06);
+
 -- ==============================================================
 -- 4. USER_PREFERENCES (básicas)
 -- ============================================================== 
@@ -474,70 +486,284 @@ ON CONFLICT (community_id, user_id) DO NOTHING;
 
 -- Chats para las comunidades (tipo COMMUNITY)
 INSERT INTO chats (id, type, created_at) VALUES
-  (1001, 'COMMUNITY', now_ts - INTERVAL '30 days'),
-  (1002, 'COMMUNITY', now_ts - INTERVAL '25 days'),
-  (1003, 'COMMUNITY', now_ts - INTERVAL '20 days'),
-  (1004, 'COMMUNITY', now_ts - INTERVAL '15 days'),
-  (1005, 'COMMUNITY', now_ts - INTERVAL '10 days')
+  ('11111111-1111-1111-1111-111111111001'::uuid, 'COMMUNITY', now_ts - INTERVAL '30 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, 'COMMUNITY', now_ts - INTERVAL '25 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, 'COMMUNITY', now_ts - INTERVAL '20 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, 'COMMUNITY', now_ts - INTERVAL '15 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, 'COMMUNITY', now_ts - INTERVAL '10 days')
 ON CONFLICT (id) DO NOTHING;
 
 -- Relación comunidad-chat
 INSERT INTO community_chats (community_id, chat_id) VALUES
-  (1, 1001),
-  (2, 1002),
-  (3, 1003),
-  (4, 1004),
-  (5, 1005)
+  (1, '11111111-1111-1111-1111-111111111001'::uuid),
+  (2, '11111111-1111-1111-1111-111111111002'::uuid),
+  (3, '11111111-1111-1111-1111-111111111003'::uuid),
+  (4, '11111111-1111-1111-1111-111111111004'::uuid),
+  (5, '11111111-1111-1111-1111-111111111005'::uuid)
 ON CONFLICT (community_id) DO NOTHING;
 
 -- Participantes en los chats de comunidades (todos los miembros)
 INSERT INTO chat_participants (chat_id, user_id, joined_at) VALUES
   -- Chat comunidad 1
-  (1001, u01, now_ts - INTERVAL '30 days'),
-  (1001, u03, now_ts - INTERVAL '28 days'),
-  (1001, u05, now_ts - INTERVAL '26 days'),
-  (1001, u06, now_ts - INTERVAL '24 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u01, now_ts - INTERVAL '30 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u03, now_ts - INTERVAL '28 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u05, now_ts - INTERVAL '26 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u06, now_ts - INTERVAL '24 days'),
   -- Chat comunidad 2
-  (1002, u02, now_ts - INTERVAL '25 days'),
-  (1002, u09, now_ts - INTERVAL '23 days'),
-  (1002, u13, now_ts - INTERVAL '21 days'),
-  (1002, u14, now_ts - INTERVAL '19 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u02, now_ts - INTERVAL '25 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u09, now_ts - INTERVAL '23 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u13, now_ts - INTERVAL '21 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u14, now_ts - INTERVAL '19 days'),
   -- Chat comunidad 3
-  (1003, u03, now_ts - INTERVAL '20 days'),
-  (1003, u08, now_ts - INTERVAL '18 days'),
-  (1003, u11, now_ts - INTERVAL '16 days'),
-  (1003, u12, now_ts - INTERVAL '14 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u03, now_ts - INTERVAL '20 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u08, now_ts - INTERVAL '18 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u11, now_ts - INTERVAL '16 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u12, now_ts - INTERVAL '14 days'),
   -- Chat comunidad 4
-  (1004, u04, now_ts - INTERVAL '15 days'),
-  (1004, u06, now_ts - INTERVAL '13 days'),
-  (1004, u08, now_ts - INTERVAL '11 days'),
-  (1004, u10, now_ts - INTERVAL '9 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u04, now_ts - INTERVAL '15 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u06, now_ts - INTERVAL '13 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u08, now_ts - INTERVAL '11 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u10, now_ts - INTERVAL '9 days'),
   -- Chat comunidad 5
-  (1005, u05, now_ts - INTERVAL '10 days'),
-  (1005, u07, now_ts - INTERVAL '8 days'),
-  (1005, u11, now_ts - INTERVAL '6 days'),
-  (1005, u15, now_ts - INTERVAL '4 days')
+  ('11111111-1111-1111-1111-111111111005'::uuid, u05, now_ts - INTERVAL '10 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u07, now_ts - INTERVAL '8 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u11, now_ts - INTERVAL '6 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u15, now_ts - INTERVAL '4 days')
 ON CONFLICT (chat_id, user_id) DO NOTHING;
 
 -- Algunos mensajes de prueba en los chats de comunidades
 INSERT INTO messages (chat_id, sender_id, body, sent_at) VALUES
-  (1001, u01, '¡Bienvenidos al Club de Lectura Triana! Este mes leeremos "Cien años de soledad"', now_ts - INTERVAL '30 days'),
-  (1001, u03, '¡Qué buena elección! Me encanta García Márquez', now_ts - INTERVAL '29 days'),
-  (1001, u05, '¿Nos vemos el sábado en la biblioteca para comentarlo?', now_ts - INTERVAL '28 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u01, '¡Bienvenidos al Club de Lectura Triana! Este mes leeremos "Cien años de soledad"', now_ts - INTERVAL '30 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u03, '¡Qué buena elección! Me encanta García Márquez', now_ts - INTERVAL '29 days'),
+  ('11111111-1111-1111-1111-111111111001'::uuid, u05, '¿Nos vemos el sábado en la biblioteca para comentarlo?', now_ts - INTERVAL '28 days'),
+
+  ('11111111-1111-1111-1111-111111111002'::uuid, u02, 'Acabamos de terminar "La chica del tren". ¿Qué os ha parecido?', now_ts - INTERVAL '20 days'),
+  ('11111111-1111-1111-1111-111111111002'::uuid, u09, 'El final me dejó con la boca abierta', now_ts - INTERVAL '19 days'),
+
+  ('11111111-1111-1111-1111-111111111003'::uuid, u03, '¿Habéis leído la nueva de Brandon Sanderson?', now_ts - INTERVAL '15 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u08, 'Sí, increíble como siempre. Sus sistemas de magia son geniales', now_ts - INTERVAL '14 days'),
+  ('11111111-1111-1111-1111-111111111003'::uuid, u11, 'Yo estoy esperando a que salga en español', now_ts - INTERVAL '13 days'),
+
+  ('11111111-1111-1111-1111-111111111004'::uuid, u04, 'Propongo que hagamos un intercambio de libros este fin de semana', now_ts - INTERVAL '10 days'),
+  ('11111111-1111-1111-1111-111111111004'::uuid, u06, 'Me apunto! Tengo varios que ya he leído', now_ts - INTERVAL '9 days'),
+
+  ('11111111-1111-1111-1111-111111111005'::uuid, u05, '¿Alguien ha leído "It Ends With Us"?', now_ts - INTERVAL '5 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u15, 'Yo, y lloré muchísimo con el final', now_ts - INTERVAL '4 days'),
+  ('11111111-1111-1111-1111-111111111005'::uuid, u07, 'Está en mi lista de pendientes', now_ts - INTERVAL '3 days')
+ON CONFLICT DO NOTHING;
+
+-- ==============================================================
+-- MEETUPS (Eventos en comunidades)
+-- ==============================================================
+INSERT INTO meetups (community_id, title, description, other_book_spot_id, scheduled_at, status, creator_id, created_at, updated_at) VALUES
+  -- comunidad 1
+  (1, 'Lectura de "Cien Años de Soledad"', 'Nos reunimos para comentar el libro seleccionado para este mes', 10, now_ts - INTERVAL '5 days', 'SCHEDULED', u01, now_ts - INTERVAL '20 days', now_ts - INTERVAL '20 days'),
+  (1, 'Intercambio de Novelas Clásicas', 'Traed vuestros clásicos favoritos para intercambiar', 11, now_ts + INTERVAL '3 days', 'SCHEDULED', u01, now_ts - INTERVAL '15 days', now_ts - INTERVAL '15 days'),
   
-  (1002, u02, 'Acabamos de terminar "La chica del tren". ¿Qué os ha parecido?', now_ts - INTERVAL '20 days'),
-  (1002, u09, 'El final me dejó con la boca abierta', now_ts - INTERVAL '19 days'),
+  -- comunidad 2
+  (2, 'Club de Thriller y Misterio', 'Comentaremos "La chica del tren" y otras obras de suspenso', 12, now_ts - INTERVAL '2 days', 'SCHEDULED', u02, now_ts - INTERVAL '12 days', now_ts - INTERVAL '12 days'),
+  (2, 'Tarde de Novedades Criminales', 'Presentación de los últimos thrillers publicados', 13, now_ts + INTERVAL '7 days', 'SCHEDULED', u02, now_ts - INTERVAL '8 days', now_ts - INTERVAL '8 days'),
   
-  (1003, u03, '¿Habéis leído la nueva de Brandon Sanderson?', now_ts - INTERVAL '15 days'),
-  (1003, u08, 'Sí, increíble como siempre. Sus sistemas de magia son geniales', now_ts - INTERVAL '14 days'),
-  (1003, u11, 'Yo estoy esperando a que salga en español', now_ts - INTERVAL '13 days'),
+  -- Fantasía y Ciencia Ficción (comunidad 3)
+  (3, 'Mundo de Sanderson', 'Relectura y análisis de "Sopa de Piedra"', 14, now_ts - INTERVAL '8 days', 'SCHEDULED', u03, now_ts - INTERVAL '18 days', now_ts - INTERVAL '18 days'),
+  (3, 'Viaje por los Multiversos', 'Intercambio de novelas de ciencia ficción y fantasía épica', 15, now_ts + INTERVAL '10 days', 'SCHEDULED', u03, now_ts - INTERVAL '10 days', now_ts - INTERVAL '10 days'),
   
-  (1004, u04, 'Propongo que hagamos un intercambio de libros este fin de semana', now_ts - INTERVAL '10 days'),
-  (1004, u06, 'Me apunto! Tengo varios que ya he leído', now_ts - INTERVAL '9 days'),
+  -- Lectores de Dos Hermanas (comunidad 4)
+  (4, 'Encuentro de Apasionados por la Lectura', 'Reunión mensual de lectores sevillanos', 16, now_ts - INTERVAL '3 days', 'SCHEDULED', u04, now_ts - INTERVAL '14 days', now_ts - INTERVAL '14 days'),
+  (4, 'Tertulias de Café y Libros', 'Charla informal mientras tomamos algo en el café', 17, now_ts + INTERVAL '5 days', 'SCHEDULED', u04, now_ts - INTERVAL '9 days', now_ts - INTERVAL '9 days'),
   
-  (1005, u05, '¿Alguien ha leído "It Ends With Us"?', now_ts - INTERVAL '5 days'),
-  (1005, u15, 'Yo, y lloré muchísimo con el final', now_ts - INTERVAL '4 days'),
-  (1005, u07, 'Está en mi lista de pendientes', now_ts - INTERVAL '3 days')
+  -- Románticos Empedernidos (comunidad 5)
+  (5, 'Historias de Amor y Desamor', 'Lectura compartida de novelas románticas contemporáneas', 22, now_ts - INTERVAL '1 day', 'SCHEDULED', u05, now_ts - INTERVAL '11 days', now_ts - INTERVAL '11 days'),
+  (5, 'Debate: ¿Qué hace un buen final romántico?', 'Discusión abierta sobre los finales que nos marcaron', 24, now_ts + INTERVAL '8 days', 'SCHEDULED', u05, now_ts - INTERVAL '7 days', now_ts - INTERVAL '7 days')
+ON CONFLICT DO NOTHING;
+
+-- ==============================================================
+-- MEETUP ATTENDANCES (Usuarios asistiendo a meetups)
+-- ==============================================================
+INSERT INTO meetup_attendance (meetup_id, user_id, selected_book_id, status) VALUES
+  -- Meetup 1: Club de Lectura Triana
+  (1, u01, 101, 'ATTENDED'),
+  (1, u03, 109, 'ATTENDED'),
+  (1, u05, 117, 'ATTENDED'),
+  (1, u06, 121, 'ATTENDED'),
+  
+  -- Meetup 2: Intercambio Novelas Clásicas
+  (2, u01, 102, 'REGISTERED'),
+  (2, u03, 110, 'REGISTERED'),
+  (2, u06, 122, 'REGISTERED'),
+  
+  -- Meetup 3: Club de Thriller y Misterio
+  (3, u02, 105, 'ATTENDED'),
+  (3, u09, 133, 'ATTENDED'),
+  (3, u13, 149, 'ATTENDED'),
+  (3, u14, 153, 'ATTENDED'),
+  
+  -- Meetup 4: Tarde de Novedades Criminales
+  (4, u02, 106, 'REGISTERED'),
+  (4, u09, 134, 'REGISTERED'),
+  (4, u13, 150, 'REGISTERED'),
+  
+  -- Meetup 5: Mundo de Sanderson
+  (5, u03, 111, 'ATTENDED'),
+  (5, u08, 129, 'ATTENDED'),
+  (5, u11, 141, 'ATTENDED'),
+  
+  -- Meetup 6: Viaje por los Multiversos
+  (6, u03, 112, 'REGISTERED'),
+  (6, u08, 130, 'REGISTERED'),
+  (6, u12, 145, 'REGISTERED'),
+  
+  -- Meetup 7: Encuentro de Apasionados
+  (7, u04, 113, 'ATTENDED'),
+  (7, u06, 123, 'ATTENDED'),
+  (7, u08, 131, 'ATTENDED'),
+  
+  -- Meetup 8: Tertulias de Café y Libros
+  (8, u04, 114, 'REGISTERED'),
+  (8, u06, 124, 'REGISTERED'),
+  (8, u10, 137, 'REGISTERED'),
+  
+  -- Meetup 9: Historias de Amor y Desamor
+  (9, u05, 118, 'ATTENDED'),
+  (9, u07, 125, 'ATTENDED'),
+  (9, u15, 157, 'ATTENDED'),
+  
+  -- Meetup 10: Debate: Finales Románticos
+  (10, u05, 119, 'REGISTERED'),
+  (10, u07, 126, 'REGISTERED'),
+  (10, u11, 142, 'REGISTERED')
+ON CONFLICT DO NOTHING;
+
+-- ==============================================================
+-- MATCHES (Emparejamientos para intercambios - 100 puntos c/u)
+-- ==============================================================
+INSERT INTO matches (user1_id, user2_id, book1_id, book2_id, status, created_at) VALUES
+  -- Match 1: Laura (u01) + Marcos (u02) → intercambio completado = 100 pts c/u
+  (u01, u02, 101, 105, 'CHAT_CREATED', now_ts - INTERVAL '39 days'),
+  
+  -- Match 2: Sofía (u03) + Diego (u08) → intercambio completado = 100 pts c/u
+  (u03, u08, 109, 129, 'CHAT_CREATED', now_ts - INTERVAL '34 days'),
+  
+  -- Match 3: Elena (u05) + Andrés (u12) → intercambio completado = 100 pts c/u
+  (u05, u12, 117, 145, 'CHAT_CREATED', now_ts - INTERVAL '29 days')
+ON CONFLICT DO NOTHING;
+
+-- ==============================================================
+-- CHATS EXCHANGE (para los intercambios)
+-- ==============================================================
+INSERT INTO chats (id, type, created_at) VALUES
+  ('22222222-2222-2222-2222-222222222001'::uuid, 'EXCHANGE', now_ts - INTERVAL '39 days'),  -- Laura + Marcos
+  ('22222222-2222-2222-2222-222222222002'::uuid, 'EXCHANGE', now_ts - INTERVAL '34 days'),  -- Sofía + Diego
+  ('22222222-2222-2222-2222-222222222003'::uuid, 'EXCHANGE', now_ts - INTERVAL '29 days')   -- Elena + Andrés
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO chat_participants (chat_id, user_id, joined_at) VALUES
+  ('22222222-2222-2222-2222-222222222001'::uuid, u01, now_ts - INTERVAL '39 days'),
+  ('22222222-2222-2222-2222-222222222001'::uuid, u02, now_ts - INTERVAL '39 days'),
+  ('22222222-2222-2222-2222-222222222002'::uuid, u03, now_ts - INTERVAL '34 days'),
+  ('22222222-2222-2222-2222-222222222002'::uuid, u08, now_ts - INTERVAL '34 days'),
+  ('22222222-2222-2222-2222-222222222003'::uuid, u05, now_ts - INTERVAL '29 days'),
+  ('22222222-2222-2222-2222-222222222003'::uuid, u12, now_ts - INTERVAL '29 days')
+ON CONFLICT (chat_id, user_id) DO NOTHING;
+
+-- ==============================================================
+-- EXCHANGES (Intercambios COMPLETADOS - cada uno genera 100 puntos)
+-- ==============================================================
+INSERT INTO exchanges (match_id, chat_id, status, created_at, updated_at) VALUES
+  (1, '22222222-2222-2222-2222-222222222001'::uuid, 'COMPLETED', now_ts - INTERVAL '39 days', now_ts - INTERVAL '5 days'),
+  (2, '22222222-2222-2222-2222-222222222002'::uuid, 'COMPLETED', now_ts - INTERVAL '34 days', now_ts - INTERVAL '3 days'),
+  (3, '22222222-2222-2222-2222-222222222003'::uuid, 'COMPLETED', now_ts - INTERVAL '29 days', now_ts - INTERVAL '1 day')
+ON CONFLICT DO NOTHING;
+
+-- ==============================================================
+-- EXCHANGE MEETINGS (ambos usuarios marcan como completado)
+-- ==============================================================
+INSERT INTO exchange_meetings (exchange_id, proposer_id, mode, custom_location, scheduled_at, mark_as_completed_by_user1, mark_as_completed_by_user2, status) VALUES
+  (1, u01, 'BOOKSPOT', ST_MakePoint(-6.0016, 37.3815)::geography, now_ts - INTERVAL '5 days', true, true, 'ACCEPTED'),
+  (2, u03, 'BOOKSPOT', ST_MakePoint(-5.9900, 37.4020)::geography, now_ts - INTERVAL '3 days', true, true, 'ACCEPTED'),
+  (3, u05, 'BOOKSPOT', ST_MakePoint(-5.9930, 37.3890)::geography, now_ts - INTERVAL '1 day', true, true, 'ACCEPTED')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO user_progress (user_id, xp_total, streak_weeks, last_active_date, streak_start_date, last_decrement_date, updated_at) VALUES
+  -- Nivel 0, sin actividad
+  (u04, 0, 0, NULL, NULL, NULL, now_ts),
+  (u08, 0, 0, NULL, NULL, NULL, now_ts),
+  
+  -- Con XP TOTAL (marzo + abril): Laura (600), Sofía (500), Elena (500), Pablo (400)
+  (u01, 600, 3, now_ts - INTERVAL '2 days', now_ts - INTERVAL '21 days', NULL, now_ts),
+  (u03, 500, 5, now_ts - INTERVAL '1 day',  now_ts - INTERVAL '35 days', NULL, now_ts),
+  
+  -- Activo semana pasada (debe incrementar al hacer acción)
+  (u02, 0, 2, now_ts - INTERVAL '8 days', now_ts - INTERVAL '16 days', NULL, now_ts),
+  (u05, 500, 4, now_ts - INTERVAL '9 days', now_ts - INTERVAL '28 days', NULL, now_ts),
+  
+  -- Inactivo, debe decrementar
+  (u07, 0, 4, now_ts - INTERVAL '14 days', now_ts - INTERVAL '28 days', NULL, now_ts),
+  (u09, 0, 2, now_ts - INTERVAL '20 days', now_ts - INTERVAL '14 days', NULL, now_ts),
+  
+  -- Tope de multiplicador
+  (u11, 0, 8, now_ts - INTERVAL '2 days', now_ts - INTERVAL '56 days', NULL, now_ts),
+  
+  -- Recuperando racha desde nivel bajo
+  (u06, 400, 1, now_ts - INTERVAL '8 days', now_ts - INTERVAL '7 days',  NULL, now_ts),
+  
+  -- Resto de usuarios
+  (u10, 0, 0, NULL, NULL, NULL, now_ts),
+  (u12, 0, 0, NULL, NULL, NULL, now_ts),
+  (u13, 0, 0, NULL, NULL, NULL, now_ts),
+  (u14, 0, 0, NULL, NULL, NULL, now_ts),
+  (u15, 0, 0, NULL, NULL, NULL, now_ts)
+ON CONFLICT (user_id) DO NOTHING;
+
+-- ==============================================================
+-- INKDROPS RANKING (community_monthly_scores - Abril 2026)
+-- Comunidad 1: Club de Lectura Triana
+-- Miembros: Laura (u01), Sofía (u03), Elena (u05), Pablo (u06)
+-- SOLO SE CUENTAN LAS ACCIONES DE ABRIL
+-- ==============================================================
+INSERT INTO community_monthly_scores (community_id, user_id, month, inkdrops_this_month) VALUES
+  -- Laura Fernández: 2 intercambios (200) + 1 meetup (200) = 400 pts en ABRIL
+  (1, u01, '2026-04', 400),
+  
+  -- Sofía Ramos: 1 intercambio (100) + 1 meetup (200) = 300 pts en ABRIL
+  (1, u03, '2026-04', 300),
+  
+  -- Elena Castillo: 1 intercambio (100) + 1 meetup (200) = 300 pts en ABRIL
+  (1, u05, '2026-04', 300),
+  
+  -- Pablo Moreno: 1 meetup (200) = 200 pts en ABRIL
+  (1, u06, '2026-04', 200)
+ON CONFLICT (community_id, user_id, month) DO NOTHING;
+
+-- ==============================================================
+-- INKDROPS HISTORY (Histórico de acciones)
+-- ==============================================================
+INSERT INTO inkdrops_history (user_id, action_type, points_granted, related_id, created_at) VALUES
+  -- Laura Fernández (u01) - Intercambios (ABRIL)
+  (u01, 'EXCHANGE_COMPLETED', 100, 1, now_ts - INTERVAL '5 days'),   -- April 2
+  (u01, 'EXCHANGE_COMPLETED', 100, null, now_ts - INTERVAL '2 days'), -- April 5
+  
+  -- Laura Fernández (u01) - Meetups asistidos (MARZO + ABRIL)
+  (u01, 'MEETUP_ATTENDED', 200, 1, now_ts - INTERVAL '30 days'),  -- Marzo 8
+  (u01, 'MEETUP_ATTENDED', 200, 2, now_ts - INTERVAL '4 days'),  -- April 3
+  
+  -- Sofía Ramos (u03) - Intercambio (ABRIL)
+  (u03, 'EXCHANGE_COMPLETED', 100, 2, now_ts - INTERVAL '3 days'),   -- April 4
+  
+  -- Sofía Ramos (u03) - Meetups (MARZO + ABRIL)
+  (u03, 'MEETUP_ATTENDED', 200, 5, now_ts - INTERVAL '15 days'),  -- Marzo 23
+  (u03, 'MEETUP_ATTENDED', 200, 6, now_ts - INTERVAL '1 day'), -- April 6
+  
+  -- Elena Castillo (u05) - Intercambio (ABRIL)
+  (u05, 'EXCHANGE_COMPLETED', 100, 3, now_ts - INTERVAL '1 day'),  -- April 6
+  
+  -- Elena Castillo (u05) - Meetups (MARZO + ABRIL)
+  (u05, 'MEETUP_ATTENDED', 200, 9, now_ts - INTERVAL '25 days'),  -- Marzo 13
+  (u05, 'MEETUP_ATTENDED', 200, 10, now_ts - INTERVAL '2 days'), -- April 5
+  
+  -- Pablo Moreno (u06) - Meetups (MARZO + ABRIL)
+  (u06, 'MEETUP_ATTENDED', 200, 7, now_ts - INTERVAL '18 days'),  -- Marzo 20
+  (u06, 'MEETUP_ATTENDED', 200, 8, now_ts - INTERVAL '3 days')  -- April 4
 ON CONFLICT DO NOTHING;
 
 END $$;

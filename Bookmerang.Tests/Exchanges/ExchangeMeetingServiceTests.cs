@@ -13,6 +13,7 @@ using MatchEntity = Bookmerang.Api.Models.Entities.Match;
 
 namespace Bookmerang.Tests.Exchanges;
 
+// TODO: cambiar chat ids por GUID si es necesario e instanciar el inkDrop service en el ExchangeMeetingService
 public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
     private AppDbContext _db = null!;

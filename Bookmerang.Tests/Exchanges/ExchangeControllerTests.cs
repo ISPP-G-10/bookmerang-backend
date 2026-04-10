@@ -24,7 +24,7 @@ public class ExchangeControllerTests(WebAppFixture fixture) : IClassFixture<WebA
     private record ExchangeTestData(
         string Token1, string Token2,
         Guid User1Id, Guid User2Id,
-        int ExchangeId, int ChatId);
+        int ExchangeId, Guid ChatId);
 
     private async Task<ExchangeTestData> SeedExchangeData(
         string prefix, ExchangeStatus status = ExchangeStatus.NEGOTIATING)
@@ -89,7 +89,7 @@ public class ExchangeControllerTests(WebAppFixture fixture) : IClassFixture<WebA
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(data.ChatId, body.GetProperty("chatId").GetInt32());
+        Assert.Equal(data.ChatId, body.GetProperty("chatId").GetInt32()); // TODO: actualizar, antes era id y ahora es GUID
         ClearAuth(_client);
     }
 

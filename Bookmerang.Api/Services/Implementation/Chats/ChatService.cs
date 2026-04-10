@@ -1,4 +1,5 @@
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Exceptions;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Models.DTOs;
@@ -27,8 +28,8 @@ public class ChatService(AppDbContext db) : IChatService
             .ToListAsync();
 
         var communityChatIds = chats.Where(c => c.Type == ChatType.COMMUNITY).Select(c => c.Id).ToList();
-        var communityNames = new Dictionary<int, string>();
-        
+        var communityNames = new Dictionary<Guid, string>();
+
         if (communityChatIds.Any())
         {
             communityNames = await _db.CommunityChats
@@ -65,10 +66,14 @@ public class ChatService(AppDbContext db) : IChatService
         return result;
     }
 
-    public async Task<ChatDto?> GetChatById(int chatId, Guid userId)
+    public async Task<ChatDto> GetChatById(Guid chatId, Guid userId)
     {
+        var chatExists = await _db.Chats.AnyAsync(c => c.Id == chatId);
+        if (!chatExists)
+            throw new NotFoundException("Chat no encontrado.");
+
         if (!await IsParticipant(chatId, userId))
-            return null;
+            throw new ForbiddenException("No tienes acceso a este chat.");
 
         var chat = await _db.Chats
             .Include(c => c.Participants)
@@ -76,7 +81,8 @@ public class ChatService(AppDbContext db) : IChatService
                     .ThenInclude(u => u.BaseUser)
             .FirstOrDefaultAsync(c => c.Id == chatId);
 
-        if (chat == null) return null;
+        if (chat == null)
+            throw new NotFoundException("Chat no encontrado.");
 
         var lastMessage = await _db.Messages
             .Include(m => m.Sender)
@@ -94,7 +100,7 @@ public class ChatService(AppDbContext db) : IChatService
             if (commChat != null)
             {
                 name = commChat.Community.Name;
-                
+
                 // Enriquecer participantes con roles de comunidad
                 userRoles = await _db.CommunityMembers
                     .Where(cm => cm.CommunityId == commChat.CommunityId)
@@ -110,7 +116,7 @@ public class ChatService(AppDbContext db) : IChatService
         return chat.ToDto(lastMessage, name);
     }
 
-    public async Task<List<MessageDto>> GetMessages(int chatId, Guid userId, int page, int pageSize)
+    public async Task<List<MessageDto>> GetMessages(Guid chatId, Guid userId, int page, int pageSize)
     {
         if (!await IsParticipant(chatId, userId))
             return new List<MessageDto>();
@@ -127,7 +133,7 @@ public class ChatService(AppDbContext db) : IChatService
         return messages.Select(m => m.ToDto()).ToList();
     }
 
-    public async Task<MessageDto?> SendMessage(int chatId, Guid senderId, string body)
+    public async Task<MessageDto?> SendMessage(Guid chatId, Guid senderId, string body)
     {
         if (!await IsParticipant(chatId, senderId))
             return null;
@@ -171,6 +177,7 @@ public class ChatService(AppDbContext db) : IChatService
 
         var chat = new Chat
         {
+            Id = Guid.NewGuid(),
             Type = type,
             CreatedAt = DateTime.UtcNow
         };
@@ -192,13 +199,13 @@ public class ChatService(AppDbContext db) : IChatService
         return await GetChatByIdInternal(chat.Id);
     }
 
-    public async Task<bool> IsParticipant(int chatId, Guid userId)
+    public async Task<bool> IsParticipant(Guid chatId, Guid userId)
     {
         return await _db.ChatParticipants
             .AnyAsync(cp => cp.ChatId == chatId && cp.UserId == userId);
     }
 
-    public async Task<bool> StartTyping(int chatId, Guid userId)
+    public async Task<bool> StartTyping(Guid chatId, Guid userId)
     {
         if (!await IsParticipant(chatId, userId))
             return false;
@@ -229,7 +236,7 @@ public class ChatService(AppDbContext db) : IChatService
         return true;
     }
 
-    public async Task<bool> StopTyping(int chatId, Guid userId)
+    public async Task<bool> StopTyping(Guid chatId, Guid userId)
     {
         var typingIndicator = await _db.TypingIndicators
             .FirstOrDefaultAsync(t => t.ChatId == chatId && t.UserId == userId);
@@ -242,7 +249,7 @@ public class ChatService(AppDbContext db) : IChatService
         return true;
     }
 
-    public async Task<List<TypingUserDto>> GetTypingUsers(int chatId, Guid userId)
+    public async Task<List<TypingUserDto>> GetTypingUsers(Guid chatId, Guid userId)
     {
         if (!await IsParticipant(chatId, userId))
             return new List<TypingUserDto>();
@@ -254,8 +261,8 @@ public class ChatService(AppDbContext db) : IChatService
         var typingUsers = await _db.TypingIndicators
             .Include(t => t.User)
                 .ThenInclude(u => u.BaseUser)
-            .Where(t => t.ChatId == chatId 
-                && t.UserId != userId 
+            .Where(t => t.ChatId == chatId
+                && t.UserId != userId
                 && t.StartedAt > timeoutThreshold)
             .Select(t => t.ToDto())
             .ToListAsync();
@@ -263,7 +270,7 @@ public class ChatService(AppDbContext db) : IChatService
         return typingUsers;
     }
 
-    private async Task<ChatDto?> GetChatByIdInternal(int chatId)
+    private async Task<ChatDto?> GetChatByIdInternal(Guid chatId)
     {
         var chat = await _db.Chats
             .Include(c => c.Participants)

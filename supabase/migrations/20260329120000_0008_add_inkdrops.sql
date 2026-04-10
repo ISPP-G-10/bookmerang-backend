@@ -1,0 +1,2 @@
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "inkdrops" int NOT NULL DEFAULT 0;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "inkdrops_last_updated" varchar NOT NULL DEFAULT '1970-01';

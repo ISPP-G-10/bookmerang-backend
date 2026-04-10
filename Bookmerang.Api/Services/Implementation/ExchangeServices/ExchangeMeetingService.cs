@@ -4,16 +4,19 @@ using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Services.Interfaces.Books;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Services.Implementation.ExchangeServices;
 
-public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_service, IBookRepository bookRepository) : IExchangeMeetingService
+public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_service, IBookRepository bookRepository, IInkdropsService inkdrops_service) : IExchangeMeetingService
 {
     private readonly AppDbContext _db = db;
     private readonly IExchangeService _exchange_service = exchange_service;
     private readonly IBookRepository _bookRepository = bookRepository;
+
+    private readonly IInkdropsService _inkdrops_service = inkdrops_service;
 
     private IQueryable<ExchangeMeeting> MeetingsWithProposer =>
         _db.ExchangeMeetings.Include(m => m.Proposer).ThenInclude(p => p.BaseUser);
@@ -129,6 +132,7 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
             book2.Status = BookStatus.EXCHANGED;
 
             await InvalidateCollateralExchanges(exchange.Match.Book1Id, exchange.Match.Book2Id, exchange.MatchId);
+            await _inkdrops_service.GrantExchangeInkdropsAsync(exchange.Match.User1Id, exchange.Match.User2Id);
         }
 
         await _db.SaveChangesAsync();

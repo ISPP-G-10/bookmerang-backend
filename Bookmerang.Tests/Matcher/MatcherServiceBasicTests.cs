@@ -638,7 +638,7 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
         var mockChatService = new Mock<IChatService>();
         mockChatService.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
             .ReturnsAsync(new ChatDto(
-                Id: chat.Id,
+                Id: Guid.NewGuid(),
                 Type: ChatType.EXCHANGE.ToString(),
                 CreatedAt: chat.CreatedAt,
                 Participants: [],
@@ -958,7 +958,7 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
 
         var chatMock = new Mock<IChatService>();
         chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(Id: chat.Id, Type: ChatType.EXCHANGE.ToString(), CreatedAt: chat.CreatedAt, Participants: [], LastMessage: null));
+            .ReturnsAsync(new ChatDto(Id: Guid.NewGuid(), Type: ChatType.EXCHANGE.ToString(), CreatedAt: chat.CreatedAt, Participants: [], LastMessage: null));
         var serviceWithChat = CreateServiceWithChat(_db, chatMock.Object);
 
         // B swipea RIGHT a libro de A → registra swipe
@@ -1044,7 +1044,7 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
 
         var chatMock = new Mock<IChatService>();
         chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(Id: chat.Id, Type: ChatType.EXCHANGE.ToString(), CreatedAt: chat.CreatedAt, Participants: [], LastMessage: null));
+            .ReturnsAsync(new ChatDto(Id: Guid.NewGuid(), Type: ChatType.EXCHANGE.ToString(), CreatedAt: chat.CreatedAt, Participants: [], LastMessage: null));
         var serviceWithChat = CreateServiceWithChat(_db, chatMock.Object);
 
         await serviceWithChat.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
@@ -1100,4 +1100,3 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
         Assert.Equal(book.Id, feedAfterUndo[0].Id);
     }
 }
-

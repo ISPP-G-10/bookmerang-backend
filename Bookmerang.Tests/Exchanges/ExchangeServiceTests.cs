@@ -11,6 +11,7 @@ using MatchEntity = Bookmerang.Api.Models.Entities.Match;
 
 namespace Bookmerang.Tests.Exchanges;
 
+// TODO: Corregir los chat ids por GUIDs
 public class ExchangeServiceTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
     private AppDbContext _db = null!;

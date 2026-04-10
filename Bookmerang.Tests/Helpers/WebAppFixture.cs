@@ -97,6 +97,7 @@ public class WebAppFixture : IAsyncLifetime
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookdropExchangeStatus>("bookdrop_exchange_status", t);
+        Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<InkdropsActionType>("inkdrops_action_type", t);
         #pragma warning restore CS0618
     }
 
@@ -111,7 +112,10 @@ public class WebAppFixture : IAsyncLifetime
         {
             "20260222163941_0001_extensions.sql",
             "20260222164018_0002_schema.sql",
-            "20260407000000_0008_bookdrop_exchange_status.sql"
+            "20260407000000_0008_bookdrop_exchange_status.sql", // TODO: verificar que no de problemas el haber metido las migraciones de los compañeros por encima
+            "20260307120000_0005_add_typing_indicators.sql",
+            "20260329120000_0008_add_inkdrops.sql",
+            "20260408120000_0008_chats_uuid_ids.sql"
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

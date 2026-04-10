@@ -237,7 +237,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
     /// donde ya conocemos chatId y otherUserId).
     /// </summary>
     private async Task<MatchCreatedDto> BuildMatchCreatedDto(
-        Match match, int chatId, Guid otherUserId)
+        Match match, Guid chatId, Guid otherUserId)
     {
         // Fix audit #6: FirstOrDefaultAsync para evitar crash si el usuario fue eliminado
         var otherUsername = await _db.Users
