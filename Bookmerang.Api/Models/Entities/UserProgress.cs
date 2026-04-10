@@ -16,6 +16,15 @@ public class UserProgress
     [Column("streak_weeks")]
     public int StreakWeeks { get; set; }
 
+    [Column("last_active_date")]
+    public DateTime? LastActiveDate { get; set; }
+
+    [Column("streak_start_date")]
+    public DateTime? StreakStartDate { get; set; }
+
+    [Column("last_decrement_date")]
+    public DateTime? LastDecrementDate { get; set; }
+
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; }
 }

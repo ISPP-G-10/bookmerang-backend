@@ -2,11 +2,17 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.Auth;
 using Bookmerang.Api.Services.Implementation.Bookdrop;
+using Bookmerang.Api.Services.Implementation.Inkdrops;
+using Bookmerang.Api.Services.Implementation.Leveling;
+using Bookmerang.Api.Services.Interfaces.Streaks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Npgsql.NameTranslation;
 using Testcontainers.PostgreSql;
+using Moq;
+using Bookmerang.Api.Models.DTOs;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Xunit;
 
 namespace Bookmerang.Tests.Helpers;
@@ -55,12 +61,23 @@ public class PostgresBookdropFixture : IAsyncLifetime
             })
             .Build();
 
-        return new AuthService(db, config);
+        var levelingService = new LevelingService(db);
+        
+        var inkdropsServiceMock = new Mock<IInkdropsService>();
+        inkdropsServiceMock.Setup(s => s.GetUserInkdropsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(new InkdropsDto(Guid.Empty, 0, DateTime.UtcNow.ToString("yyyy-MM")));
+            
+        return new AuthService(db, config, levelingService, inkdropsServiceMock.Object);
     }
 
     public BookdropService CreateBookdropService(AppDbContext db)
     {
         return new BookdropService(db);
+    }
+
+    public InkdropsService CreateInkdropsService(AppDbContext db, IStreakService streakService)
+    {
+        return new InkdropsService(db, streakService);
     }
 
     private static NpgsqlDataSource BuildDataSource(string connectionString)
@@ -87,6 +104,7 @@ public class PostgresBookdropFixture : IAsyncLifetime
         builder.MapEnum<MeetupStatus>("meetup_status", t);
         builder.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
         builder.MapEnum<PricingPlan>("pricing_plan", t);
+        builder.MapEnum<InkdropsActionType>("inkdrops_action_type", t);
 
         return builder.Build();
     }

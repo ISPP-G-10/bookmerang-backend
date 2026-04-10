@@ -3,15 +3,17 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Services.Implementation.ExchangeServices;
 
-public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_service) : IExchangeMeetingService
+public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_service, IInkdropsService inkdrops_service) : IExchangeMeetingService
 {
     private readonly AppDbContext _db = db;
     private readonly IExchangeService _exchange_service = exchange_service;
+    private readonly IInkdropsService _inkdrops_service = inkdrops_service;
 
     public async Task<ExchangeMeeting?> GetExchangeMeeting(int meetingId)
     {
@@ -120,7 +122,7 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         if (dto.MarkAsCompletedByUser2.HasValue)
             meeting.MarkAsCompletedByUser2 = dto.MarkAsCompletedByUser2.Value;
 
-        if (IsCompleted(meeting)) {
+        if (IsCompleted(meeting) && oldStatus != ExchangeStatus.COMPLETED) {
             exchange.Status = ExchangeStatus.COMPLETED;
 
             if (exchange.Match == null)
@@ -134,6 +136,7 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
 
             book1.OwnerId = exchange.Match.User2Id;
             book2.OwnerId = exchange.Match.User1Id;
+            await _inkdrops_service.GrantExchangeInkdropsAsync(exchange.Match.User1Id, exchange.Match.User2Id);
         }
         else
         {

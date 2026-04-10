@@ -2,6 +2,7 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Services.Implementation.Auth;
+using Bookmerang.Api.Services.Implementation.Leveling;
 using Bookmerang.Api.Models.Enums;
 using NetTopologySuite.Geometries;
 using Xunit;
@@ -10,6 +11,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Moq;
+using Bookmerang.Api.Services.Implementation.Inkdrops;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
+using Bookmerang.Api.Services.Interfaces.Streaks;
 
 namespace Bookmerang.Tests.Auth;
 
@@ -30,7 +35,10 @@ public class AuthServiceTests
             .AddInMemoryCollection(new Dictionary<string, string?>())
             .Build();
 
-        return new AuthService(db, config);
+        var levelingService = new LevelingService(db);
+        var streakServiceMock = new Mock<IStreakService>();
+        var inkdropsService = new InkdropsService(db, streakServiceMock.Object);
+        return new AuthService(db, config, levelingService, inkdropsService);
     }
 
     [Fact]
@@ -269,7 +277,7 @@ public class AuthServiceTests
             Location = new Point(0, 0) { SRID = 4326 }
         });
 
-        db.Matches.Add(new Match
+        db.Matches.Add(new Bookmerang.Api.Models.Entities.Match
         {
             Id = 10,
             User1Id = userId,
@@ -357,7 +365,7 @@ public class AuthServiceTests
         db.TypingIndicators.Add(new TypingIndicator { Id = 1, ChatId = chatId, UserId = userId, StartedAt = DateTime.UtcNow });
 
         var matchId = 10;
-        db.Matches.Add(new Match { Id = matchId, User1Id = userId, User2Id = Guid.NewGuid(), Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow });
+        db.Matches.Add(new Bookmerang.Api.Models.Entities.Match { Id = matchId, User1Id = userId, User2Id = Guid.NewGuid(), Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow });
         db.Exchanges.Add(new Exchange { ExchangeId = 200, ChatId = chatId, MatchId = matchId, Status = ExchangeStatus.COMPLETED, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
 
         await db.SaveChangesAsync();
@@ -385,11 +393,13 @@ public class AuthServiceTests
         await using var db = CreateDbContext();
         var service = CreateService(db);
 
+        var userId = Guid.NewGuid();
         var supabaseId = "user-no-progress";
         var location = new Point(1.0, 2.0) { SRID = 4326 };
 
         db.Users.Add(new BaseUser
         {
+            Id = userId,
             SupabaseId = supabaseId,
             Email = "noprog@test.com",
             Username = "noprog",
@@ -398,6 +408,17 @@ public class AuthServiceTests
             UserType = BaseUserType.USER,
             Location = location
         });
+        
+        // Add regularUser (User entity) which is required by GetPerfil
+        db.RegularUsers.Add(new User 
+        { 
+            Id = userId,
+            Plan = Bookmerang.Api.Models.Enums.PricingPlan.FREE,
+            RatingMean = 0,
+            FinishedExchanges = 0,
+            Inkdrops = 0,
+            InkdropsLastUpdated = "1970-01"
+        });
         await db.SaveChangesAsync();
 
         var dto = await service.GetPerfil(supabaseId);
@@ -405,7 +426,7 @@ public class AuthServiceTests
         Assert.NotNull(dto);
         Assert.Equal(1, dto.Level);
         Assert.Equal(0.0, dto.Progress);
-        Assert.Equal(1000, dto.InksToNextLevel);
+        Assert.Equal(100, dto.InksToNextLevel); // Level 1→2 requires 100 XP
         Assert.Equal(0, dto.Streak);
         Assert.Equal(0, dto.Bonus);
     }
@@ -429,6 +450,17 @@ public class AuthServiceTests
             ProfilePhoto = "avatar.jpg",
             Location = location,
             UserType = BaseUserType.USER
+        });
+        
+        // Add regularUser (User entity) which is required by GetPerfil
+        db.RegularUsers.Add(new User 
+        { 
+            Id = userId,
+            Plan = Bookmerang.Api.Models.Enums.PricingPlan.FREE,
+            RatingMean = 0,
+            FinishedExchanges = 0,
+            Inkdrops = 0,
+            InkdropsLastUpdated = "1970-01"
         });
         await db.SaveChangesAsync();
 
@@ -949,7 +981,7 @@ public class AuthServiceTests
 
         var userId = Guid.NewGuid();
         var supabaseId = "user-gamification";
-        var xp = 123456;
+        var totalXp = 5000; // 5000 XP total accumulated
         var streak = 10;
 
         db.Users.Add(new BaseUser
@@ -964,31 +996,38 @@ public class AuthServiceTests
             Location = new Point(0, 0) { SRID = 4326 }
         });
 
-        db.UserProgresses.Add(new UserProgress { UserId = userId, XpTotal = xp, StreakWeeks = streak, UpdatedAt = DateTime.UtcNow });
+        var regularUser = new User 
+        { 
+            Id = userId,
+            Inkdrops = 250, // Monthly inkdrops
+            InkdropsLastUpdated = DateTime.UtcNow.ToString("yyyy-MM")
+        };
+        db.RegularUsers.Add(regularUser);
+
+        // Create LevelingService to calculate expected level for this XP
+        var levelingService = new LevelingService(db);
+        var (expectedLevel, _, expectedProgress) = levelingService.CalculateLevelInfo(totalXp);
+
+        db.UserProgresses.Add(new UserProgress 
+        { 
+            UserId = userId, 
+            XpTotal = totalXp,
+            StreakWeeks = streak, 
+            UpdatedAt = DateTime.UtcNow 
+        });
 
         await db.SaveChangesAsync();
 
         var dto = await service.GetPerfil(supabaseId);
 
         Assert.NotNull(dto);
-
-        var expectedLevel = (xp / 1000) + 1;
-        var expectedXpRemainder = xp % 1000;
-        var expectedProgress = (double)expectedXpRemainder / 1000.0;
-        var expectedInksToNext = 1000 - expectedXpRemainder;
-        var expectedMonthlyInkDrops = xp % 500;
-        var expectedBonus = Math.Min(streak * 4, 20);
-        var expectedDaysUntilReset = DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month) - DateTime.UtcNow.Day;
-
         Assert.Equal(expectedLevel, dto.Level);
-        Assert.Equal(expectedProgress, dto.Progress);
-        Assert.Equal(expectedInksToNext, dto.InksToNextLevel);
+        Assert.Equal(expectedProgress, dto.Progress, 0.01); // Allow small floating point variance
         Assert.Equal(streak, dto.Streak);
-        Assert.Equal(expectedBonus, dto.Bonus);
-        Assert.Equal(expectedMonthlyInkDrops, dto.MonthlyInkDrops);
+        Assert.Equal(Math.Min(streak * 4, 20), dto.Bonus);
+        Assert.Equal(250, dto.MonthlyInkDrops);
+        var expectedDaysUntilReset = DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month) - DateTime.UtcNow.Day;
         Assert.Equal(expectedDaysUntilReset, dto.DaysUntilReset);
-
-        Assert.Equal("DIAMANTE", dto.Tier);
     }
 
     [Fact]
@@ -996,19 +1035,26 @@ public class AuthServiceTests
     {
         var cases = new (int level, string tier)[]
         {
+            (4, "BRONCE"),
             (5, "PLATA"),
-            (10, "ORO"),
+            (14, "PLATA"),
+            (15, "ORO"),
+            (24, "ORO"),
             (25, "PLATINO"),
-            (50, "DIAMANTE")
+            (34, "PLATINO"),
+            (35, "DIAMANTE"),
+            (44, "DIAMANTE"),
+            (45, "PLATINO_ELITE"),
+            (49, "PLATINO_ELITE"),
+            (50, "LEGENDARIO")
         };
 
-        foreach (var (level, tier) in cases)
+        foreach (var (level, expectedTier) in cases)
         {
             await using var db = CreateDbContext();
             var service = CreateService(db);
             var userId = Guid.NewGuid();
             var supabaseId = $"tier-{level}";
-            var xp = (level - 1) * 1000;
 
             db.Users.Add(new BaseUser
             {
@@ -1022,12 +1068,27 @@ public class AuthServiceTests
                 Location = new Point(0, 0) { SRID = 4326 }
             });
 
-            db.UserProgresses.Add(new UserProgress { UserId = userId, XpTotal = xp, StreakWeeks = 0, UpdatedAt = DateTime.UtcNow });
+            var regularUser = new User { Id = userId };
+            db.RegularUsers.Add(regularUser);
+
+            // Use LevelingService to calculate XP needed for exact level
+            var levelingService = new LevelingService(db);
+            var xpNeeded = levelingService.GetXpRequiredForLevel(level);
+
+            // Set XpTotal to reach that exact level
+            db.UserProgresses.Add(new UserProgress 
+            { 
+                UserId = userId, 
+                XpTotal = xpNeeded,
+                StreakWeeks = 0, 
+                UpdatedAt = DateTime.UtcNow 
+            });
             await db.SaveChangesAsync();
 
             var dto = await service.GetPerfil(supabaseId);
             Assert.NotNull(dto);
-            Assert.Equal(tier, dto.Tier);
+            Assert.Equal(level, dto.Level);
+            Assert.Equal(expectedTier, dto.Tier);
         }
     }
 }

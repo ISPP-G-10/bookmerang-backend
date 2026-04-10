@@ -118,6 +118,7 @@ public class PostgresBookspotFixture : IAsyncLifetime
             "20260222163941_0001_extensions.sql",
             "20260222164018_0002_schema.sql",
             "20260307120000_0005_add_typing_indicators.sql",
+            "20260329120000_0008_add_inkdrops.sql",
             "20260408120000_0008_chats_uuid_ids.sql"
         })
         {

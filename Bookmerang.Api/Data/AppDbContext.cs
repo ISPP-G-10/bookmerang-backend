@@ -37,6 +37,8 @@ public class AppDbContext : DbContext
     public DbSet<Meetup> Meetups => Set<Meetup>();
     public DbSet<BookdropUser> BookdropUsers => Set<BookdropUser>();
     public DbSet<MeetupAttendance> MeetupAttendances => Set<MeetupAttendance>();
+    public DbSet<CommunityMonthlyScore> CommunityMonthlyScores => Set<CommunityMonthlyScore>();
+    public DbSet<InkdropsHistory> InkdropsHistories => Set<InkdropsHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +62,7 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<BookspotStatus>();
         modelBuilder.HasPostgresEnum<PricingPlan>();
         modelBuilder.HasPostgresEnum<BaseUserType>();
+        modelBuilder.HasPostgresEnum<InkdropsActionType>();
 
         modelBuilder.Entity<BaseUser>(entity =>
         {
@@ -486,6 +489,17 @@ public class AppDbContext : DbContext
             e.Property(x => x.UserId).HasColumnName("user_id");
             e.Property(x => x.SelectedBookId).HasColumnName("selected_book_id");
             e.Property(x => x.Status).HasColumnName("status");
+        });
+        modelBuilder.Entity<CommunityMonthlyScore>(e =>
+        {
+            e.ToTable("community_monthly_scores");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CommunityId).HasColumnName("community_id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.Month).HasColumnName("month");
+            e.Property(x => x.InkdropsThisMonth).HasColumnName("inkdrops_this_month");
+
+            e.HasIndex(x => new { x.CommunityId, x.UserId, x.Month }).IsUnique();
         });
     }
 }
