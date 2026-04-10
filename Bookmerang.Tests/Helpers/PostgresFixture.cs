@@ -8,11 +8,16 @@ using Xunit;
 
 namespace Bookmerang.Tests.Helpers;
 
-public class PostgresChatsFixture : IAsyncLifetime
+/// <summary>
+/// Fixture PostgreSQL+PostGIS generalizada.
+/// Ejecuta todas las migraciones de esquema y mapea todos los enums,
+/// por lo que sirve como base para cualquier suite de tests de servicio.
+/// </summary>
+public class PostgresFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
         .WithImage("postgis/postgis:16-3.4")
-        .WithDatabase("bookmerang_test_chats")
+        .WithDatabase("bookmerang_test")
         .WithUsername("test")
         .WithPassword("test")
         .Build();
@@ -23,7 +28,6 @@ public class PostgresChatsFixture : IAsyncLifetime
     {
         await _container.StartAsync();
         var connectionString = _container.GetConnectionString();
-
         await RunMigrationsAsync(connectionString);
         _dataSource = BuildDataSource(connectionString);
     }
@@ -39,7 +43,6 @@ public class PostgresChatsFixture : IAsyncLifetime
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql(_dataSource, o => o.UseNetTopologySuite())
             .Options;
-
         return new AppDbContext(options);
     }
 
@@ -49,22 +52,24 @@ public class PostgresChatsFixture : IAsyncLifetime
         builder.UseNetTopologySuite();
 
         var t = new NpgsqlNullNameTranslator();
-        builder.MapEnum<ChatType>("chat_type", t);
-        builder.MapEnum<BooksExtension>("books_extension", t);
-        builder.MapEnum<BookStatus>("book_status", t);
-        builder.MapEnum<BookCondition>("book_condition", t);
-        builder.MapEnum<CoverType>("cover_type", t);
-        builder.MapEnum<SwipeDirection>("swipe_direction", t);
-        builder.MapEnum<MatchStatus>("match_status", t);
-        builder.MapEnum<ExchangeStatus>("exchange_status", t);
-        builder.MapEnum<ExchangeMode>("exchange_mode", t);
-        builder.MapEnum<ExchangeMeetingStatus>("exchange_meeting_status", t);
-        builder.MapEnum<CommunityStatus>("community_status", t);
-        builder.MapEnum<CommunityRole>("community_role", t);
-        builder.MapEnum<MeetupStatus>("meetup_status", t);
-        builder.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
-        builder.MapEnum<BookspotStatus>("bookspot_status", t);
-        builder.MapEnum<PricingPlan>("pricing_plan", t);
+        builder.MapEnum<BaseUserType>           ("base_user_type",            t);
+        builder.MapEnum<BookCondition>          ("book_condition",            t);
+        builder.MapEnum<BookStatus>             ("book_status",               t);
+        builder.MapEnum<BookdropExchangeStatus> ("bookdrop_exchange_status",  t);
+        builder.MapEnum<BooksExtension>         ("books_extension",           t);
+        builder.MapEnum<BookspotStatus>         ("bookspot_status",           t);
+        builder.MapEnum<ChatType>               ("chat_type",                 t);
+        builder.MapEnum<CommunityRole>          ("community_role",            t);
+        builder.MapEnum<CommunityStatus>        ("community_status",          t);
+        builder.MapEnum<CoverType>              ("cover_type",                t);
+        builder.MapEnum<ExchangeMeetingStatus>  ("exchange_meeting_status",   t);
+        builder.MapEnum<ExchangeMode>           ("exchange_mode",             t);
+        builder.MapEnum<ExchangeStatus>         ("exchange_status",           t);
+        builder.MapEnum<MatchStatus>            ("match_status",              t);
+        builder.MapEnum<MeetupAttendanceStatus> ("meetup_attendance_status",  t);
+        builder.MapEnum<MeetupStatus>           ("meetup_status",             t);
+        builder.MapEnum<PricingPlan>            ("pricing_plan",              t);
+        builder.MapEnum<SwipeDirection>         ("swipe_direction",           t);
 
         return builder.Build();
     }
@@ -76,16 +81,15 @@ public class PostgresChatsFixture : IAsyncLifetime
         await using var plainSource = NpgsqlDataSource.Create(connectionString);
         await using var conn = await plainSource.OpenConnectionAsync();
 
-        var migrationFiles = new[]
+        foreach (var file in new[]
         {
             "20260222163941_0001_extensions.sql",
             "20260222164018_0002_schema.sql",
             "20260222165524_0003_indexes.sql",
             "20260307120000_0005_add_typing_indicators.sql",
-            "20260317110000_0004_match_pair_unique_index.sql"
-        };
-
-        foreach (var file in migrationFiles)
+            "20260317110000_0004_match_pair_unique_index.sql",
+            "20260407000000_0008_bookdrop_exchange_status.sql"
+        })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));
             await using var cmd = conn.CreateCommand();
@@ -98,12 +102,13 @@ public class PostgresChatsFixture : IAsyncLifetime
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
 
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "supabase", "migrations")))
+        while (dir != null &&
+               !Directory.Exists(Path.Combine(dir.FullName, "supabase", "migrations")))
             dir = dir.Parent;
 
         if (dir == null)
             throw new DirectoryNotFoundException(
-                "No se encontró el directorio supabase/migrations subiendo desde el binario de test.");
+                "No se encontro supabase/migrations subiendo desde el binario de test.");
 
         return Path.Combine(dir.FullName, "supabase", "migrations");
     }

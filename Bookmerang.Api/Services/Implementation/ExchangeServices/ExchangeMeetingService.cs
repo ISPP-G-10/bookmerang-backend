@@ -15,6 +15,16 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
     private readonly IExchangeService _exchange_service = exchange_service;
     private readonly IBookRepository _bookRepository = bookRepository;
 
+    private IQueryable<ExchangeMeeting> MeetingsWithProposer =>
+        _db.ExchangeMeetings.Include(m => m.Proposer).ThenInclude(p => p.BaseUser);
+
+    private async Task LoadProposer(ExchangeMeeting meeting)
+    {
+        meeting.Proposer = await _db.RegularUsers
+            .Include(u => u.BaseUser)
+            .FirstAsync(u => u.Id == meeting.ProposerId);
+    }
+
     // Helper reutilizable para validar campos y resolver la localización
     private async Task<Point> ValidateAndResolveLocation(ExchangeMode mode, int? bookspotId, double? latitud, double? longitud, DateTime scheduledAt)
     {
@@ -40,25 +50,22 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
 
     public async Task<ExchangeMeeting?> GetExchangeMeeting(int meetingId)
     {
-        return await _db.ExchangeMeetings.Include(m => m.Proposer).FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
+        return await MeetingsWithProposer.FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
     }
 
     public async Task<List<ExchangeMeeting>> GetMeetingsByUserId(Guid proposerId)
     {
-        return await _db.ExchangeMeetings
-            .Include(m => m.Proposer)
-            .Where(m => m.ProposerId == proposerId)
-            .ToListAsync();
+        return await MeetingsWithProposer.Where(m => m.ProposerId == proposerId).ToListAsync();
     }
 
     public async Task<List<ExchangeMeeting>> GetAllExchangeMeetings()
     {
-        return await _db.ExchangeMeetings.Include(m => m.Proposer).ToListAsync();
+        return await MeetingsWithProposer.ToListAsync();
     }
 
     public async Task<ExchangeMeeting?> GetMeetingByExchangeId(int exchangeId)
     {
-        return await _db.ExchangeMeetings.FirstOrDefaultAsync(m => m.ExchangeId == exchangeId);
+        return await MeetingsWithProposer.FirstOrDefaultAsync(m => m.ExchangeId == exchangeId);
     }
 
     public async Task<ExchangeMeeting> CreateExchangeMeeting(CreateExchangeMeetingDto dto, Guid proposerId)
@@ -78,6 +85,7 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         _db.ExchangeMeetings.Add(meeting);
         await _db.SaveChangesAsync();
 
+        await LoadProposer(meeting);
         return meeting;
     }
 
@@ -93,6 +101,7 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
 
         await _db.SaveChangesAsync();
 
+        await LoadProposer(meeting);
         return meeting;
     }
 
@@ -193,13 +202,5 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         } while (exists);
 
         return pin;
-    }
-
-    public async Task RemoveByExchangeId(int exchangeId)
-    {
-        var meetings = await _db.ExchangeMeetings
-            .Where(em => em.ExchangeId == exchangeId)
-            .ToListAsync();
-        _db.ExchangeMeetings.RemoveRange(meetings);
     }
 }

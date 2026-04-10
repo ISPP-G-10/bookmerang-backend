@@ -10,9 +10,11 @@ using Moq;
 using NetTopologySuite.Geometries;
 using Xunit;
 
+using MatchEntity = Bookmerang.Api.Models.Entities.Match;
+
 namespace Bookmerang.Tests.Exchanges;
 
-public class ExchangeMeetingServiceTests : IAsyncLifetime
+public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
     private AppDbContext _db = null!;
     private Mock<IExchangeService> _mockExchangeService = null!;
@@ -21,7 +23,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 
     public Task InitializeAsync()
     {
-        _db = DbContextFactory.CreateInMemory();
+        _db = fixture.CreateDbContext();
         _mockExchangeService = new Mock<IExchangeService>();
         _mockBookRepository = new Mock<IBookRepository>();
         _service = new ExchangeMeetingService(_db, _mockExchangeService.Object, _mockBookRepository.Object);
@@ -30,8 +32,60 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await _db.Database.EnsureDeletedAsync();
         await _db.DisposeAsync();
+    }
+
+    // ── Seed helpers ────────────────────────────────────────────────
+
+    private async Task<Guid> SeedUser(string prefix)
+    {
+        var id = Guid.NewGuid();
+        _db.Users.Add(new BaseUser
+        {
+            Id = id,
+            SupabaseId = $"supa_{id:N}",
+            Email = $"{prefix}_{id:N}@test.com",
+            Username = prefix,
+            Name = $"{prefix} User",
+            ProfilePhoto = "photo.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(-5.98, 37.39) { SRID = 4326 }
+        });
+        _db.RegularUsers.Add(new User { Id = id });
+        await _db.SaveChangesAsync();
+        return id;
+    }
+
+    private record SeedData(Guid User1Id, Guid User2Id, Exchange Exchange, Book Book1, Book Book2, MatchEntity Match);
+
+    private async Task<SeedData> SeedExchangeChain(string prefix, ExchangeStatus status = ExchangeStatus.ACCEPTED)
+    {
+        var u1 = await SeedUser($"{prefix}_u1");
+        var u2 = await SeedUser($"{prefix}_u2");
+
+        var book1 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED };
+        var book2 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
+        _db.Books.AddRange(book1, book2);
+        await _db.SaveChangesAsync();
+
+        var match = new MatchEntity
+        {
+            User1Id = u1, User2Id = u2,
+            Book1Id = book1.Id, Book2Id = book2.Id,
+            Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow
+        };
+        _db.Matches.Add(match);
+        await _db.SaveChangesAsync();
+
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        var exchange = new Exchange { ChatId = chat.Id, MatchId = match.Id, Status = status };
+        _db.Exchanges.Add(exchange);
+        await _db.SaveChangesAsync();
+
+        return new SeedData(u1, u2, exchange, book1, book2, match);
     }
 
     private async Task<Bookspot> SeedBookspot(bool isBookdrop = false)
@@ -57,6 +111,8 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
     [InlineData(ExchangeMode.CUSTOM, false)]
     public async Task CreateExchangeMeeting_HappyPath_ThreeModes(ExchangeMode mode, bool isBookdrop)
     {
+        var seed = await SeedExchangeChain($"create_{mode}");
+
         int? bookspotId = null;
         double? latitud = null;
         double? longitud = null;
@@ -73,7 +129,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
         }
 
         var dto = new CreateExchangeMeetingDto(
-            ExchangeId: 1,
+            ExchangeId: seed.Exchange.ExchangeId,
             ExchangeMode: mode,
             BookspotId: bookspotId,
             Latitud: latitud,
@@ -81,12 +137,13 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
             ScheduledAt: DateTime.UtcNow.AddHours(1)
         );
 
-        var result = await _service.CreateExchangeMeeting(dto, Guid.NewGuid());
+        var result = await _service.CreateExchangeMeeting(dto, seed.User1Id);
 
         Assert.NotNull(result);
         Assert.Equal(mode, result.ExchangeMode);
         Assert.NotNull(result.CustomLocation);
-        Assert.Single(_db.ExchangeMeetings);
+        Assert.NotNull(result.Proposer);
+        Assert.NotNull(result.Proposer.BaseUser);
     }
 
     [Fact]
@@ -150,15 +207,14 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
     [Fact]
     public async Task CounterProposeMeeting_HappyPath_UpdatesMeeting()
     {
+        var seed = await SeedExchangeChain("counter");
         var bookspot = await SeedBookspot(isBookdrop: false);
-        var user1Id = Guid.NewGuid();
-        var user2Id = Guid.NewGuid();
 
         var meeting = new ExchangeMeeting
         {
-            ExchangeId = 1,
+            ExchangeId = seed.Exchange.ExchangeId,
             ExchangeMode = ExchangeMode.CUSTOM,
-            ProposerId = user1Id,
+            ProposerId = seed.User1Id,
             CustomLocation = new Point(-3.0, 40.0) { SRID = 4326 },
             ScheduledAt = DateTime.UtcNow.AddHours(2)
         };
@@ -174,11 +230,13 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
             ScheduledAt: scheduledAt
         );
 
-        var result = await _service.CounterProposeMeeting(meeting, dto, user2Id);
+        var result = await _service.CounterProposeMeeting(meeting, dto, seed.User2Id);
 
         Assert.Equal(ExchangeMode.BOOKSPOT, result.ExchangeMode);
-        Assert.Equal(user2Id, result.ProposerId);
+        Assert.Equal(seed.User2Id, result.ProposerId);
         Assert.Equal(scheduledAt, result.ScheduledAt);
+        Assert.NotNull(result.Proposer);
+        Assert.NotNull(result.Proposer.BaseUser);
     }
 
     // --- MarkAsCompleted ---
@@ -186,13 +244,13 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
     [Fact]
     public async Task MarkAsCompleted_OnlyOneUser_SetsOnlyOneFlag()
     {
-        var user1Id = Guid.NewGuid();
+        var seed = await SeedExchangeChain("mark_one");
 
         var meeting = new ExchangeMeeting
         {
-            ExchangeId = 1,
+            ExchangeId = seed.Exchange.ExchangeId,
             ExchangeMode = ExchangeMode.BOOKSPOT,
-            ProposerId = user1Id,
+            ProposerId = seed.User1Id,
             CustomLocation = new Point(0, 0) { SRID = 4326 },
             ScheduledAt = DateTime.UtcNow.AddHours(1),
             MarkAsCompletedByUser1 = false,
@@ -201,7 +259,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
         _db.ExchangeMeetings.Add(meeting);
         await _db.SaveChangesAsync();
 
-        await _service.MarkAsCompleted(meeting, user1Id);
+        await _service.MarkAsCompleted(meeting, seed.User1Id);
 
         Assert.True(meeting.MarkAsCompletedByUser1);
         Assert.False(meeting.MarkAsCompletedByUser2);
@@ -211,61 +269,33 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
     [Fact]
     public async Task MarkAsCompleted_BothUsers_CompletesExchangeAndSwapsBooks()
     {
-        var user1Id = Guid.NewGuid();
-        var user2Id = Guid.NewGuid();
+        var seed = await SeedExchangeChain("mark_both");
 
-        var book1 = new Book { OwnerId = user1Id, Status = BookStatus.PUBLISHED };
-        var book2 = new Book { OwnerId = user2Id, Status = BookStatus.PUBLISHED };
-        _db.Books.AddRange(book1, book2);
-        await _db.SaveChangesAsync();
-
-        var match = new Api.Models.Entities.Match
-        {
-            User1Id = user1Id,
-            User2Id = user2Id,
-            Book1Id = book1.Id,
-            Book2Id = book2.Id,
-            Status = MatchStatus.CHAT_CREATED,
-            CreatedAt = DateTime.UtcNow
-        };
-        _db.Matches.Add(match);
-        await _db.SaveChangesAsync();
-
-        var exchange = new Exchange
-        {
-            ChatId = 1,
-            MatchId = match.Id,
-            Status = ExchangeStatus.ACCEPTED
-        };
-        _db.Exchanges.Add(exchange);
-        await _db.SaveChangesAsync();
-
-        // Objeto con Match cargado que devuelve el mock
         var exchangeWithMatch = new Exchange
         {
-            ExchangeId = exchange.ExchangeId,
-            ChatId = 1,
-            MatchId = match.Id,
+            ExchangeId = seed.Exchange.ExchangeId,
+            ChatId = seed.Exchange.ChatId,
+            MatchId = seed.Match.Id,
             Status = ExchangeStatus.ACCEPTED,
-            Match = match
+            Match = seed.Match
         };
 
         _mockExchangeService
-            .Setup(s => s.GetExchangeWithMatch(exchange.ExchangeId))
+            .Setup(s => s.GetExchangeWithMatch(seed.Exchange.ExchangeId))
             .ReturnsAsync(exchangeWithMatch);
 
         _mockBookRepository
-            .Setup(r => r.GetByIdOrThrowAsync(book1.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(book1);
+            .Setup(r => r.GetByIdOrThrowAsync(seed.Book1.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(seed.Book1);
         _mockBookRepository
-            .Setup(r => r.GetByIdOrThrowAsync(book2.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(book2);
+            .Setup(r => r.GetByIdOrThrowAsync(seed.Book2.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(seed.Book2);
 
         var meeting = new ExchangeMeeting
         {
-            ExchangeId = exchange.ExchangeId,
+            ExchangeId = seed.Exchange.ExchangeId,
             ExchangeMode = ExchangeMode.BOOKSPOT,
-            ProposerId = user1Id,
+            ProposerId = seed.User1Id,
             CustomLocation = new Point(0, 0) { SRID = 4326 },
             ScheduledAt = DateTime.UtcNow.AddHours(1),
             MarkAsCompletedByUser1 = true,
@@ -274,15 +304,15 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
         _db.ExchangeMeetings.Add(meeting);
         await _db.SaveChangesAsync();
 
-        await _service.MarkAsCompleted(meeting, user2Id);
+        await _service.MarkAsCompleted(meeting, seed.User2Id);
 
         Assert.True(meeting.MarkAsCompletedByUser1);
         Assert.True(meeting.MarkAsCompletedByUser2);
         Assert.Equal(ExchangeStatus.COMPLETED, exchangeWithMatch.Status);
-        Assert.Equal(user2Id, book1.OwnerId);
-        Assert.Equal(user1Id, book2.OwnerId);
-        Assert.Equal(BookStatus.EXCHANGED, book1.Status);
-        Assert.Equal(BookStatus.EXCHANGED, book2.Status);
+        Assert.Equal(seed.User2Id, seed.Book1.OwnerId);
+        Assert.Equal(seed.User1Id, seed.Book2.OwnerId);
+        Assert.Equal(BookStatus.EXCHANGED, seed.Book1.Status);
+        Assert.Equal(BookStatus.EXCHANGED, seed.Book2.Status);
     }
 
     // --- InvalidateCollateralExchanges ---
@@ -290,14 +320,30 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
     [Fact]
     public async Task InvalidateCollateralExchanges_RejectsAffectedAndRefusesMeetings()
     {
-        var match1 = new Api.Models.Entities.Match { User1Id = Guid.NewGuid(), User2Id = Guid.NewGuid(), Book1Id = 1, Book2Id = 2, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
-        var match2 = new Api.Models.Entities.Match { User1Id = Guid.NewGuid(), User2Id = Guid.NewGuid(), Book1Id = 1, Book2Id = 3, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
-        var match3 = new Api.Models.Entities.Match { User1Id = Guid.NewGuid(), User2Id = Guid.NewGuid(), Book1Id = 5, Book2Id = 6, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
+        var u1 = await SeedUser("inv_u1");
+        var u2 = await SeedUser("inv_u2");
+
+        var book1 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED };
+        var book2 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
+        var book3 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
+        var book5 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED };
+        var book6 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
+        _db.Books.AddRange(book1, book2, book3, book5, book6);
+        await _db.SaveChangesAsync();
+
+        var match1 = new MatchEntity { User1Id = u1, User2Id = u2, Book1Id = book1.Id, Book2Id = book2.Id, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
+        var match2 = new MatchEntity { User1Id = u1, User2Id = u2, Book1Id = book1.Id, Book2Id = book3.Id, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
+        var match3 = new MatchEntity { User1Id = u1, User2Id = u2, Book1Id = book5.Id, Book2Id = book6.Id, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
         _db.Matches.AddRange(match1, match2, match3);
         await _db.SaveChangesAsync();
 
-        var exchange2 = new Exchange { ChatId = 1, MatchId = match2.Id, Status = ExchangeStatus.NEGOTIATING };
-        var exchange3 = new Exchange { ChatId = 2, MatchId = match3.Id, Status = ExchangeStatus.NEGOTIATING };
+        var chat2 = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        var chat3 = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.AddRange(chat2, chat3);
+        await _db.SaveChangesAsync();
+
+        var exchange2 = new Exchange { ChatId = chat2.Id, MatchId = match2.Id, Status = ExchangeStatus.NEGOTIATING };
+        var exchange3 = new Exchange { ChatId = chat3.Id, MatchId = match3.Id, Status = ExchangeStatus.NEGOTIATING };
         _db.Exchanges.AddRange(exchange2, exchange3);
         await _db.SaveChangesAsync();
 
@@ -305,7 +351,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
         {
             ExchangeId = exchange2.ExchangeId,
             ExchangeMode = ExchangeMode.BOOKSPOT,
-            ProposerId = Guid.NewGuid(),
+            ProposerId = u1,
             CustomLocation = new Point(0, 0) { SRID = 4326 },
             ScheduledAt = DateTime.UtcNow.AddHours(1),
             MeetingStatus = ExchangeMeetingStatus.PROPOSAL
@@ -313,7 +359,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
         _db.ExchangeMeetings.Add(meeting2);
         await _db.SaveChangesAsync();
 
-        await _service.InvalidateCollateralExchanges(book1Id: 1, book2Id: 2, completedMatchId: match1.Id);
+        await _service.InvalidateCollateralExchanges(book1Id: book1.Id, book2Id: book2.Id, completedMatchId: match1.Id);
 
         Assert.Equal(ExchangeStatus.REJECTED, exchange2.Status);
         Assert.Equal(ExchangeMeetingStatus.REFUSED, meeting2.MeetingStatus);
@@ -325,11 +371,13 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
     [Fact]
     public async Task AcceptMeeting_NonBookdrop_SetsAcceptedWithoutPin()
     {
+        var seed = await SeedExchangeChain("accept_no_bd");
+
         var meeting = new ExchangeMeeting
         {
-            ExchangeId = 1,
+            ExchangeId = seed.Exchange.ExchangeId,
             ExchangeMode = ExchangeMode.BOOKSPOT,
-            ProposerId = Guid.NewGuid(),
+            ProposerId = seed.User1Id,
             CustomLocation = new Point(0, 0) { SRID = 4326 },
             ScheduledAt = DateTime.UtcNow.AddHours(1),
             MeetingStatus = ExchangeMeetingStatus.PROPOSAL,
@@ -348,14 +396,15 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
     [Fact]
     public async Task AcceptMeeting_BookdropMode_GeneratesPinAndSetsStatus()
     {
+        var seed = await SeedExchangeChain("accept_bd");
         var bookspot = await SeedBookspot(isBookdrop: true);
 
         var meeting = new ExchangeMeeting
         {
-            ExchangeId = 1,
+            ExchangeId = seed.Exchange.ExchangeId,
             ExchangeMode = ExchangeMode.BOOKDROP,
             BookspotId = bookspot.Id,
-            ProposerId = Guid.NewGuid(),
+            ProposerId = seed.User1Id,
             CustomLocation = new Point(0, 0) { SRID = 4326 },
             ScheduledAt = DateTime.UtcNow.AddHours(1),
             MeetingStatus = ExchangeMeetingStatus.PROPOSAL,

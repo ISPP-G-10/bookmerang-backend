@@ -1,85 +1,16 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Bookmerang.Tests.Helpers;
 using Xunit;
 
+using static Bookmerang.Tests.Helpers.AuthTestHelper;
+
 namespace Bookmerang.Tests.Bookdrop;
 
-public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixture>
+public class BookdropControllerTests(WebAppFixture fixture) : IClassFixture<WebAppFixture>
 {
-    private readonly HttpClient _client;
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-
-    public BookdropControllerTests(BookdropWebApplicationFixture fixture)
-    {
-        _client = fixture.Factory.CreateClient();
-    }
-
-    // ── Helpers ──────────────────────────────────────────────────────
-
-    private async Task<string> RegisterBookdropAndGetToken(string email, string username, string nombre)
-    {
-        var response = await _client.PostAsJsonAsync("/api/auth/register/business", new
-        {
-            email,
-            password = "Test1234",
-            username,
-            name = "Test Owner",
-            profilePhoto = (string?)null,
-            nombreEstablecimiento = nombre,
-            addressText = "Calle Test 1, Sevilla",
-            latitud = 37.3886,
-            longitud = -5.9823
-        });
-        response.EnsureSuccessStatusCode();
-
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        return body.GetProperty("accessToken").GetString()!;
-    }
-
-    private async Task<string> RegisterUserAndGetToken(string email, string username)
-    {
-        var response = await _client.PostAsJsonAsync("/api/auth/register", new
-        {
-            email,
-            password = "Test1234",
-            username,
-            name = "Normal User",
-            profilePhoto = "photo.jpg",
-            userType = 2,
-            latitud = 37.3886,
-            longitud = -5.9823
-        });
-        response.EnsureSuccessStatusCode();
-
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        return body.GetProperty("accessToken").GetString()!;
-    }
-
-    private async Task<string> LoginAndGetToken(string email)
-    {
-        var response = await _client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email,
-            password = "Test1234"
-        });
-        response.EnsureSuccessStatusCode();
-
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        return body.GetProperty("accessToken").GetString()!;
-    }
-
-    private void SetAuth(string token)
-    {
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    }
-
-    private void ClearAuth()
-    {
-        _client.DefaultRequestHeaders.Authorization = null;
-    }
+    private readonly HttpClient _client = fixture.Factory.CreateClient();
 
     // ── Bookdrop NO puede acceder a endpoints de usuario ──
 
@@ -89,18 +20,18 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
     [InlineData("DELETE", "/api/auth/perfil")]
     public async Task BookdropToken_CannotAccessUserEndpoints_Returns403(string method, string url)
     {
-        var token = await RegisterBookdropAndGetToken(
+        var (token, _) = await RegisterBookdrop(_client,
             $"sec7_{method}_{url.Replace("/", "_")}@test.com",
             $"sec7_{method}_{url.Replace("/", "_")}",
             "Local Sec 7");
 
-        SetAuth(token);
+        SetAuth(_client, token);
 
         var request = new HttpRequestMessage(new HttpMethod(method), url);
         var response = await _client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        ClearAuth();
+        ClearAuth(_client);
     }
 
     // ── Usuario normal NO puede acceder a endpoints de bookdrop ──
@@ -110,17 +41,17 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
     [InlineData("DELETE", "/api/bookdrop/perfil")]
     public async Task UserToken_CannotAccessBookdropEndpoints_Returns403(string method, string url)
     {
-        var token = await RegisterUserAndGetToken(
+        var (token, _) = await RegisterUser(_client,
             $"sec8_{method}_{url.Replace("/", "_")}@test.com",
             $"sec8_{method}_{url.Replace("/", "_")}");
 
-        SetAuth(token);
+        SetAuth(_client, token);
 
         var request = new HttpRequestMessage(new HttpMethod(method), url);
         var response = await _client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        ClearAuth();
+        ClearAuth(_client);
     }
 
     // ── Registro normal NO permite crear admin ──
@@ -153,16 +84,16 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
     [InlineData("GET", "/api/admin/bookdrops")]
     public async Task BookdropToken_CannotAccessAdminEndpoints_Returns403(string method, string url)
     {
-        var token = await RegisterBookdropAndGetToken(
+        var (token, _) = await RegisterBookdrop(_client,
             "sec14@test.com", "sec14_user", "Local Sec 14");
 
-        SetAuth(token);
+        SetAuth(_client, token);
 
         var request = new HttpRequestMessage(new HttpMethod(method), url);
         var response = await _client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        ClearAuth();
+        ClearAuth(_client);
     }
 
     // ── Register business devuelve 201 con token ──
@@ -198,10 +129,10 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
     [Fact]
     public async Task GetBookdropPerfil_WithValidToken_Returns200()
     {
-        var token = await RegisterBookdropAndGetToken(
+        var (token, _) = await RegisterBookdrop(_client,
             "positive_perfil@test.com", "positive_perfil", "Librería Perfil");
 
-        SetAuth(token);
+        SetAuth(_client, token);
 
         var response = await _client.GetAsync("/api/bookdrop/perfil");
 
@@ -210,7 +141,7 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("Librería Perfil", body.GetProperty("nombreEstablecimiento").GetString());
         Assert.Equal("ACTIVE", body.GetProperty("bookspotStatus").GetString());
-        ClearAuth();
+        ClearAuth(_client);
     }
 
     // ── CASO POSITIVO: PATCH /api/bookdrop/perfil ──
@@ -218,10 +149,10 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
     [Fact]
     public async Task PatchBookdropPerfil_WithValidToken_Returns200()
     {
-        var token = await RegisterBookdropAndGetToken(
+        var (token, _) = await RegisterBookdrop(_client,
             "positive_patch@test.com", "positive_patch", "Librería Patch");
 
-        SetAuth(token);
+        SetAuth(_client, token);
 
         var response = await _client.PatchAsJsonAsync("/api/bookdrop/perfil", new
         {
@@ -232,7 +163,7 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("Librería Actualizada", body.GetProperty("nombreEstablecimiento").GetString());
-        ClearAuth();
+        ClearAuth(_client);
     }
 
     // ── CASO POSITIVO: DELETE /api/bookdrop/perfil ──
@@ -240,10 +171,10 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
     [Fact]
     public async Task DeleteBookdropPerfil_WithValidToken_Returns200()
     {
-        var token = await RegisterBookdropAndGetToken(
+        var (token, _) = await RegisterBookdrop(_client,
             "positive_delete@test.com", "positive_delete", "Librería Delete");
 
-        SetAuth(token);
+        SetAuth(_client, token);
 
         var response = await _client.DeleteAsync("/api/bookdrop/perfil");
 
@@ -252,7 +183,7 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
         // Verificar que ya no puede acceder
         var secondResponse = await _client.GetAsync("/api/bookdrop/perfil");
         Assert.Equal(HttpStatusCode.NotFound, secondResponse.StatusCode);
-        ClearAuth();
+        ClearAuth(_client);
     }
 
     // ── CASO POSITIVO: Login bookdrop y acceso ──
@@ -260,16 +191,16 @@ public class BookdropControllerTests : IClassFixture<BookdropWebApplicationFixtu
     [Fact]
     public async Task Login_BookdropUser_CanAccessBookdropEndpoints()
     {
-        await RegisterBookdropAndGetToken(
+        await RegisterBookdrop(_client,
             "login_integ@test.com", "login_integ", "Librería Login");
 
         // Login por separado
-        var token = await LoginAndGetToken("login_integ@test.com");
+        var token = await Login(_client, "login_integ@test.com");
 
-        SetAuth(token);
+        SetAuth(_client, token);
         var response = await _client.GetAsync("/api/bookdrop/perfil");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        ClearAuth();
+        ClearAuth(_client);
     }
 }

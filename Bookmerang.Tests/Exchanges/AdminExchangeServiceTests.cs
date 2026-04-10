@@ -3,7 +3,6 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Services.Interfaces.Chats;
-using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Tests.Helpers;
 using Moq;
 using Xunit;
@@ -19,8 +18,7 @@ public class AdminExchangeServiceTests : IAsyncLifetime
     {
         _db = DbContextFactory.CreateInMemory();
         var mockChatService = new Mock<IChatService>();
-        var mockMeetingService = new Mock<IExchangeMeetingService>();
-        _service = new ExchangeService(_db, mockChatService.Object, mockMeetingService.Object);
+        _service = new ExchangeService(_db, mockChatService.Object);
         return Task.CompletedTask;
     }
 

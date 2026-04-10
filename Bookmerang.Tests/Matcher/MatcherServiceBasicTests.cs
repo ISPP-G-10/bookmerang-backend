@@ -9,6 +9,7 @@ using Bookmerang.Api.Configuration;
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
+using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Services.Implementation.Matcher;
 using Bookmerang.Api.Services.Interfaces.Chats;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
@@ -27,12 +28,42 @@ namespace Bookmerang.Tests.Matcher;
 /// <summary>
 /// Tests básicos de funcionalidad de MatcherService contra PostgreSQL+PostGIS real, simulando prod.
 /// </summary>
-public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutputHelper output) : IClassFixture<PostgresMatcherFixture>, IAsyncLifetime
+public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper output) : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
-    private readonly PostgresMatcherFixture _fixture = fixture;
+    private readonly PostgresFixture _fixture = fixture;
     private readonly ITestOutputHelper _output = output;
     private AppDbContext _db = null!;
     private MatcherService _service = null!;
+
+    private static readonly MatcherSettings Settings = new()
+    {
+        Weights = new WeightsSettings
+        {
+            GenreMatch     = 0.40,
+            ExtensionMatch = 0.10,
+            DistanceScore  = 0.35,
+            RecencyBonus   = 0.15
+        },
+        Feed = new FeedSettings
+        {
+            PriorityToDiscoveryRatio = 3,
+            DefaultPageSize          = 20,
+            RecencyDecayDays         = 30,
+            SwipeValidDays           = 30
+        }
+    };
+
+    private MatcherService CreateService(AppDbContext db) =>
+        new(db, Options.Create(Settings),
+            new Mock<ILogger<MatcherService>>().Object,
+            new Mock<IChatService>().Object,
+            new ExchangeService(db, new Mock<IChatService>().Object));
+
+    private MatcherService CreateServiceWithChat(AppDbContext db, IChatService chatService) =>
+        new(db, Options.Create(Settings),
+            new Mock<ILogger<MatcherService>>().Object,
+            chatService,
+            new ExchangeService(db, chatService));
 
     // Coordenadas Madrid centro -> punto de referencia
     private static readonly Point Madrid = MakePoint(-3.7038, 40.4168);
@@ -51,7 +82,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
     public async Task InitializeAsync()
     {
         _db      = _fixture.CreateDbContext();
-        _service = _fixture.CreateService(_db);
+        _service = CreateService(_db);
 
         // Limpiamos todas las tablas de datos antes de cada test.
         await _db.Database.ExecuteSqlRawAsync(@"
@@ -289,7 +320,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
             SwiperId  = UserB,
             BookId    = bookA.Id,
             Direction = SwipeDirection.RIGHT,
-            CreatedAt = DateTime.UtcNow.AddDays(-(PostgresMatcherFixture.Settings.Feed.SwipeValidDays + 1))
+            CreatedAt = DateTime.UtcNow.AddDays(-(Settings.Feed.SwipeValidDays + 1))
         });
         await _db.SaveChangesAsync();
 
@@ -609,7 +640,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
                 Participants: [],
                 LastMessage: null
             ));
-        var service = _fixture.CreateServiceWithChat(_db, mockChatService.Object);
+        var service = CreateServiceWithChat(_db, mockChatService.Object);
 
         // B hace RIGHT en libro de A
         _db.Swipes.Add(new Swipe
@@ -648,7 +679,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
             SwiperId = UserB,
             BookId = bookA.Id,
             Direction = SwipeDirection.RIGHT,
-            CreatedAt = DateTime.UtcNow.AddDays(-(PostgresMatcherFixture.Settings.Feed.SwipeValidDays + 1))
+            CreatedAt = DateTime.UtcNow.AddDays(-(Settings.Feed.SwipeValidDays + 1))
         });
         await _db.SaveChangesAsync();
 
@@ -781,7 +812,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
                 DistanceScore = 0.30,
                 RecencyBonus = 0.10 // suma = 1.20
             },
-            Feed = PostgresMatcherFixture.Settings.Feed
+            Feed = Settings.Feed
         };
         var badService = new MatcherService(
             _db,
@@ -920,7 +951,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
         var chatMock = new Mock<IChatService>();
         chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
             .ReturnsAsync(new ChatDto(Id: 100, Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
-        var serviceWithChat = _fixture.CreateServiceWithChat(_db, chatMock.Object);
+        var serviceWithChat = CreateServiceWithChat(_db, chatMock.Object);
 
         // B swipea RIGHT a libro de A → registra swipe
         await serviceWithChat.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
@@ -1002,7 +1033,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
         var chatMock = new Mock<IChatService>();
         chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
             .ReturnsAsync(new ChatDto(Id: 200, Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
-        var serviceWithChat = _fixture.CreateServiceWithChat(_db, chatMock.Object);
+        var serviceWithChat = CreateServiceWithChat(_db, chatMock.Object);
 
         await serviceWithChat.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
         var res = await serviceWithChat.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);

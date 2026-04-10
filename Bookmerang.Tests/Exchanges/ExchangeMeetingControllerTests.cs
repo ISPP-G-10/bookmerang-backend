@@ -1,317 +1,291 @@
-using Moq;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
-using NetTopologySuite.Geometries;
-using Bookmerang.Api.Controllers.Exchanges;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
-using Bookmerang.Api.Models.DTOs;
-using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
+using Bookmerang.Tests.Helpers;
+using Microsoft.Extensions.DependencyInjection;
+using NetTopologySuite.Geometries;
 using Xunit;
 
+using static Bookmerang.Tests.Helpers.AuthTestHelper;
 using MatchEntity = Bookmerang.Api.Models.Entities.Match;
 
 namespace Bookmerang.Tests.Exchanges;
 
-public class ExchangeMeetingControllerTests
+public class ExchangeMeetingControllerTests(WebAppFixture fixture) : IClassFixture<WebAppFixture>
 {
-    private readonly Mock<IExchangeMeetingService> _mockMeetingService;
-    private readonly Mock<IExchangeService> _mockExchangeService;
-    private readonly AppDbContext _db;
-    private readonly ExchangeMeetingController _controller;
-    private readonly Guid _currentUserId = Guid.NewGuid();
-    private readonly Guid _otherUserId = Guid.NewGuid();
-    private readonly string _supabaseId = "test-supabase-meeting";
+    private readonly HttpClient _client = fixture.Factory.CreateClient();
+    private readonly WebAppFixture _fixture = fixture;
 
-    public ExchangeMeetingControllerTests()
+    // ── Helpers ──────────────────────────────────────────────────────
+
+    private record TestData(
+        string Token1, string Token2,
+        Guid User1Id, Guid User2Id,
+        int ExchangeId, int? MeetingId);
+
+    private async Task<TestData> Seed(
+        string prefix,
+        ExchangeStatus exchangeStatus = ExchangeStatus.ACCEPTED,
+        ExchangeMeetingStatus? meetingStatus = null,
+        ExchangeMode meetingMode = ExchangeMode.BOOKSPOT,
+        bool proposerIsUser1 = false,
+        bool markCompletedByUser2 = false)
     {
-        _mockMeetingService = new Mock<IExchangeMeetingService>();
-        _mockExchangeService = new Mock<IExchangeService>();
+        var (token1, user1Id) = await RegisterUser(_client, $"{prefix}_u1@test.com", $"{prefix}_u1");
+        var (token2, user2Id) = await RegisterUser(_client, $"{prefix}_u2@test.com", $"{prefix}_u2");
 
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        _db = new AppDbContext(options);
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        _controller = new ExchangeMeetingController(_mockMeetingService.Object, _db, _mockExchangeService.Object);
+        var book1 = new Book { OwnerId = user1Id, Status = BookStatus.PUBLISHED };
+        var book2 = new Book { OwnerId = user2Id, Status = BookStatus.PUBLISHED };
+        db.Books.AddRange(book1, book2);
+        await db.SaveChangesAsync();
 
-        SetupUserInDb();
-        SetupControllerContext();
-    }
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        db.Chats.Add(chat);
+        await db.SaveChangesAsync();
 
-    private void SetupUserInDb()
-    {
-        _db.Users.Add(new BaseUser
+        var match = new MatchEntity
         {
-            Id = _currentUserId,
-            SupabaseId = _supabaseId,
-            Email = "meeting@test.com",
-            Username = "meetinguser",
-            Name = "Meeting User",
-            Location = new Point(0, 0) { SRID = 4326 }
-        });
-        _db.SaveChanges();
-    }
-
-    private void SetupControllerContext()
-    {
-        var claims = new List<Claim>
-        {
-            new Claim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", _supabaseId)
+            User1Id = user1Id, User2Id = user2Id,
+            Book1Id = book1.Id, Book2Id = book2.Id,
+            Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow
         };
-        var identity = new ClaimsIdentity(claims, "TestAuthType");
-        var claimsPrincipal = new ClaimsPrincipal(identity);
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
 
-        _controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext { User = claimsPrincipal }
-        };
-    }
+        var exchange = new Exchange { ChatId = chat.Id, MatchId = match.Id, Status = exchangeStatus };
+        db.Exchanges.Add(exchange);
+        await db.SaveChangesAsync();
 
-    private Exchange BuildExchange(int exchangeId, ExchangeStatus status) => new Exchange
-    {
-        ExchangeId = exchangeId,
-        ChatId = 10,
-        MatchId = 1,
-        Status = status,
-        Match = new MatchEntity
+        int? meetingId = null;
+        if (meetingStatus.HasValue)
         {
-            User1Id = _currentUserId,
-            User2Id = _otherUserId,
-            Book1Id = 1,
-            Book2Id = 2,
-            Status = MatchStatus.CHAT_CREATED,
-            CreatedAt = DateTime.UtcNow
-        }
-    };
-
-    private ExchangeMeeting BuildMeeting(
-        int meetingId,
-        int exchangeId,
-        ExchangeMeetingStatus status = ExchangeMeetingStatus.PROPOSAL,
-        ExchangeMode mode = ExchangeMode.BOOKSPOT,
-        Guid? proposerId = null) => new ExchangeMeeting
-    {
-        ExchangeMeetingId = meetingId,
-        ExchangeId = exchangeId,
-        MeetingStatus = status,
-        ExchangeMode = mode,
-        ProposerId = proposerId ?? _otherUserId,
-        CustomLocation = new Point(0, 0) { SRID = 4326 },
-        ScheduledAt = DateTime.UtcNow.AddHours(1),
-        Proposer = new User
-        {
-            Id = proposerId ?? _otherUserId,
-            BaseUser = new BaseUser
+            var meeting = new ExchangeMeeting
             {
-                Id = proposerId ?? _otherUserId,
-                Name = "Test",
-                Username = "test",
-                Email = "t@t.com",
-                SupabaseId = "other",
-                Location = new Point(0, 0) { SRID = 4326 }
-            }
+                ExchangeId = exchange.ExchangeId,
+                ExchangeMode = meetingMode,
+                CustomLocation = new Point(-3.0, 40.0) { SRID = 4326 },
+                ScheduledAt = DateTime.UtcNow.AddHours(1),
+                ProposerId = proposerIsUser1 ? user1Id : user2Id,
+                MeetingStatus = meetingStatus.Value,
+                MarkAsCompletedByUser2 = markCompletedByUser2
+            };
+            db.ExchangeMeetings.Add(meeting);
+            await db.SaveChangesAsync();
+            meetingId = meeting.ExchangeMeetingId;
         }
-    };
 
-    // --- Happy paths ---
+        return new TestData(token1, token2, user1Id, user2Id, exchange.ExchangeId, meetingId);
+    }
+
+    // ── Happy paths ─────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetExchangeMeeting_Exists_ReturnsOkWithDto()
+    public async Task GetExchangeMeeting_Exists_ReturnsOk()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1);
+        var d = await Seed("get_mtg", meetingStatus: ExchangeMeetingStatus.PROPOSAL);
+        SetAuth(_client, d.Token1);
 
-        _mockMeetingService.Setup(s => s.GetExchangeMeeting(10)).ReturnsAsync(meeting);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
+        var response = await _client.GetAsync($"/api/exchangemeeting/{d.MeetingId}");
 
-        var result = await _controller.GetExchangeMeeting(10);
-
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<ExchangeMeetingDto>(okResult.Value);
-        Assert.Equal(10, dto.ExchangeMeetingId);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(d.MeetingId, body.GetProperty("exchangeMeetingId").GetInt32());
+        ClearAuth(_client);
     }
 
     [Fact]
-    public async Task GetMeetingByExchangeId_Exists_ReturnsOkWithDto()
+    public async Task GetMeetingByExchangeId_Exists_ReturnsOk()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1);
+        var d = await Seed("get_mtg_exch", meetingStatus: ExchangeMeetingStatus.PROPOSAL);
+        SetAuth(_client, d.Token1);
 
-        _mockMeetingService.Setup(s => s.GetMeetingByExchangeId(1)).ReturnsAsync(meeting);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
+        var response = await _client.GetAsync($"/api/exchangemeeting/byExchange/{d.ExchangeId}");
 
-        var result = await _controller.GetMeetingByExchangeId(1);
-
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        Assert.IsType<ExchangeMeetingDto>(okResult.Value);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(d.ExchangeId, body.GetProperty("exchangeId").GetInt32());
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task CreateExchangeMeeting_Valid_ReturnsCreated()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1);
+        var d = await Seed("create_mtg");
+        SetAuth(_client, d.Token1);
 
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
-        _mockMeetingService.Setup(s => s.GetMeetingByExchangeId(1)).ReturnsAsync((ExchangeMeeting?)null);
-        _mockMeetingService
-            .Setup(s => s.CreateExchangeMeeting(It.IsAny<CreateExchangeMeetingDto>(), _currentUserId))
-            .ReturnsAsync(meeting);
+        var response = await _client.PostAsJsonAsync("/api/exchangemeeting", new
+        {
+            exchangeId = d.ExchangeId,
+            exchangeMode = "CUSTOM",
+            bookspotId = (int?)null,
+            latitud = 40.0,
+            longitud = -3.0,
+            scheduledAt = DateTime.UtcNow.AddHours(1)
+        });
 
-        var dto = new CreateExchangeMeetingDto(1, ExchangeMode.BOOKSPOT, 1, null, null, DateTime.UtcNow.AddHours(1));
-
-        var result = await _controller.CreateExchangeMeeting(dto);
-
-        Assert.IsType<CreatedAtActionResult>(result);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task CounterProposeMeeting_Valid_ReturnsOk()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1, proposerId: _otherUserId);
-        var updatedMeeting = BuildMeeting(10, 1, mode: ExchangeMode.CUSTOM);
+        // proposer=user2 por defecto -> user1 puede contra-proponer
+        var d = await Seed("counter_mtg", meetingStatus: ExchangeMeetingStatus.PROPOSAL);
+        SetAuth(_client, d.Token1);
 
-        _mockMeetingService.Setup(s => s.GetExchangeMeeting(10)).ReturnsAsync(meeting);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
-        _mockMeetingService
-            .Setup(s => s.CounterProposeMeeting(It.IsAny<ExchangeMeeting>(), It.IsAny<CounterProposeMeetingDto>(), _currentUserId))
-            .ReturnsAsync(updatedMeeting);
+        var response = await _client.PatchAsync(
+            $"/api/exchangemeeting/{d.MeetingId}/counter-propose",
+            JsonContent.Create(new
+            {
+                exchangeMode = "CUSTOM",
+                bookspotId = (int?)null,
+                latitud = 41.0,
+                longitud = -4.0,
+                scheduledAt = DateTime.UtcNow.AddHours(2)
+            }));
 
-        var dto = new CounterProposeMeetingDto(ExchangeMode.CUSTOM, null, 40.0, -3.0, DateTime.UtcNow.AddHours(2));
-
-        var result = await _controller.CounterProposeMeeting(10, dto);
-
-        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task CompleteExchange_Valid_ReturnsOk()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1, status: ExchangeMeetingStatus.ACCEPTED, proposerId: _otherUserId);
-        var completedMeeting = BuildMeeting(10, 1, status: ExchangeMeetingStatus.ACCEPTED, proposerId: _otherUserId);
+        // proposer=user2 por defecto -> user1 marca como user2
+        var d = await Seed("complete_mtg", meetingStatus: ExchangeMeetingStatus.ACCEPTED);
+        SetAuth(_client, d.Token1);
 
-        _mockMeetingService.Setup(s => s.GetExchangeMeeting(10)).ReturnsAsync(meeting);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
-        _mockMeetingService
-            .Setup(s => s.MarkAsCompleted(It.IsAny<ExchangeMeeting>(), _currentUserId))
-            .ReturnsAsync(completedMeeting);
+        var response = await _client.PutAsync($"/api/exchangemeeting/{d.MeetingId}/complete", null);
 
-        var result = await _controller.CompleteExchange(10);
-
-        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task AcceptExchangeMeeting_Valid_ReturnsOk()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1, proposerId: _otherUserId);
-        var acceptedMeeting = BuildMeeting(10, 1, status: ExchangeMeetingStatus.ACCEPTED, proposerId: _otherUserId);
+        // proposer=user2 por defecto -> user1 puede aceptar
+        var d = await Seed("accept_mtg", meetingStatus: ExchangeMeetingStatus.PROPOSAL);
+        SetAuth(_client, d.Token1);
 
-        _mockMeetingService.Setup(s => s.GetExchangeMeeting(10)).ReturnsAsync(meeting);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
-        _mockMeetingService
-            .Setup(s => s.AcceptMeeting(It.IsAny<ExchangeMeeting>()))
-            .ReturnsAsync(acceptedMeeting);
+        var response = await _client.PutAsync($"/api/exchangemeeting/{d.MeetingId}/accept", null);
 
-        var result = await _controller.AcceptExchangeMeeting(10);
-
-        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        ClearAuth(_client);
     }
 
-    // --- Guardias de seguridad ---
+    // ── Guardias de seguridad ───────────────────────────────────────
 
     [Fact]
     public async Task CreateExchangeMeeting_ExchangeNotAccepted_ReturnsBadRequest()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.NEGOTIATING);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
+        var d = await Seed("create_neg", exchangeStatus: ExchangeStatus.NEGOTIATING);
+        SetAuth(_client, d.Token1);
 
-        var dto = new CreateExchangeMeetingDto(1, ExchangeMode.BOOKSPOT, 1, null, null, DateTime.UtcNow.AddHours(1));
+        var response = await _client.PostAsJsonAsync("/api/exchangemeeting", new
+        {
+            exchangeId = d.ExchangeId,
+            exchangeMode = "CUSTOM",
+            bookspotId = (int?)null,
+            latitud = 40.0,
+            longitud = -3.0,
+            scheduledAt = DateTime.UtcNow.AddHours(1)
+        });
 
-        var result = await _controller.CreateExchangeMeeting(dto);
-
-        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        ClearAuth(_client);
     }
 
     [Fact]
-    public async Task CreateExchangeMeeting_MeetingAlreadyExists_ReturnsConflict()
+    public async Task CreateExchangeMeeting_AlreadyExists_ReturnsConflict()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var existingMeeting = BuildMeeting(10, 1);
+        var d = await Seed("create_dup", meetingStatus: ExchangeMeetingStatus.PROPOSAL);
+        SetAuth(_client, d.Token1);
 
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
-        _mockMeetingService.Setup(s => s.GetMeetingByExchangeId(1)).ReturnsAsync(existingMeeting);
+        var response = await _client.PostAsJsonAsync("/api/exchangemeeting", new
+        {
+            exchangeId = d.ExchangeId,
+            exchangeMode = "CUSTOM",
+            bookspotId = (int?)null,
+            latitud = 40.0,
+            longitud = -3.0,
+            scheduledAt = DateTime.UtcNow.AddHours(1)
+        });
 
-        var dto = new CreateExchangeMeetingDto(1, ExchangeMode.BOOKSPOT, 1, null, null, DateTime.UtcNow.AddHours(1));
-
-        var result = await _controller.CreateExchangeMeeting(dto);
-
-        Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task CounterProposeMeeting_OwnProposal_ReturnsBadRequest()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1, proposerId: _currentUserId);
+        // proposer=user1 -> user1 NO puede contra-proponer lo suyo
+        var d = await Seed("counter_own", meetingStatus: ExchangeMeetingStatus.PROPOSAL, proposerIsUser1: true);
+        SetAuth(_client, d.Token1);
 
-        _mockMeetingService.Setup(s => s.GetExchangeMeeting(10)).ReturnsAsync(meeting);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
+        var response = await _client.PatchAsync(
+            $"/api/exchangemeeting/{d.MeetingId}/counter-propose",
+            JsonContent.Create(new
+            {
+                exchangeMode = "CUSTOM",
+                bookspotId = (int?)null,
+                latitud = 41.0,
+                longitud = -4.0,
+                scheduledAt = DateTime.UtcNow.AddHours(2)
+            }));
 
-        var dto = new CounterProposeMeetingDto(ExchangeMode.CUSTOM, null, 40.0, -3.0, DateTime.UtcNow.AddHours(2));
-
-        var result = await _controller.CounterProposeMeeting(10, dto);
-
-        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task CompleteExchange_BookdropMode_ReturnsBadRequest()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1, status: ExchangeMeetingStatus.ACCEPTED, mode: ExchangeMode.BOOKDROP);
+        var d = await Seed("complete_bd",
+            meetingStatus: ExchangeMeetingStatus.ACCEPTED,
+            meetingMode: ExchangeMode.BOOKDROP);
+        SetAuth(_client, d.Token1);
 
-        _mockMeetingService.Setup(s => s.GetExchangeMeeting(10)).ReturnsAsync(meeting);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
+        var response = await _client.PutAsync($"/api/exchangemeeting/{d.MeetingId}/complete", null);
 
-        var result = await _controller.CompleteExchange(10);
-
-        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task CompleteExchange_AlreadyMarked_ReturnsBadRequest()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1, status: ExchangeMeetingStatus.ACCEPTED, proposerId: _otherUserId);
-        meeting.MarkAsCompletedByUser2 = true;
+        // user1 no es proposer -> controller comprueba MarkAsCompletedByUser2
+        var d = await Seed("complete_dup",
+            meetingStatus: ExchangeMeetingStatus.ACCEPTED,
+            markCompletedByUser2: true);
+        SetAuth(_client, d.Token1);
 
-        _mockMeetingService.Setup(s => s.GetExchangeMeeting(10)).ReturnsAsync(meeting);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
+        var response = await _client.PutAsync($"/api/exchangemeeting/{d.MeetingId}/complete", null);
 
-        var result = await _controller.CompleteExchange(10);
-
-        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task AcceptExchangeMeeting_OwnProposal_ReturnsBadRequest()
     {
-        var exchange = BuildExchange(1, ExchangeStatus.ACCEPTED);
-        var meeting = BuildMeeting(10, 1, proposerId: _currentUserId);
+        // proposer=user1 -> user1 NO puede aceptar lo suyo
+        var d = await Seed("accept_own",
+            meetingStatus: ExchangeMeetingStatus.PROPOSAL,
+            proposerIsUser1: true);
+        SetAuth(_client, d.Token1);
 
-        _mockMeetingService.Setup(s => s.GetExchangeMeeting(10)).ReturnsAsync(meeting);
-        _mockExchangeService.Setup(s => s.GetExchangeWithMatch(1)).ReturnsAsync(exchange);
+        var response = await _client.PutAsync($"/api/exchangemeeting/{d.MeetingId}/accept", null);
 
-        var result = await _controller.AcceptExchangeMeeting(10);
-
-        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        ClearAuth(_client);
     }
 }

@@ -4,7 +4,6 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Services.Interfaces.Chats;
-using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Tests.Helpers;
 using Moq;
 using Xunit;
@@ -16,14 +15,12 @@ public class ExchangeServiceTests : IAsyncLifetime
     private AppDbContext _db = null!;
     private ExchangeService _service = null!;
     private Mock<IChatService> _mockChatService = null!;
-    private Mock<IExchangeMeetingService> _mockMeetingService = null!;
 
     public Task InitializeAsync()
     {
         _db = DbContextFactory.CreateInMemory();
         _mockChatService = new Mock<IChatService>();
-        _mockMeetingService = new Mock<IExchangeMeetingService>();
-        _service = new ExchangeService(_db, _mockChatService.Object, _mockMeetingService.Object);
+        _service = new ExchangeService(_db, _mockChatService.Object);
         return Task.CompletedTask;
     }
 
@@ -165,14 +162,12 @@ public class ExchangeServiceTests : IAsyncLifetime
     public async Task DeleteExchange_Exists_DeletesAndReturnsTrue()
     {
         var (exchange, _, _, _) = await SeedExchangeWithMatch();
-        _mockMeetingService.Setup(s => s.RemoveByExchangeId(exchange.ExchangeId)).Returns(Task.CompletedTask);
         _mockChatService.Setup(s => s.DeleteChat(exchange.ChatId)).ReturnsAsync(true);
 
         var result = await _service.DeleteExchange(exchange.ExchangeId);
 
         Assert.True(result);
         Assert.Empty(_db.Exchanges);
-        _mockMeetingService.Verify(s => s.RemoveByExchangeId(exchange.ExchangeId), Times.Once);
         _mockChatService.Verify(s => s.DeleteChat(exchange.ChatId), Times.Once);
     }
 

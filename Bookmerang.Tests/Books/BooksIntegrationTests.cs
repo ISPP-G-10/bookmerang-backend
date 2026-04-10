@@ -9,11 +9,11 @@ using Xunit;
 
 namespace Bookmerang.Tests.Books.Integration;
 
-public class BooksIntegrationTests : IClassFixture<PostgresBooksFixture>
+public class BooksIntegrationTests : IClassFixture<PostgresFixture>
 {
-    private readonly PostgresBooksFixture _fixture;
+    private readonly PostgresFixture _fixture;
 
-    public BooksIntegrationTests(PostgresBooksFixture fixture)
+    public BooksIntegrationTests(PostgresFixture fixture)
     {
         _fixture = fixture;
     }

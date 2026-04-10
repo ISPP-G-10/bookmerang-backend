@@ -8,11 +8,10 @@ using Bookmerang.Api.Models.Enums;
 
 namespace Bookmerang.Api.Services.Implementation.ExchangeServices;
 
-public class ExchangeService(AppDbContext db, IChatService chatService, IExchangeMeetingService meetingService): IExchangeService
+public class ExchangeService(AppDbContext db, IChatService chatService): IExchangeService
 {
     private readonly AppDbContext _db = db;
     private readonly IChatService _chatService = chatService;
-    private readonly IExchangeMeetingService _meetingService = meetingService;
     
     public async Task<Exchange?> GetExchangeByChatIdWithMatch(int chatId)
     {
@@ -117,7 +116,11 @@ public class ExchangeService(AppDbContext db, IChatService chatService, IExchang
         var exchange = await _db.Exchanges.FindAsync(exchangeId)
             ?? throw new NotFoundException($"Intercambio con id {exchangeId} no encontrado.");
 
-        await _meetingService.RemoveByExchangeId(exchangeId);
+        var meetings = await _db.ExchangeMeetings
+            .Where(em => em.ExchangeId == exchangeId)
+            .ToListAsync();
+        _db.ExchangeMeetings.RemoveRange(meetings);
+
         await _chatService.DeleteChat(exchange.ChatId);
 
         _db.Exchanges.Remove(exchange);

@@ -11,7 +11,7 @@ using Xunit;
 
 namespace Bookmerang.Tests.Helpers;
 
-public class BookdropWebApplicationFixture : IAsyncLifetime
+public class WebAppFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
         .WithImage("postgis/postgis:16-3.4")
@@ -96,6 +96,7 @@ public class BookdropWebApplicationFixture : IAsyncLifetime
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupStatus>("meetup_status", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", t);
+        Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookdropExchangeStatus>("bookdrop_exchange_status", t);
         #pragma warning restore CS0618
     }
 
@@ -109,7 +110,8 @@ public class BookdropWebApplicationFixture : IAsyncLifetime
         foreach (var file in new[]
         {
             "20260222163941_0001_extensions.sql",
-            "20260222164018_0002_schema.sql"
+            "20260222164018_0002_schema.sql",
+            "20260407000000_0008_bookdrop_exchange_status.sql"
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

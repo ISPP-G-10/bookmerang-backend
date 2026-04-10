@@ -9,8 +9,8 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Exceptions;
 using Bookmerang.Api.Models.DTOs.Bookspots.Requests;
 using Bookmerang.Api.Models.DTOs.Bookspots.Responses;
-using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
+using Bookmerang.Api.Services.Implementation.Bookspots;
 using Bookmerang.Tests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -24,12 +24,12 @@ namespace Bookmerang.Tests.Bookspots;
 /// Cubre creación, validaciones de negocio, geoespacial y borrado.
 /// </summary>
 public class BookspotServiceBasicTests(
-    PostgresBookspotFixture fixture,
+    PostgresFixture fixture,
     ITestOutputHelper output)
-    : IClassFixture<PostgresBookspotFixture>, IAsyncLifetime
+    : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
     private AppDbContext _db = null!;
-    private Bookmerang.Api.Services.Implementation.Bookspots.BookspotService _service = null!;
+    private BookspotService _service = null!;
 
     // ── Coordenadas de referencia ──────────────────────────────────────
 
@@ -54,7 +54,7 @@ public class BookspotServiceBasicTests(
     public async Task InitializeAsync()
     {
         _db = fixture.CreateDbContext();
-        _service = fixture.CreateService(_db);
+        _service = new BookspotService(new BookspotRepository(_db), _db);
 
         await _db.Database.ExecuteSqlRawAsync(@"
             TRUNCATE TABLE

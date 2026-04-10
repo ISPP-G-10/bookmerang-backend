@@ -14,7 +14,6 @@ using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 using Moq;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace Bookmerang.Tests.Bookspots;
 
@@ -23,8 +22,8 @@ namespace Bookmerang.Tests.Bookspots;
 /// Lógica pura con mocks + integración contra PostgreSQL real.
 /// </summary>
 public class BookspotValidationServiceTests(
-    PostgresBookspotFixture fixture)
-    : IClassFixture<PostgresBookspotFixture>, IAsyncLifetime
+    PostgresFixture fixture)
+    : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
     private Bookmerang.Api.Data.AppDbContext _db = null!;
     private BookspotValidationService _service = null!;
@@ -52,7 +51,10 @@ public class BookspotValidationServiceTests(
     public async Task InitializeAsync()
     {
         _db = fixture.CreateDbContext();
-        _service = fixture.CreateValidationService(_db);
+        _service = new BookspotValidationService(
+            new BookspotValidationRepository(_db),
+            new BookspotRepository(_db),
+            _db);
 
         await _db.Database.ExecuteSqlRawAsync(@"
             TRUNCATE TABLE

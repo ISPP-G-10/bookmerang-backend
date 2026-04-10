@@ -1,208 +1,180 @@
-using Moq;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
-using NetTopologySuite.Geometries;
-using Bookmerang.Api.Controllers.Exchanges;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
-using Bookmerang.Api.Models.DTOs;
-using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
+using Bookmerang.Tests.Helpers;
+using Microsoft.Extensions.DependencyInjection;
+using NetTopologySuite.Geometries;
 using Xunit;
 
+using static Bookmerang.Tests.Helpers.AuthTestHelper;
 using MatchEntity = Bookmerang.Api.Models.Entities.Match;
 
 namespace Bookmerang.Tests.Exchanges;
 
-public class ExchangeControllerTests
+public class ExchangeControllerTests(WebAppFixture fixture) : IClassFixture<WebAppFixture>
 {
-    private readonly Mock<IExchangeService> _mockService;
-    private readonly Mock<IExchangeMeetingService> _mockMeetingService;
-    private readonly AppDbContext _db;
-    private readonly ExchangeController _controller;
-    private readonly Guid _currentUserId = Guid.NewGuid();
-    private readonly Guid _otherUserId = Guid.NewGuid();
-    private readonly string _supabaseId = "test-supabase-exchange";
+    private readonly HttpClient _client = fixture.Factory.CreateClient();
+    private readonly WebAppFixture _fixture = fixture;
 
-    public ExchangeControllerTests()
+    // ── Helpers ──────────────────────────────────────────────────────
+
+    private record ExchangeTestData(
+        string Token1, string Token2,
+        Guid User1Id, Guid User2Id,
+        int ExchangeId, int ChatId);
+
+    private async Task<ExchangeTestData> SeedExchangeData(
+        string prefix, ExchangeStatus status = ExchangeStatus.NEGOTIATING)
     {
-        _mockService = new Mock<IExchangeService>();
-        _mockMeetingService = new Mock<IExchangeMeetingService>();
+        var (token1, user1Id) = await RegisterUser(_client, $"{prefix}_u1@test.com", $"{prefix}_u1");
+        var (token2, user2Id) = await RegisterUser(_client, $"{prefix}_u2@test.com", $"{prefix}_u2");
 
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        _db = new AppDbContext(options);
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        _controller = new ExchangeController(_mockService.Object, _mockMeetingService.Object, _db);
+        var book1 = new Book { OwnerId = user1Id, Status = BookStatus.PUBLISHED };
+        var book2 = new Book { OwnerId = user2Id, Status = BookStatus.PUBLISHED };
+        db.Books.AddRange(book1, book2);
+        await db.SaveChangesAsync();
 
-        SetupUserInDb();
-        SetupControllerContext();
-    }
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        db.Chats.Add(chat);
+        await db.SaveChangesAsync();
 
-    private void SetupUserInDb()
-    {
-        _db.Users.Add(new BaseUser
+        var match = new MatchEntity
         {
-            Id = _currentUserId,
-            SupabaseId = _supabaseId,
-            Email = "exchange@test.com",
-            Username = "exchangeuser",
-            Name = "Exchange User",
-            Location = new Point(0, 0) { SRID = 4326 }
-        });
-        _db.SaveChanges();
-    }
-
-    private void SetupControllerContext()
-    {
-        var claims = new List<Claim>
-        {
-            new Claim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", _supabaseId)
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuthType");
-        var claimsPrincipal = new ClaimsPrincipal(identity);
-
-        _controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext { User = claimsPrincipal }
-        };
-    }
-
-    private Exchange BuildExchange(int exchangeId, ExchangeStatus status) => new Exchange
-    {
-        ExchangeId = exchangeId,
-        ChatId = 10,
-        MatchId = 1,
-        Status = status,
-        Match = new MatchEntity
-        {
-            User1Id = _currentUserId,
-            User2Id = _otherUserId,
-            Book1Id = 1,
-            Book2Id = 2,
+            User1Id = user1Id, User2Id = user2Id,
+            Book1Id = book1.Id, Book2Id = book2.Id,
             Status = MatchStatus.CHAT_CREATED,
             CreatedAt = DateTime.UtcNow
-        }
-    };
+        };
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
 
-    // --- GetExchange ---
+        var exchange = new Exchange { ChatId = chat.Id, MatchId = match.Id, Status = status };
+        db.Exchanges.Add(exchange);
+        await db.SaveChangesAsync();
+
+        return new ExchangeTestData(token1, token2, user1Id, user2Id, exchange.ExchangeId, chat.Id);
+    }
+
+    // ── GetExchange ─────────────────────────────────────────────────
 
     [Fact]
     public async Task GetExchange_Exists_ReturnsOkWithDto()
     {
-        var exchangeId = 1;
-        var exchange = BuildExchange(exchangeId, ExchangeStatus.NEGOTIATING);
-        _mockService.Setup(s => s.GetExchangeWithMatch(exchangeId)).ReturnsAsync(exchange);
+        var data = await SeedExchangeData("get_exch");
+        SetAuth(_client, data.Token1);
 
-        var result = await _controller.GetExchange(exchangeId);
+        var response = await _client.GetAsync($"/api/exchange/{data.ExchangeId}");
 
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<ExchangeDto>(okResult.Value);
-        Assert.Equal(exchangeId, dto.ExchangeId);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(data.ExchangeId, body.GetProperty("exchangeId").GetInt32());
+        ClearAuth(_client);
     }
 
-    // --- GetExchangeByChatIdWithMatch ---
+    // ── GetExchangeByChatId ─────────────────────────────────────────
 
     [Fact]
     public async Task GetExchangeByChatId_Exists_ReturnsOkWithDto()
     {
-        var chatId = 10;
-        var exchange = BuildExchange(1, ExchangeStatus.NEGOTIATING);
-        _mockService.Setup(s => s.GetExchangeByChatIdWithMatch(chatId)).ReturnsAsync(exchange);
+        var data = await SeedExchangeData("get_by_chat");
+        SetAuth(_client, data.Token1);
 
-        var result = await _controller.GetExchangeByChatIdWithMatchDetails(chatId);
+        var response = await _client.GetAsync($"/api/exchange/byChat/{data.ChatId}/withMatch");
 
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<ExchangeWithMatchDto>(okResult.Value);
-        Assert.Equal(chatId, dto.ChatId);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(data.ChatId, body.GetProperty("chatId").GetInt32());
+        ClearAuth(_client);
     }
 
-    // --- AcceptExchange ---
+    // ── AcceptExchange ──────────────────────────────────────────────
 
     [Fact]
-    public async Task AcceptExchange_Valid_ReturnsOkWithDto()
+    public async Task AcceptExchange_Valid_ReturnsOkWithAcceptedBy1()
     {
-        var exchangeId = 1;
-        var exchange = BuildExchange(exchangeId, ExchangeStatus.NEGOTIATING);
-        var accepted = BuildExchange(exchangeId, ExchangeStatus.ACCEPTED_BY_1);
-        _mockService.Setup(s => s.GetExchangeWithMatch(exchangeId)).ReturnsAsync(exchange);
-        _mockService.Setup(s => s.AcceptExchange(exchangeId, _currentUserId)).ReturnsAsync(accepted);
+        var data = await SeedExchangeData("accept_exch", ExchangeStatus.NEGOTIATING);
+        SetAuth(_client, data.Token1);
 
-        var result = await _controller.AcceptExchange(exchangeId);
+        var response = await _client.PatchAsync($"/api/exchange/{data.ExchangeId}/accept", null);
 
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<ExchangeDto>(okResult.Value);
-        Assert.Equal(ExchangeStatus.ACCEPTED_BY_1, dto.Status);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("ACCEPTED_BY_1", body.GetProperty("status").GetString());
+        ClearAuth(_client);
     }
 
-    // --- RejectExchange ---
+    // ── RejectExchange ──────────────────────────────────────────────
 
     [Fact]
     public async Task RejectExchange_Negotiating_ReturnsOkWithRejected()
     {
-        var exchangeId = 1;
-        var exchange = BuildExchange(exchangeId, ExchangeStatus.NEGOTIATING);
-        var rejected = BuildExchange(exchangeId, ExchangeStatus.REJECTED);
-        _mockService.Setup(s => s.GetExchangeWithMatch(exchangeId)).ReturnsAsync(exchange);
-        _mockService.Setup(s => s.UpdateExchangeStatus(It.IsAny<Exchange>(), ExchangeStatus.REJECTED)).ReturnsAsync(rejected);
+        var data = await SeedExchangeData("reject_exch", ExchangeStatus.NEGOTIATING);
+        SetAuth(_client, data.Token1);
 
-        var result = await _controller.RejectExchange(exchangeId);
+        var response = await _client.PatchAsync($"/api/exchange/{data.ExchangeId}/reject", null);
 
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<ExchangeDto>(okResult.Value);
-        Assert.Equal(ExchangeStatus.REJECTED, dto.Status);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("REJECTED", body.GetProperty("status").GetString());
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task RejectExchange_AlreadyAccepted_ReturnsBadRequest()
     {
-        var exchangeId = 1;
-        var exchange = BuildExchange(exchangeId, ExchangeStatus.ACCEPTED);
-        _mockService.Setup(s => s.GetExchangeWithMatch(exchangeId)).ReturnsAsync(exchange);
+        var data = await SeedExchangeData("reject_accepted", ExchangeStatus.ACCEPTED);
+        SetAuth(_client, data.Token1);
 
-        var result = await _controller.RejectExchange(exchangeId);
+        var response = await _client.PatchAsync($"/api/exchange/{data.ExchangeId}/reject", null);
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        ClearAuth(_client);
     }
 
-    // --- ReportExchange ---
+    // ── ReportExchange ──────────────────────────────────────────────
 
     [Fact]
     public async Task ReportExchange_MeetingAccepted_ReturnsOkWithIncident()
     {
-        var exchangeId = 1;
-        var exchange = BuildExchange(exchangeId, ExchangeStatus.ACCEPTED);
-        var incident = BuildExchange(exchangeId, ExchangeStatus.INCIDENT);
-        var meeting = new ExchangeMeeting
+        var data = await SeedExchangeData("report_exch", ExchangeStatus.ACCEPTED);
+
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.ExchangeMeetings.Add(new ExchangeMeeting
         {
-            ExchangeId = exchangeId,
-            MeetingStatus = ExchangeMeetingStatus.ACCEPTED,
-            CustomLocation = null!
-        };
-        _mockService.Setup(s => s.GetExchangeWithMatch(exchangeId)).ReturnsAsync(exchange);
-        _mockMeetingService.Setup(s => s.GetMeetingByExchangeId(exchangeId)).ReturnsAsync(meeting);
-        _mockService.Setup(s => s.UpdateExchangeStatus(It.IsAny<Exchange>(), ExchangeStatus.INCIDENT)).ReturnsAsync(incident);
+            ExchangeId = data.ExchangeId,
+            ExchangeMode = ExchangeMode.BOOKSPOT,
+            CustomLocation = new Point(0, 0) { SRID = 4326 },
+            ScheduledAt = DateTime.UtcNow.AddHours(1),
+            ProposerId = data.User1Id,
+            MeetingStatus = ExchangeMeetingStatus.ACCEPTED
+        });
+        await db.SaveChangesAsync();
 
-        var result = await _controller.ReportExchange(exchangeId);
+        SetAuth(_client, data.Token1);
+        var response = await _client.PatchAsync($"/api/exchange/{data.ExchangeId}/report", null);
 
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<ExchangeDto>(okResult.Value);
-        Assert.Equal(ExchangeStatus.INCIDENT, dto.Status);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("INCIDENT", body.GetProperty("status").GetString());
+        ClearAuth(_client);
     }
 
     [Fact]
     public async Task ReportExchange_NoAcceptedMeeting_ReturnsBadRequest()
     {
-        var exchangeId = 1;
-        var exchange = BuildExchange(exchangeId, ExchangeStatus.ACCEPTED);
-        _mockService.Setup(s => s.GetExchangeWithMatch(exchangeId)).ReturnsAsync(exchange);
-        _mockMeetingService.Setup(s => s.GetMeetingByExchangeId(exchangeId)).ReturnsAsync((ExchangeMeeting?)null);
+        var data = await SeedExchangeData("report_no_mtg", ExchangeStatus.ACCEPTED);
+        SetAuth(_client, data.Token1);
 
-        var result = await _controller.ReportExchange(exchangeId);
+        var response = await _client.PatchAsync($"/api/exchange/{data.ExchangeId}/report", null);
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        ClearAuth(_client);
     }
 }
