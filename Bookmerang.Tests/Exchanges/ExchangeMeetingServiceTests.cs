@@ -2,11 +2,10 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
+using Bookmerang.Api.Services.Implementation.Books;
+using Bookmerang.Api.Services.Implementation.Chats;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
-using Bookmerang.Api.Services.Interfaces.Books;
-using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Tests.Helpers;
-using Moq;
 using NetTopologySuite.Geometries;
 using Xunit;
 
@@ -17,16 +16,15 @@ namespace Bookmerang.Tests.Exchanges;
 public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
     private AppDbContext _db = null!;
-    private Mock<IExchangeService> _mockExchangeService = null!;
-    private Mock<IBookRepository> _mockBookRepository = null!;
     private ExchangeMeetingService _service = null!;
 
     public Task InitializeAsync()
     {
         _db = fixture.CreateDbContext();
-        _mockExchangeService = new Mock<IExchangeService>();
-        _mockBookRepository = new Mock<IBookRepository>();
-        _service = new ExchangeMeetingService(_db, _mockExchangeService.Object, _mockBookRepository.Object);
+        var chatService = new ChatService(_db);
+        var exchangeService = new ExchangeService(_db, chatService);
+        var bookRepository = new BookRepository(_db);
+        _service = new ExchangeMeetingService(_db, exchangeService, bookRepository);
         return Task.CompletedTask;
     }
 
@@ -37,31 +35,12 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
 
     // ── Seed helpers ────────────────────────────────────────────────
 
-    private async Task<Guid> SeedUser(string prefix)
-    {
-        var id = Guid.NewGuid();
-        _db.Users.Add(new BaseUser
-        {
-            Id = id,
-            SupabaseId = $"supa_{id:N}",
-            Email = $"{prefix}_{id:N}@test.com",
-            Username = prefix,
-            Name = $"{prefix} User",
-            ProfilePhoto = "photo.jpg",
-            UserType = BaseUserType.USER,
-            Location = new Point(-5.98, 37.39) { SRID = 4326 }
-        });
-        _db.RegularUsers.Add(new User { Id = id });
-        await _db.SaveChangesAsync();
-        return id;
-    }
-
     private record SeedData(Guid User1Id, Guid User2Id, Exchange Exchange, Book Book1, Book Book2, MatchEntity Match);
 
     private async Task<SeedData> SeedExchangeChain(string prefix, ExchangeStatus status = ExchangeStatus.ACCEPTED)
     {
-        var u1 = await SeedUser($"{prefix}_u1");
-        var u2 = await SeedUser($"{prefix}_u2");
+        var u1 = await TestSeedHelper.SeedUser(_db, $"{prefix}_u1");
+        var u2 = await TestSeedHelper.SeedUser(_db, $"{prefix}_u2");
 
         var book1 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED };
         var book2 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
@@ -88,21 +67,6 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
         return new SeedData(u1, u2, exchange, book1, book2, match);
     }
 
-    private async Task<Bookspot> SeedBookspot(bool isBookdrop = false)
-    {
-        var bookspot = new Bookspot
-        {
-            Nombre = "Test Bookspot",
-            AddressText = "Test Address",
-            Location = new Point(0, 0) { SRID = 4326 },
-            IsBookdrop = isBookdrop,
-            Status = BookspotStatus.ACTIVE
-        };
-        _db.Bookspots.Add(bookspot);
-        await _db.SaveChangesAsync();
-        return bookspot;
-    }
-
     // --- CreateExchangeMeeting ---
 
     [Theory]
@@ -119,7 +83,7 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
 
         if (mode is ExchangeMode.BOOKSPOT or ExchangeMode.BOOKDROP)
         {
-            var bookspot = await SeedBookspot(isBookdrop);
+            var bookspot = await TestSeedHelper.SeedBookspot(_db, isBookdrop);
             bookspotId = bookspot.Id;
         }
         else
@@ -185,7 +149,7 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
     [Fact]
     public async Task CreateExchangeMeeting_BookdropOnNormalBookspot_ThrowsArgumentException()
     {
-        var bookspot = await SeedBookspot(isBookdrop: false);
+        var bookspot = await TestSeedHelper.SeedBookspot(_db, isBookdrop: false);
 
         var dto = new CreateExchangeMeetingDto(
             ExchangeId: 1,
@@ -208,7 +172,7 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
     public async Task CounterProposeMeeting_HappyPath_UpdatesMeeting()
     {
         var seed = await SeedExchangeChain("counter");
-        var bookspot = await SeedBookspot(isBookdrop: false);
+        var bookspot = await TestSeedHelper.SeedBookspot(_db, isBookdrop: false);
 
         var meeting = new ExchangeMeeting
         {
@@ -263,33 +227,13 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
 
         Assert.True(meeting.MarkAsCompletedByUser1);
         Assert.False(meeting.MarkAsCompletedByUser2);
-        _mockExchangeService.Verify(s => s.GetExchangeWithMatch(It.IsAny<int>()), Times.Never);
+        Assert.Equal(ExchangeStatus.ACCEPTED, seed.Exchange.Status);
     }
 
     [Fact]
     public async Task MarkAsCompleted_BothUsers_CompletesExchangeAndSwapsBooks()
     {
         var seed = await SeedExchangeChain("mark_both");
-
-        var exchangeWithMatch = new Exchange
-        {
-            ExchangeId = seed.Exchange.ExchangeId,
-            ChatId = seed.Exchange.ChatId,
-            MatchId = seed.Match.Id,
-            Status = ExchangeStatus.ACCEPTED,
-            Match = seed.Match
-        };
-
-        _mockExchangeService
-            .Setup(s => s.GetExchangeWithMatch(seed.Exchange.ExchangeId))
-            .ReturnsAsync(exchangeWithMatch);
-
-        _mockBookRepository
-            .Setup(r => r.GetByIdOrThrowAsync(seed.Book1.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(seed.Book1);
-        _mockBookRepository
-            .Setup(r => r.GetByIdOrThrowAsync(seed.Book2.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(seed.Book2);
 
         var meeting = new ExchangeMeeting
         {
@@ -308,11 +252,16 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
 
         Assert.True(meeting.MarkAsCompletedByUser1);
         Assert.True(meeting.MarkAsCompletedByUser2);
-        Assert.Equal(ExchangeStatus.COMPLETED, exchangeWithMatch.Status);
-        Assert.Equal(seed.User2Id, seed.Book1.OwnerId);
-        Assert.Equal(seed.User1Id, seed.Book2.OwnerId);
-        Assert.Equal(BookStatus.EXCHANGED, seed.Book1.Status);
-        Assert.Equal(BookStatus.EXCHANGED, seed.Book2.Status);
+
+        var updatedExchange = await _db.Exchanges.FindAsync(seed.Exchange.ExchangeId);
+        Assert.Equal(ExchangeStatus.COMPLETED, updatedExchange!.Status);
+
+        var book1 = await _db.Books.FindAsync(seed.Book1.Id);
+        var book2 = await _db.Books.FindAsync(seed.Book2.Id);
+        Assert.Equal(seed.User2Id, book1!.OwnerId);
+        Assert.Equal(seed.User1Id, book2!.OwnerId);
+        Assert.Equal(BookStatus.EXCHANGED, book1.Status);
+        Assert.Equal(BookStatus.EXCHANGED, book2.Status);
     }
 
     // --- InvalidateCollateralExchanges ---
@@ -320,10 +269,10 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
     [Fact]
     public async Task InvalidateCollateralExchanges_RejectsAffectedAndRefusesMeetings()
     {
-        var u1 = await SeedUser("inv_u1");
-        var u2 = await SeedUser("inv_u2");
-        var u3 = await SeedUser("inv_u3");
-        var u4 = await SeedUser("inv_u4");
+        var u1 = await TestSeedHelper.SeedUser(_db, "inv_u1");
+        var u2 = await TestSeedHelper.SeedUser(_db, "inv_u2");
+        var u3 = await TestSeedHelper.SeedUser(_db, "inv_u3");
+        var u4 = await TestSeedHelper.SeedUser(_db, "inv_u4");
 
         var book1 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED };
         var book2 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
@@ -399,7 +348,7 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
     public async Task AcceptMeeting_BookdropMode_GeneratesPinAndSetsStatus()
     {
         var seed = await SeedExchangeChain("accept_bd");
-        var bookspot = await SeedBookspot(isBookdrop: true);
+        var bookspot = await TestSeedHelper.SeedBookspot(_db, isBookdrop: true);
 
         var meeting = new ExchangeMeeting
         {

@@ -1,10 +1,17 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Bookmerang.Api.Data;
+using Bookmerang.Api.Models.Entities;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Tests.Helpers;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using NetTopologySuite.Geometries;
 using Xunit;
 
 using static Bookmerang.Tests.Helpers.AuthTestHelper;
+using MatchEntity = Bookmerang.Api.Models.Entities.Match;
 
 namespace Bookmerang.Tests.Bookdrop;
 
@@ -201,6 +208,131 @@ public class BookdropControllerTests(WebAppFixture fixture) : IClassFixture<WebA
         var response = await _client.GetAsync("/api/bookdrop/perfil");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        ClearAuth(_client);
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  BookDrop Exchange endpoints
+    // ══════════════════════════════════════════════════════════════════
+
+    private record ExchangeSeed(string BookdropToken, int MeetingId);
+
+    private async Task<ExchangeSeed> SeedExchangeChain(
+        string prefix, BookdropExchangeStatus dropStatus)
+    {
+        var (bdToken, bdUserId) = await RegisterBookdrop(_client,
+            $"{prefix}_bd@t.com", $"{prefix}_bd", $"Local {prefix}");
+        var (_, u1Id) = await RegisterUser(_client,
+            $"{prefix}_u1@t.com", $"{prefix}_u1");
+        var (_, u2Id) = await RegisterUser(_client,
+            $"{prefix}_u2@t.com", $"{prefix}_u2");
+
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var bookdropUser = await db.BookdropUsers.FirstAsync(b => b.Id == bdUserId);
+        var bookspotId = bookdropUser.BookSpotId;
+
+        var book1 = new Book { OwnerId = u1Id, Status = BookStatus.PUBLISHED, Titulo = "Libro A" };
+        var book2 = new Book { OwnerId = u2Id, Status = BookStatus.PUBLISHED, Titulo = "Libro B" };
+        db.Books.AddRange(book1, book2);
+        await db.SaveChangesAsync();
+
+        var match = new MatchEntity
+        {
+            User1Id = u1Id, User2Id = u2Id,
+            Book1Id = book1.Id, Book2Id = book2.Id,
+            Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow
+        };
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
+
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        db.Chats.Add(chat);
+        await db.SaveChangesAsync();
+
+        var exchange = new Exchange { ChatId = chat.Id, MatchId = match.Id, Status = ExchangeStatus.ACCEPTED };
+        db.Exchanges.Add(exchange);
+        await db.SaveChangesAsync();
+
+        var meeting = new ExchangeMeeting
+        {
+            ExchangeId = exchange.ExchangeId,
+            ExchangeMode = ExchangeMode.BOOKDROP,
+            BookspotId = bookspotId,
+            CustomLocation = new Point(-5.98, 37.39) { SRID = 4326 },
+            ProposerId = u1Id,
+            MeetingStatus = ExchangeMeetingStatus.ACCEPTED,
+            Pin = "123456",
+            BookDropStatus = dropStatus,
+            ScheduledAt = DateTime.UtcNow.AddHours(1)
+        };
+        db.ExchangeMeetings.Add(meeting);
+        await db.SaveChangesAsync();
+
+        return new ExchangeSeed(bdToken, meeting.ExchangeMeetingId);
+    }
+
+    [Fact]
+    public async Task GetActiveExchanges_Returns200WithList()
+    {
+        var seed = await SeedExchangeChain("gae", BookdropExchangeStatus.AWAITING_DROP_1);
+        SetAuth(_client, seed.BookdropToken);
+
+        var response = await _client.GetAsync("/api/bookdrop/exchanges");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetArrayLength() > 0);
+        Assert.Equal("AWAITING_DROP_1", body[0].GetProperty("status").GetString());
+        ClearAuth(_client);
+    }
+
+    [Fact]
+    public async Task ConfirmDrop_Returns200WithBook1Held()
+    {
+        var seed = await SeedExchangeChain("cd", BookdropExchangeStatus.AWAITING_DROP_1);
+        SetAuth(_client, seed.BookdropToken);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/bookdrop/exchanges/{seed.MeetingId}/confirm-drop",
+            new { Pin = "123456" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("BOOK_1_HELD", body.GetProperty("status").GetString());
+        ClearAuth(_client);
+    }
+
+    [Fact]
+    public async Task ConfirmSwap_Returns200WithBook2Held()
+    {
+        var seed = await SeedExchangeChain("cs", BookdropExchangeStatus.BOOK_1_HELD);
+        SetAuth(_client, seed.BookdropToken);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/bookdrop/exchanges/{seed.MeetingId}/confirm-swap",
+            new { Pin = "123456" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("BOOK_2_HELD", body.GetProperty("status").GetString());
+        ClearAuth(_client);
+    }
+
+    [Fact]
+    public async Task ConfirmPickup_Returns200WithCompleted()
+    {
+        var seed = await SeedExchangeChain("cp", BookdropExchangeStatus.BOOK_2_HELD);
+        SetAuth(_client, seed.BookdropToken);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/bookdrop/exchanges/{seed.MeetingId}/confirm-pickup",
+            new { Pin = "123456" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("COMPLETED", body.GetProperty("status").GetString());
         ClearAuth(_client);
     }
 }

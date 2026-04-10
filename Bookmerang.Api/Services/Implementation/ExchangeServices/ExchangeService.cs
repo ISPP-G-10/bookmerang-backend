@@ -121,9 +121,9 @@ public class ExchangeService(AppDbContext db, IChatService chatService): IExchan
             .ToListAsync();
         _db.ExchangeMeetings.RemoveRange(meetings);
 
-        await _chatService.DeleteChat(exchange.ChatId);
-
         _db.Exchanges.Remove(exchange);
+
+        await _chatService.DeleteChat(exchange.ChatId);
         await _db.SaveChangesAsync();
         return true;
     }
