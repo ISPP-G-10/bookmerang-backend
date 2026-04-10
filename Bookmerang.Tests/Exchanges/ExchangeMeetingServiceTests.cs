@@ -322,18 +322,20 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
     {
         var u1 = await SeedUser("inv_u1");
         var u2 = await SeedUser("inv_u2");
+        var u3 = await SeedUser("inv_u3");
+        var u4 = await SeedUser("inv_u4");
 
         var book1 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED };
         var book2 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
-        var book3 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
-        var book5 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED };
-        var book6 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
+        var book3 = new Book { OwnerId = u3, Status = BookStatus.PUBLISHED };
+        var book5 = new Book { OwnerId = u3, Status = BookStatus.PUBLISHED };
+        var book6 = new Book { OwnerId = u4, Status = BookStatus.PUBLISHED };
         _db.Books.AddRange(book1, book2, book3, book5, book6);
         await _db.SaveChangesAsync();
 
         var match1 = new MatchEntity { User1Id = u1, User2Id = u2, Book1Id = book1.Id, Book2Id = book2.Id, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
-        var match2 = new MatchEntity { User1Id = u1, User2Id = u2, Book1Id = book1.Id, Book2Id = book3.Id, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
-        var match3 = new MatchEntity { User1Id = u1, User2Id = u2, Book1Id = book5.Id, Book2Id = book6.Id, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
+        var match2 = new MatchEntity { User1Id = u1, User2Id = u3, Book1Id = book1.Id, Book2Id = book3.Id, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
+        var match3 = new MatchEntity { User1Id = u3, User2Id = u4, Book1Id = book5.Id, Book2Id = book6.Id, Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow };
         _db.Matches.AddRange(match1, match2, match3);
         await _db.SaveChangesAsync();
 

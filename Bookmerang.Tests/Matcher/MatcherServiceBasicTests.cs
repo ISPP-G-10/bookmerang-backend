@@ -630,13 +630,17 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
         var bookB = SeedBook(UserB); // Libro de B
         await _db.SaveChangesAsync();
 
-        // Configurar mock del ChatService para devolver un chat válido
+        // Crear chat real en DB para que ValidateChatAndMatchExist lo encuentre
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
+
         var mockChatService = new Mock<IChatService>();
         mockChatService.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
             .ReturnsAsync(new ChatDto(
-                Id: 1,
+                Id: chat.Id,
                 Type: ChatType.EXCHANGE.ToString(),
-                CreatedAt: DateTime.UtcNow,
+                CreatedAt: chat.CreatedAt,
                 Participants: [],
                 LastMessage: null
             ));
@@ -947,10 +951,14 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
         var bookB = SeedBook(UserB);
         await _db.SaveChangesAsync();
 
-        // Simular match existente (UserA ya matcheó con UserB)
+        // Crear chat real en DB para que ValidateChatAndMatchExist lo encuentre
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
+
         var chatMock = new Mock<IChatService>();
         chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(Id: 100, Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
+            .ReturnsAsync(new ChatDto(Id: chat.Id, Type: ChatType.EXCHANGE.ToString(), CreatedAt: chat.CreatedAt, Participants: [], LastMessage: null));
         var serviceWithChat = CreateServiceWithChat(_db, chatMock.Object);
 
         // B swipea RIGHT a libro de A → registra swipe
@@ -1030,9 +1038,13 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
         var bookB = SeedBook(UserB);
         await _db.SaveChangesAsync();
 
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
+
         var chatMock = new Mock<IChatService>();
         chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(Id: 200, Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
+            .ReturnsAsync(new ChatDto(Id: chat.Id, Type: ChatType.EXCHANGE.ToString(), CreatedAt: chat.CreatedAt, Participants: [], LastMessage: null));
         var serviceWithChat = CreateServiceWithChat(_db, chatMock.Object);
 
         await serviceWithChat.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
