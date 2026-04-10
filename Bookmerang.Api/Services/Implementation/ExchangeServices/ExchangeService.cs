@@ -13,11 +13,6 @@ public class ExchangeService(AppDbContext db, IChatService chatService, IExchang
     private readonly AppDbContext _db = db;
     private readonly IChatService _chatService = chatService;
     private readonly IExchangeMeetingService _meetingService = meetingService;
-
-    public async Task<Exchange?> GetExchangeById(int exchangeId)
-    {
-        return await _db.Exchanges.FirstOrDefaultAsync(e => e.ExchangeId == exchangeId);
-    }
     
     public async Task<Exchange?> GetExchangeByChatIdWithMatch(int chatId)
     {

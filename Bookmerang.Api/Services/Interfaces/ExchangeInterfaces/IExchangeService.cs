@@ -5,7 +5,6 @@ namespace Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 
 public interface IExchangeService
 {
-    Task<Exchange?> GetExchangeById(int exchangeId);
     Task<Exchange?> GetExchangeWithMatch(int exchangeId);
     Task<Exchange?> GetExchangeByChatIdWithMatch(int chatId);
     Task<List<Exchange>> GetAllExchanges();

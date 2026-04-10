@@ -28,7 +28,7 @@ public class AdminExchangeController(IExchangeService exchangeService, IExchange
     [HttpDelete("{exchangeId}")]
     public async Task<IActionResult> Delete(int exchangeId)
     {
-        var exchange = await _exchangeService.GetExchangeById(exchangeId);
+        var exchange = await _exchangeService.GetExchangeWithMatch(exchangeId);
         if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
 
         await _exchangeService.DeleteExchange(exchangeId);
