@@ -36,5 +36,5 @@ public interface IChatService
     Task<List<TypingUserDto>> GetTypingUsers(Guid chatId, Guid userId);
 
     /// Elimina un chat junto con sus mensajes y participantes.
-    Task<bool> DeleteChat(int chatId);
+    Task<bool> DeleteChat(Guid chatId);
 }

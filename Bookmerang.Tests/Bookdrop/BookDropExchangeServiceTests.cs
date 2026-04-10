@@ -5,6 +5,8 @@ using Bookmerang.Api.Services.Implementation.Bookdrop;
 using Bookmerang.Api.Services.Implementation.Books;
 using Bookmerang.Api.Services.Implementation.Chats;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
+using Bookmerang.Api.Services.Implementation.Inkdrops;
+using Bookmerang.Api.Services.Implementation.Streaks;
 using Bookmerang.Tests.Helpers;
 using NetTopologySuite.Geometries;
 using Xunit;
@@ -24,7 +26,9 @@ public class BookDropExchangeServiceTests(PostgresFixture fixture) : IClassFixtu
         var chatService = new ChatService(_db);
         var exchangeService = new ExchangeService(_db, chatService);
         var bookRepository = new BookRepository(_db);
-        var meetingService = new ExchangeMeetingService(_db, exchangeService, bookRepository);
+        var streakService = new StreakService(_db);
+        var inkdropsService = new InkdropsService(_db, streakService);
+        var meetingService = new ExchangeMeetingService(_db, exchangeService, bookRepository, inkdropsService);
         _service = new BookDropExchangeService(_db, meetingService);
         return Task.CompletedTask;
     }

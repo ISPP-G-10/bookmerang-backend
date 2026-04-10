@@ -2,6 +2,9 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.Auth;
 using Bookmerang.Api.Services.Implementation.Bookdrop;
+using Bookmerang.Api.Services.Implementation.Inkdrops;
+using Bookmerang.Api.Services.Implementation.Leveling;
+using Bookmerang.Api.Services.Implementation.Streaks;
 using Bookmerang.Tests.Helpers;
 using Microsoft.Extensions.Configuration;
 using NetTopologySuite.Geometries;
@@ -31,7 +34,10 @@ public class BookdropServiceTests(PostgresFixture fixture) : IClassFixture<Postg
                 { "Auth:JwtAudience", "bookmerang-client" }
             })
             .Build();
-        return new AuthService(db, config);
+        var levelingService = new LevelingService(db);
+        var streakService = new StreakService(db);
+        var inkdropsService = new InkdropsService(db, streakService);
+        return new AuthService(db, config, levelingService, inkdropsService);
     }
 
     private static BookdropService CreateBookdropService(AppDbContext db) => new(db);

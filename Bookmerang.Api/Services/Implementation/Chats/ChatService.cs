@@ -281,7 +281,7 @@ public class ChatService(AppDbContext db) : IChatService
         return chat?.ToDto();
     }
 
-    public async Task<bool> DeleteChat(int chatId)
+    public async Task<bool> DeleteChat(Guid chatId)
     {
         var chat = await _db.Chats.FindAsync(chatId);
         if (chat == null) return false;

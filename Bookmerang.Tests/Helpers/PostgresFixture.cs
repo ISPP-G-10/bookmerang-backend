@@ -4,9 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Npgsql.NameTranslation;
 using Testcontainers.PostgreSql;
-using Moq;
-using Bookmerang.Api.Models.DTOs;
-using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Xunit;
 
 namespace Bookmerang.Tests.Helpers;
@@ -92,8 +89,9 @@ public class PostgresFixture : IAsyncLifetime
             "20260222165524_0003_indexes.sql",
             "20260307120000_0005_add_typing_indicators.sql",
             "20260317110000_0004_match_pair_unique_index.sql",
-            "20260407000000_0008_bookdrop_exchange_status.sql", // TODO: verificar que meter las migraciones de los compañeros por encima no haya dado problemas
-            "20260307120000_0005_add_typing_indicators.sql",
+            "20260329120000_0008_add_inkdrops.sql",
+            "20260405120000_0009_add_inkdrops_history.sql",
+            "20260407000000_0008_bookdrop_exchange_status.sql",
             "20260408120000_0008_chats_uuid_ids.sql"
         })
         {

@@ -5,6 +5,8 @@ using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.Books;
 using Bookmerang.Api.Services.Implementation.Chats;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
+using Bookmerang.Api.Services.Implementation.Inkdrops;
+using Bookmerang.Api.Services.Implementation.Streaks;
 using Bookmerang.Tests.Helpers;
 using NetTopologySuite.Geometries;
 using Xunit;
@@ -13,7 +15,6 @@ using MatchEntity = Bookmerang.Api.Models.Entities.Match;
 
 namespace Bookmerang.Tests.Exchanges;
 
-// TODO: cambiar chat ids por GUID si es necesario e instanciar el inkDrop service en el ExchangeMeetingService
 public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
     private AppDbContext _db = null!;
@@ -25,7 +26,9 @@ public class ExchangeMeetingServiceTests(PostgresFixture fixture) : IClassFixtur
         var chatService = new ChatService(_db);
         var exchangeService = new ExchangeService(_db, chatService);
         var bookRepository = new BookRepository(_db);
-        _service = new ExchangeMeetingService(_db, exchangeService, bookRepository);
+        var streakService = new StreakService(_db);
+        var inkdropsService = new InkdropsService(_db, streakService);
+        _service = new ExchangeMeetingService(_db, exchangeService, bookRepository, inkdropsService);
         return Task.CompletedTask;
     }
 

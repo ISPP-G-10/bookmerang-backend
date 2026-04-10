@@ -89,7 +89,7 @@ public class ExchangeControllerTests(WebAppFixture fixture) : IClassFixture<WebA
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(data.ChatId, body.GetProperty("chatId").GetInt32()); // TODO: actualizar, antes era id y ahora es GUID
+        Assert.Equal(data.ChatId, body.GetProperty("chatId").GetGuid());
         ClearAuth(_client);
     }
 
