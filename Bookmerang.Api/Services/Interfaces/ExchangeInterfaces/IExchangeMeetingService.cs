@@ -14,5 +14,6 @@ public interface IExchangeMeetingService
     Task<ExchangeMeeting> CounterProposeMeeting(ExchangeMeeting meeting, CounterProposeMeetingDto dto, Guid newProposerId);
     Task<ExchangeMeeting> AcceptMeeting(ExchangeMeeting meeting);
     Task<ExchangeMeeting> MarkAsCompleted(ExchangeMeeting meeting, Guid userId);
+    Task InvalidateCollateralExchanges(int book1Id, int book2Id, int completedMatchId);
     Task RemoveByExchangeId(int exchangeId);
 }

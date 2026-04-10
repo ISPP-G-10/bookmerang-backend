@@ -115,10 +115,46 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
 
             book1.OwnerId = exchange.Match.User2Id;
             book2.OwnerId = exchange.Match.User1Id;
+
+            book1.Status = BookStatus.EXCHANGED;
+            book2.Status = BookStatus.EXCHANGED;
+
+            await InvalidateCollateralExchanges(exchange.Match.Book1Id, exchange.Match.Book2Id, exchange.MatchId);
         }
 
         await _db.SaveChangesAsync();
         return meeting;
+    }
+
+    // Cambia estado de exchanges afectados por libros intercambiados para que se actualice su estado en el front
+    public async Task InvalidateCollateralExchanges(int book1Id, int book2Id, int completedMatchId)
+    {
+        var affectedExchanges = await _db.Exchanges
+            .Include(e => e.Match)
+            .Where(e => e.MatchId != completedMatchId)
+            .Where(e => e.Match.Book1Id == book1Id || e.Match.Book1Id == book2Id
+                     || e.Match.Book2Id == book1Id || e.Match.Book2Id == book2Id)
+            .Where(e => e.Status != ExchangeStatus.COMPLETED
+                     && e.Status != ExchangeStatus.REJECTED
+                     && e.Status != ExchangeStatus.INCIDENT)
+            .ToListAsync();
+
+        var affectedExchangeIds = affectedExchanges.Select(e => e.ExchangeId).ToList();
+
+        foreach (var exchange in affectedExchanges)
+        {
+            exchange.Status = ExchangeStatus.REJECTED;
+            exchange.UpdatedAt = DateTime.UtcNow;
+        }
+
+        var affectedMeetings = await _db.ExchangeMeetings
+            .Where(m => affectedExchangeIds.Contains(m.ExchangeId))
+            .ToListAsync();
+
+        foreach (var meeting in affectedMeetings)
+        {
+            meeting.MeetingStatus = ExchangeMeetingStatus.REFUSED;
+        }
     }
 
     public async Task<ExchangeMeeting> AcceptMeeting(ExchangeMeeting meeting)
