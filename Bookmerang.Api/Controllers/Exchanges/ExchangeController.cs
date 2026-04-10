@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Exceptions;
-using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using System.Security.Claims;
+using Bookmerang.Api.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 
@@ -19,15 +19,6 @@ public class ExchangeController(IExchangeService service, AppDbContext db) : Con
 {
     private readonly IExchangeService _service = service;
     private readonly AppDbContext _db = db;
-
-    /// Comprueba si el usuario autenticado es admin o participa en el intercambio.
-    private bool IsAdminOrExchangeMember(Guid userId, Exchange exchange)
-    {
-        var isAdmin = User.HasClaim("user_type", ((int)BaseUserType.ADMIN).ToString());
-        var isMember = exchange.Match is not null &&
-                       (exchange.Match.User1Id == userId || exchange.Match.User2Id == userId);
-        return isAdmin || isMember;
-    }
 
     /// Obtiene el Guid del usuario autenticado
     private async Task<Guid?> GetCurrentUserId()
@@ -49,7 +40,7 @@ public class ExchangeController(IExchangeService service, AppDbContext db) : Con
         var exchange = await _service.GetExchangeWithMatch(exchangeId);
         if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
 
-        if (!IsAdminOrExchangeMember(userId.Value, exchange))
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
             throw new ForbiddenException("No tienes permiso para acceder a este intercambio.");
 
         return Ok(exchange.ToDto());
@@ -65,7 +56,7 @@ public class ExchangeController(IExchangeService service, AppDbContext db) : Con
         var exchange = await _service.GetExchangeByChatIdWithMatch(chatId);
         if (exchange == null) return NotFound($"Intercambio con id {chatId} no encontrado.");
 
-        if (!IsAdminOrExchangeMember(userId.Value, exchange))
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
             throw new ForbiddenException("No tienes permiso para acceder a este intercambio.");
 
         return Ok(exchange.ToWithMatchDto());
@@ -80,7 +71,7 @@ public class ExchangeController(IExchangeService service, AppDbContext db) : Con
         var exchange = await _service.GetExchangeWithMatch(exchangeId);
         if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
 
-        if (!IsAdminOrExchangeMember(userId.Value, exchange))
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
             throw new ForbiddenException("No tienes permiso para aceptar este intercambio.");
 
         var updated = await _service.AcceptExchange(exchangeId, userId.Value);
@@ -96,7 +87,7 @@ public class ExchangeController(IExchangeService service, AppDbContext db) : Con
         var exchange = await _service.GetExchangeWithMatch(exchangeId);
         if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
 
-        if (!IsAdminOrExchangeMember(userId.Value, exchange))
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
             throw new ForbiddenException("No tienes permiso para rechazar este intercambio.");
 
         if (exchange.Status is not (ExchangeStatus.NEGOTIATING
@@ -119,7 +110,7 @@ public class ExchangeController(IExchangeService service, AppDbContext db) : Con
         var exchange = await _service.GetExchangeWithMatch(exchangeId);
         if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
 
-        if (!IsAdminOrExchangeMember(userId.Value, exchange))
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
             throw new ForbiddenException("No tienes permiso para reportar este intercambio.");
 
         if (exchange.Status != ExchangeStatus.ACCEPTED)

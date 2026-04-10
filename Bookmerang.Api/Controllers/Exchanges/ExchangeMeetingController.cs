@@ -4,16 +4,17 @@ using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Exceptions;
+using Bookmerang.Api.Helpers;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
-using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Controllers.Exchanges;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = "UserOnly")]
 
 public class ExchangeMeetingController : ControllerBase
 {
@@ -102,33 +103,37 @@ public class ExchangeMeetingController : ControllerBase
 
     /// POST /api/exchangemeeting
     [HttpPost]
-    public async Task<IActionResult> CreateExchangeMeeting([FromBody] ExchangeMeetingDto dto)
+    public async Task<IActionResult> CreateExchangeMeeting([FromBody] CreateExchangeMeetingDto dto)
     {
-        var userId = await GetCurrentUserId(); // Obtener el userId del usuario autenticado, que será el proposer del meeting
+        var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        // require all necessary fields
-        if (dto.ExchangeId == 0 || dto.ExchangeId == null || !dto.ExchangeMode.HasValue || (dto.ExchangeMode == ExchangeMode.CUSTOM && dto.CustomLocation == null))
-            return BadRequest("Faltan propiedades para crear un ExchangeMeeting.");
-        
-        var exchange = await _exchangeService.GetExchangeWithMatch(dto.ExchangeId.Value);
+        var exchange = await _exchangeService.GetExchangeWithMatch(dto.ExchangeId);
         if (exchange == null) return NotFound($"Exchange con id {dto.ExchangeId} no encontrado.");
-        
-        if (!IsUserInExchange(userId.Value, exchange!.Match)) return Forbid();
-        
-        // if custom location was not supplied due to serialization issues, just default to the origin
-        Point location;
-        if (dto.CustomLocation != null && dto.CustomLocation.Length >= 2)
-            location = new Point(dto.CustomLocation[0], dto.CustomLocation[1]) { SRID = 4326 };
-        else
-            location = new Point(0, 0) { SRID = 4326 };
-        var meeting = await _meetingService.CreateExchangeMeeting(dto.ExchangeId.Value, dto.ExchangeMode.Value, userId.Value, dto.BookspotId, dto.ScheduledAt, location);
 
-        // Se asigna el id para que se pueda buscar el exchange meeting para devolverlo
-        return CreatedAtAction(
-            nameof(GetExchangeMeeting),
-            new { meetingId = meeting.ExchangeMeetingId },
-            meeting.ToDto());
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
+            throw new ForbiddenException("No tienes permiso para crear un meeting en este intercambio.");
+
+        if (exchange.Status != ExchangeStatus.ACCEPTED)
+            return BadRequest("Solo se puede crear un meeting cuando el intercambio ha sido aceptado.");
+
+        var existingMeeting = await _meetingService.GetMeetingByExchangeId(dto.ExchangeId);
+        if (existingMeeting != null)
+            return Conflict("Ya existe un meeting para este intercambio.");
+
+        try
+        {
+            var meeting = await _meetingService.CreateExchangeMeeting(dto, userId.Value);
+
+            return CreatedAtAction(
+                nameof(GetExchangeMeeting),
+                new { meetingId = meeting.ExchangeMeetingId },
+                meeting.ToDto());
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     /// PUT /api/exchangemeeting/{meetingId}

@@ -1,21 +1,31 @@
-using NetTopologySuite.Geometries;
+using System.ComponentModel.DataAnnotations;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 
 namespace Bookmerang.Api.Models.DTOs;
 
-public record ExchangeMeetingDto(
-    int? ExchangeMeetingId,
-    int? ExchangeId,
-    ExchangeMode? ExchangeMode,
+public record CreateExchangeMeetingDto(
+    int ExchangeId,
+    ExchangeMode ExchangeMode,
     int? BookspotId,
-    double[]? CustomLocation, // coordenadas en forma de lista [x, y]
-    DateTime? ScheduledAt,
-    Guid? ProposerId,
-    String? ProposerName,
-    ExchangeMeetingStatus? MeetingStatus,
-    bool? MarkAsCompletedByUser1,
-    bool? MarkAsCompletedByUser2,
+    [Range(-90, 90)] double? Latitud,
+    [Range(-180, 180)] double? Longitud,
+    DateTime ScheduledAt
+);
+
+public record ExchangeMeetingDto(
+    int ExchangeMeetingId,
+    int ExchangeId,
+    ExchangeMode ExchangeMode,
+    double Latitud,
+    double Longitud,
+    DateTime ScheduledAt,
+    Guid ProposerId,
+    string ProposerName,
+    ExchangeMeetingStatus MeetingStatus,
+    bool MarkAsCompletedByUser1,
+    bool MarkAsCompletedByUser2,
+    int? BookspotId,
     string? Pin,
     BookdropExchangeStatus? BookDropStatus
 );
@@ -36,14 +46,15 @@ public static class ExchangeMeetingExtensions
         meeting.ExchangeMeetingId,
         meeting.ExchangeId,
         meeting.ExchangeMode,
-        meeting.BookspotId,
-        meeting.CustomLocation != null ? [meeting.CustomLocation.X, meeting.CustomLocation.Y] : null,
-        meeting.ScheduledAt,
+        meeting.CustomLocation.Y,
+        meeting.CustomLocation.X,
+        meeting.ScheduledAt!.Value,
         meeting.ProposerId,
-        meeting.Proposer?.BaseUser?.Name, //No siempre se incluyen todas las relaciones del proposer
+        meeting.Proposer.BaseUser.Name,
         meeting.MeetingStatus,
         meeting.MarkAsCompletedByUser1,
         meeting.MarkAsCompletedByUser2,
+        meeting.BookspotId,
         meeting.Pin,
         meeting.BookDropStatus
     );

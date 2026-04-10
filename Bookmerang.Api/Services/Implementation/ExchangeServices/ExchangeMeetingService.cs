@@ -45,31 +45,37 @@ public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_s
         return await _db.ExchangeMeetings.FirstOrDefaultAsync(m => m.ExchangeId == exchangeId);
     }
 
-    // se supone que no da fallo los valores opcionales
-    public async Task<ExchangeMeeting> CreateExchangeMeeting(int exchangeId, ExchangeMode exchangeMode, Guid proposerId, int? bookspotId, DateTime? scheduledAt, Point customLocation)
+    public async Task<ExchangeMeeting> CreateExchangeMeeting(CreateExchangeMeetingDto dto, Guid proposerId)
     {
+        if (dto.ScheduledAt < DateTime.UtcNow.AddMinutes(5))
+            throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próxima a ella.");
 
-        if(scheduledAt != null && scheduledAt < DateTime.UtcNow.AddMinutes(5))
+        if (dto.ExchangeMode is ExchangeMode.BOOKSPOT or ExchangeMode.BOOKDROP && dto.BookspotId == null)
+            throw new ArgumentException("Se debe indicar el bookspot en el que se va a producir el encuentro.");
+
+        if (dto.ExchangeMode == ExchangeMode.CUSTOM && (dto.Latitud == null || dto.Longitud == null))
+            throw new ArgumentException("Se debe indicar la ubicación para un encuentro personalizado.");
+
+        Point location;
+        if (dto.ExchangeMode is ExchangeMode.BOOKSPOT or ExchangeMode.BOOKDROP)
         {
-            throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próximo a ella");
-        }
-        if((exchangeMode == ExchangeMode.BOOKSPOT || exchangeMode == ExchangeMode.BOOKDROP) && bookspotId == null)
-        {
-            throw new ArgumentException("Se debe indicar el bookspot en el que se va a producir el encuentro");
-        }
-        if(exchangeMode == ExchangeMode.BOOKDROP)
-        {
-            var bookspot = await _db.Bookspots.FindAsync(bookspotId);
-            if (bookspot == null || !bookspot.IsBookdrop)
+            var bookspot = await _db.Bookspots.FindAsync(dto.BookspotId) ?? throw new ArgumentException("El bookspot indicado no existe.");
+            if (dto.ExchangeMode == ExchangeMode.BOOKDROP && !bookspot.IsBookdrop)
                 throw new ArgumentException("El bookspot indicado no es un establecimiento BookDrop.");
+            location = bookspot.Location;
         }
+        else
+        {
+            location = new Point(dto.Longitud!.Value, dto.Latitud!.Value) { SRID = 4326 };
+        }
+
         var meeting = new ExchangeMeeting
         {
-            ExchangeId = exchangeId,
-            ExchangeMode = exchangeMode,
-            BookspotId = bookspotId,
-            CustomLocation = customLocation,
-            ScheduledAt = scheduledAt,
+            ExchangeId = dto.ExchangeId,
+            ExchangeMode = dto.ExchangeMode,
+            BookspotId = dto.BookspotId,
+            CustomLocation = location,
+            ScheduledAt = dto.ScheduledAt,
             ProposerId = proposerId
         };
 
