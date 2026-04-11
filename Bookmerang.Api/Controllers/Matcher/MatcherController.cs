@@ -108,7 +108,7 @@ public class MatcherController(IMatcherService matcherService, IAuthService auth
         var undone = await _matcherService.UndoLastSwipeAsync(usuario.Id);
 
         return undone
-            ? Ok(new { message = "Último swipe deshecho correctamente." })
-            : BadRequest(new { message = "No se puede deshacer: no hay swipes o el último generó un match." });
+            ? Ok(new { message = "Ultimo movimiento deshecho correctamente." })
+            : BadRequest(new { message = "No se pudo deshacer el ultimo movimiento." });
     }
 }

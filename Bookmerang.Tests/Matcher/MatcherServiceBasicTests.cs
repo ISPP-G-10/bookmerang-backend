@@ -202,6 +202,33 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
         Assert.Empty(feed);
     }
 
+    [Fact]
+    public async Task GetFeed_MatchedBook_IsNotReturned()
+    {
+        SeedUser(UserA, "userA", Madrid);
+        SeedUser(UserB, "userB", Madrid);
+        SeedPreferences(UserA, Madrid);
+
+        var bookA = SeedBook(UserA);
+        var bookB = SeedBook(UserB);
+        await _db.SaveChangesAsync();
+
+        _db.Matches.Add(new Api.Models.Entities.Match
+        {
+            User1Id = UserA,
+            User2Id = UserB,
+            Book1Id = bookA.Id,
+            Book2Id = bookB.Id,
+            Status = MatchStatus.CHAT_CREATED,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        var feed = Feed(await _service.GetFeedAsync(UserA, page: 0, pageSize: 20));
+
+        Assert.DoesNotContain(feed, b => b.Id == bookB.Id);
+    }
+
     /// <summary>
     /// Solo los libros PUBLISHED deben aparecer. DRAFT, PAUSED, RESERVED, EXCHANGED y DELETED deben quedar excluidos.
     /// </summary>
@@ -999,7 +1026,7 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
     /// TEST-N09: Undo con swipe RIGHT que generó match → devuelve false, no elimina nada.
     /// </summary>
     [Fact]
-    public async Task UndoLastSwipe_RightSwipeWithMatch_ReturnsFalse()
+    public async Task UndoLastSwipe_RightSwipeWithMatch_RevertsMatchFlow()
     {
         SeedUser(UserA, "userA", Madrid);
         SeedUser(UserB, "userB", Madrid);
@@ -1013,13 +1040,47 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
         await _service.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
         var res = await _service.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
         Assert.Equal(SwipeOutcome.MatchCreated, res.Outcome);
+        Assert.Equal(1, await _db.Matches.CountAsync());
+        Assert.Equal(1, await _db.Exchanges.CountAsync());
+        Assert.Equal(1, await _db.Chats.CountAsync());
 
-        // El último swipe de A generó match → no se puede deshacer
         var undone = await _service.UndoLastSwipeAsync(UserA);
 
-        Assert.False(undone);
-        // El swipe sigue en la BD
-        Assert.True(await _db.Swipes.AnyAsync(s => s.SwiperId == UserA));
+        Assert.True(undone);
+        Assert.Equal(0, await _db.Matches.CountAsync());
+        Assert.Equal(0, await _db.Exchanges.CountAsync());
+        Assert.Equal(0, await _db.Chats.CountAsync());
+        Assert.False(await _db.Swipes.AnyAsync(s => s.SwiperId == UserA && s.BookId == bookB.Id));
+        Assert.True(await _db.Swipes.AnyAsync(s => s.SwiperId == UserB && s.BookId == bookA.Id));
+    }
+
+    [Fact]
+    public async Task UndoLastSwipe_RightSwipeAfterExistingMatch_RemovesOnlyLastSwipe()
+    {
+        SeedUser(UserA, "userA", Madrid);
+        SeedUser(UserB, "userB", Madrid);
+        SeedPreferences(UserA, Madrid);
+        SeedPreferences(UserB, Madrid);
+
+        var bookA = SeedBook(UserA);
+        var bookB = SeedBook(UserB);
+        var bookB2 = SeedBook(UserB);
+        await _db.SaveChangesAsync();
+
+        await _service.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
+        var matched = await _service.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
+        Assert.Equal(SwipeOutcome.MatchCreated, matched.Outcome);
+
+        var extraSwipe = await _service.ProcessSwipeAsync(UserA, bookB2.Id, SwipeDirection.RIGHT);
+        Assert.Equal(SwipeOutcome.Recorded, extraSwipe.Outcome);
+
+        var undone = await _service.UndoLastSwipeAsync(UserA);
+
+        Assert.True(undone);
+        Assert.Equal(1, await _db.Matches.CountAsync());
+        Assert.Equal(1, await _db.Exchanges.CountAsync());
+        Assert.False(await _db.Swipes.AnyAsync(s => s.SwiperId == UserA && s.BookId == bookB2.Id));
+        Assert.True(await _db.Swipes.AnyAsync(s => s.SwiperId == UserA && s.BookId == bookB.Id));
     }
 
     /// <summary>

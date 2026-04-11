@@ -6,6 +6,7 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Tests.Helpers;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 using Xunit;
 
@@ -179,6 +180,36 @@ public class ExchangeMeetingControllerTests(WebAppFixture fixture) : IClassFixtu
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         ClearAuth(_client);
+    }
+
+    [Fact]
+    public async Task RejectExchangeMeeting_AcceptedMeeting_ReturnsNoContentAndRefused()
+    {
+        var d = await Seed("reject_mtg",
+            exchangeStatus: ExchangeStatus.ACCEPTED,
+            meetingStatus: ExchangeMeetingStatus.ACCEPTED,
+            meetingMode: ExchangeMode.BOOKDROP);
+
+        using (var scope = _fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var meeting = await db.ExchangeMeetings.FirstAsync(m => m.ExchangeMeetingId == d.MeetingId!.Value);
+            meeting.Pin = "987654";
+            meeting.BookDropStatus = BookdropExchangeStatus.AWAITING_DROP_1;
+            await db.SaveChangesAsync();
+        }
+
+        SetAuth(_client, d.Token1);
+        var response = await _client.DeleteAsync($"/api/exchangemeeting/{d.MeetingId}");
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        ClearAuth(_client);
+
+        using var checkScope = _fixture.Factory.Services.CreateScope();
+        var checkDb = checkScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var refusedMeeting = await checkDb.ExchangeMeetings.FirstAsync(m => m.ExchangeMeetingId == d.MeetingId!.Value);
+        Assert.Equal(ExchangeMeetingStatus.REFUSED, refusedMeeting.MeetingStatus);
+        Assert.Null(refusedMeeting.Pin);
+        Assert.Null(refusedMeeting.BookDropStatus);
     }
 
     // ── Guardias de seguridad ───────────────────────────────────────
