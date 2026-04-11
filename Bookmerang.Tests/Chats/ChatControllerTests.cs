@@ -10,6 +10,7 @@ using Bookmerang.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using NetTopologySuite.Geometries;
+using Bookmerang.Api.Exceptions;
 using Xunit;
 
 namespace Bookmerang.Tests.Chats;
@@ -70,7 +71,7 @@ public class ChatControllerTests
     [Fact]
     public async Task GetMyChats_ShouldReturnOk_WithChats()
     {
-        var chats = new List<ChatDto> { new ChatDto(1, "INDIVIDUAL", DateTime.UtcNow, new List<ChatParticipantDto>(), null) };
+        var chats = new List<ChatDto> { new ChatDto(Guid.NewGuid(), "INDIVIDUAL", DateTime.UtcNow, new List<ChatParticipantDto>(), null) };
         _mockChatService.Setup(s => s.GetUserChats(_currentUserId)).ReturnsAsync(chats);
 
         var result = await _controller.GetMyChats();
@@ -82,7 +83,7 @@ public class ChatControllerTests
     [Fact]
     public async Task GetChat_ShouldReturnOk_WhenChatExists()
     {
-        var chatId = 1;
+        var chatId = Guid.NewGuid();
         var chat = new ChatDto(chatId, "INDIVIDUAL", DateTime.UtcNow, new List<ChatParticipantDto>(), null);
         _mockChatService.Setup(s => s.GetChatById(chatId, _currentUserId)).ReturnsAsync(chat);
 
@@ -93,20 +94,19 @@ public class ChatControllerTests
     }
 
     [Fact]
-    public async Task GetChat_ShouldReturnNotFound_WhenChatDoesNotExist()
+    public async Task GetChat_ShouldThrowNotFound_WhenChatDoesNotExist()
     {
-        var chatId = 1;
-        _mockChatService.Setup(s => s.GetChatById(chatId, _currentUserId)).ReturnsAsync((ChatDto?)null);
+        var chatId = Guid.NewGuid();
+        _mockChatService.Setup(s => s.GetChatById(chatId, _currentUserId))
+            .ThrowsAsync(new NotFoundException("not found"));
 
-        var result = await _controller.GetChat(chatId);
-
-        Assert.IsType<NotFoundObjectResult>(result);
+        await Assert.ThrowsAsync<NotFoundException>(() => _controller.GetChat(chatId));
     }
 
     [Fact]
     public async Task GetMessages_ShouldReturnOk_WhenUserIsParticipant()
     {
-        var chatId = 1;
+        var chatId = Guid.NewGuid();
         var messages = new List<MessageDto>();
         _mockChatService.Setup(s => s.IsParticipant(chatId, _currentUserId)).ReturnsAsync(true);
         _mockChatService.Setup(s => s.GetMessages(chatId, _currentUserId, 1, 50)).ReturnsAsync(messages);
@@ -120,7 +120,7 @@ public class ChatControllerTests
     [Fact]
     public async Task GetMessages_ShouldReturnForbid_WhenUserIsNotParticipant()
     {
-        var chatId = 1;
+        var chatId = Guid.NewGuid();
         _mockChatService.Setup(s => s.IsParticipant(chatId, _currentUserId)).ReturnsAsync(false);
 
         var result = await _controller.GetMessages(chatId);
@@ -131,7 +131,7 @@ public class ChatControllerTests
     [Fact]
     public async Task SendMessage_ShouldReturnCreated_WhenSuccessful()
     {
-        var chatId = 1;
+        var chatId = Guid.NewGuid();
         var request = new SendMessageRequest("Hello");
         var messageDto = new MessageDto(1, chatId, _currentUserId, "testuser", "Hello", DateTime.UtcNow);
         _mockChatService.Setup(s => s.SendMessage(chatId, _currentUserId, request.Body)).ReturnsAsync(messageDto);
@@ -147,7 +147,7 @@ public class ChatControllerTests
     {
         var participantIds = new List<Guid> { _currentUserId, Guid.NewGuid() };
         var request = new CreateChatRequest(ChatType.EXCHANGE, participantIds);
-        var chatDto = new ChatDto(1, "INDIVIDUAL", DateTime.UtcNow, new List<ChatParticipantDto>(), null);
+        var chatDto = new ChatDto(Guid.NewGuid(), "INDIVIDUAL", DateTime.UtcNow, new List<ChatParticipantDto>(), null);
         
         _mockChatService.Setup(s => s.CreateChat(request.Type, It.IsAny<List<Guid>>())).ReturnsAsync(chatDto);
 
@@ -160,7 +160,7 @@ public class ChatControllerTests
     [Fact]
     public async Task StartTyping_ShouldReturnNoContent_WhenSuccessful()
     {
-        var chatId = 1;
+        var chatId = Guid.NewGuid();
         _mockChatService.Setup(s => s.StartTyping(chatId, _currentUserId)).ReturnsAsync(true);
 
         var result = await _controller.StartTyping(chatId);
@@ -171,7 +171,7 @@ public class ChatControllerTests
     [Fact]
     public async Task StopTyping_ShouldReturnNoContent()
     {
-        var chatId = 1;
+        var chatId = Guid.NewGuid();
         _mockChatService.Setup(s => s.StopTyping(chatId, _currentUserId)).ReturnsAsync(true);
 
         var result = await _controller.StopTyping(chatId);
@@ -182,7 +182,7 @@ public class ChatControllerTests
     [Fact]
     public async Task GetTypingUsers_ShouldReturnOk()
     {
-        var chatId = 1;
+        var chatId = Guid.NewGuid();
         var typingUsers = new List<TypingUserDto>();
         _mockChatService.Setup(s => s.GetTypingUsers(chatId, _currentUserId)).ReturnsAsync(typingUsers);
 
@@ -195,7 +195,7 @@ public class ChatControllerTests
     [Fact]
     public async Task SendMessage_ShouldReturnBadRequest_WhenBodyIsEmpty()
     {
-        var chatId = 1;
+        var chatId = Guid.NewGuid();
         var request = new SendMessageRequest("");
 
         var result = await _controller.SendMessage(chatId, request);

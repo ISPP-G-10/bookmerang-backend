@@ -115,6 +115,7 @@ public class PostgresMatcherFixture : IAsyncLifetime
         builder.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
         builder.MapEnum<BookspotStatus>("bookspot_status", t);
         builder.MapEnum<PricingPlan>("pricing_plan", t);
+        builder.MapEnum<InkdropsActionType>("inkdrops_action_type", t);
 
         return builder.Build();
     }
@@ -132,7 +133,10 @@ public class PostgresMatcherFixture : IAsyncLifetime
         {
             "20260222163941_0001_extensions.sql",   // postgis, pgcrypto
             "20260222164018_0002_schema.sql",        // tablas y tipos enum
-            "20260317110000_0004_match_pair_unique_index.sql"
+            "20260317110000_0004_match_pair_unique_index.sql",
+            "20260307120000_0005_add_typing_indicators.sql",
+            "20260329120000_0008_add_inkdrops.sql",
+            "20260408120000_0008_chats_uuid_ids.sql"
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

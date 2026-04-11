@@ -4,6 +4,7 @@ using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Bookmerang.Tests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -16,13 +17,18 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 {
 	private AppDbContext _db = null!;
 	private Mock<IExchangeService> _exchangeService = null!;
+	private Mock<IInkdropsService> _inkdropsService = null!;
 	private ExchangeMeetingService _service = null!;
 
 	public Task InitializeAsync()
 	{
 		_db = DbContextFactory.CreateInMemory();
 		_exchangeService = new Mock<IExchangeService>();
-		_service = new ExchangeMeetingService(_db, _exchangeService.Object);
+		_inkdropsService = new Mock<IInkdropsService>();
+		_inkdropsService
+			.Setup(s => s.GrantExchangeInkdropsAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+			.Returns(Task.CompletedTask);
+		_service = new ExchangeMeetingService(_db, _exchangeService.Object, _inkdropsService.Object);
 		return Task.CompletedTask;
 	}
 
@@ -57,7 +63,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 10,
-			ChatId = 20,
+			ChatId = Guid.NewGuid(),
 			MatchId = 30,
 			Match = match,
 			Status = ExchangeStatus.NEGOTIATING,
@@ -90,6 +96,66 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		Assert.True(updatedMeeting.MarkAsCompletedByUser1);
 		Assert.True(updatedMeeting.MarkAsCompletedByUser2);
 		Assert.Equal(ExchangeStatus.COMPLETED, exchange.Status);
+	}
+
+	[Fact]
+	public async Task UpdateExchangeMeeting_AlreadyCompleted_DoesNotDuplicateInkdrops()
+	{
+		var user1Id = Guid.NewGuid();
+		var user2Id = Guid.NewGuid();
+		var match = new Api.Models.Entities.Match
+		{
+			Id = 32,
+			User1Id = user1Id,
+			User2Id = user2Id,
+			Book1Id = 321,
+			Book2Id = 322,
+			Status = MatchStatus.NEW,
+			CreatedAt = DateTime.UtcNow
+		};
+
+		_db.Matches.Add(match);
+		_db.Books.AddRange(
+			new Book { Id = 321, OwnerId = user1Id, Status = BookStatus.PUBLISHED },
+			new Book { Id = 322, OwnerId = user2Id, Status = BookStatus.PUBLISHED }
+		);
+
+		var exchange = new Api.Models.Entities.Exchange
+		{
+			ExchangeId = 12,
+			ChatId = Guid.NewGuid(),
+			MatchId = 32,
+			Match = match,
+			Status = ExchangeStatus.COMPLETED,
+			CreatedAt = DateTime.UtcNow,
+			UpdatedAt = DateTime.UtcNow
+		};
+
+		var meeting = new ExchangeMeeting
+		{
+			ExchangeMeetingId = 13,
+			ExchangeId = 12,
+			ExchangeMode = ExchangeMode.CUSTOM,
+			CustomLocation = new Point(0, 0) { SRID = 4326 },
+			ProposerId = Guid.NewGuid(),
+			MeetingStatus = ExchangeMeetingStatus.PROPOSAL,
+			MarkAsCompletedByUser1 = true,
+			MarkAsCompletedByUser2 = true
+		};
+
+		_db.Exchanges.Add(exchange);
+		_db.ExchangeMeetings.Add(meeting);
+		await _db.SaveChangesAsync();
+
+		_exchangeService
+			.Setup(s => s.GetExchangeWithMatch(12))
+			.ReturnsAsync(exchange);
+
+		var dto = new UpdateExchangeMeetingDto(null, null, null, null, null, true, true);
+
+		var updatedMeeting = await _service.UpdateExchangeMeeting(13, dto);
+
+		_inkdropsService.Verify(s => s.GrantExchangeInkdropsAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
 	}
 
 	[Fact]
@@ -173,7 +239,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 200,
-			ChatId = 1,
+			ChatId = Guid.NewGuid(),
 			MatchId = 1,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -414,7 +480,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 70,
-			ChatId = 7,
+			ChatId = Guid.NewGuid(),
 			MatchId = 7,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -453,7 +519,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 71,
-			ChatId = 8,
+			ChatId = Guid.NewGuid(),
 			MatchId = 8,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -493,7 +559,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 72,
-			ChatId = 9,
+			ChatId = Guid.NewGuid(),
 			MatchId = 9,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -532,7 +598,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 73,
-			ChatId = 10,
+			ChatId = Guid.NewGuid(),
 			MatchId = 10,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -588,7 +654,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 74,
-			ChatId = 11,
+			ChatId = Guid.NewGuid(),
 			MatchId = 11,
 			Status = ExchangeStatus.NEGOTIATING,
 			CreatedAt = DateTime.UtcNow,
@@ -647,7 +713,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 75,
-			ChatId = 12,
+			ChatId = Guid.NewGuid(),
 			MatchId = 12,
 			Match = match,
 			Status = ExchangeStatus.ACCEPTED,
@@ -690,7 +756,7 @@ public class ExchangeMeetingServiceTests : IAsyncLifetime
 		var exchange = new Api.Models.Entities.Exchange
 		{
 			ExchangeId = 76,
-			ChatId = 13,
+			ChatId = Guid.NewGuid(),
 			MatchId = 13,
 			Status = ExchangeStatus.ACCEPTED,
 			CreatedAt = DateTime.UtcNow,

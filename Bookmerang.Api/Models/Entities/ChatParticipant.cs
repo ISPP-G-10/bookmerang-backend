@@ -7,7 +7,7 @@ namespace Bookmerang.Api.Models.Entities;
 public class ChatParticipant
 {
     [Column("chat_id")]
-    public int ChatId { get; set; }
+    public Guid ChatId { get; set; }
 
     [Column("user_id")]
     public Guid UserId { get; set; }

@@ -13,6 +13,6 @@ public class CommunityDto
     public CommunityRole? CurrentUserRole { get; set; }
     
     // Optional details
-    public int? ChatId { get; set; }
+    public Guid? ChatId { get; set; }
     public int MemberCount { get; set; }
 }

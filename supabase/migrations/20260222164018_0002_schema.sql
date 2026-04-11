@@ -356,6 +356,9 @@ CREATE TABLE "user_progress" (
   "user_id" UUID PRIMARY KEY,
   "xp_total" int NOT NULL DEFAULT 0,
   "streak_weeks" int NOT NULL DEFAULT 0,
+  "last_active_date" timestamp,
+  "streak_start_date" timestamp,
+  "last_decrement_date" timestamp,
   "updated_at" timestamp NOT NULL
 );
 

@@ -39,6 +39,8 @@ public class AppDbContext : DbContext
     public DbSet<MeetupAttendance> MeetupAttendances => Set<MeetupAttendance>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<SubscriptionReceipt> SubscriptionReceipts => Set<SubscriptionReceipt>();
+    public DbSet<CommunityMonthlyScore> CommunityMonthlyScores => Set<CommunityMonthlyScore>();
+    public DbSet<InkdropsHistory> InkdropsHistories => Set<InkdropsHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,6 +66,7 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<BaseUserType>();
         modelBuilder.HasPostgresEnum<SubscriptionStatus>();
         modelBuilder.HasPostgresEnum<SubscriptionPlatform>();
+        modelBuilder.HasPostgresEnum<InkdropsActionType>();
 
         modelBuilder.Entity<BaseUser>(entity =>
         {
@@ -345,7 +348,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Chat>(e =>
         {
             e.ToTable("chats");
-            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             e.Property(x => x.Type).HasColumnName("type");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
         });
@@ -534,6 +537,18 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             e.HasIndex(x => x.SubscriptionId);
+        });
+
+        modelBuilder.Entity<CommunityMonthlyScore>(e =>
+        {
+            e.ToTable("community_monthly_scores");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CommunityId).HasColumnName("community_id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.Month).HasColumnName("month");
+            e.Property(x => x.InkdropsThisMonth).HasColumnName("inkdrops_this_month");
+
+            e.HasIndex(x => new { x.CommunityId, x.UserId, x.Month }).IsUnique();
         });
     }
 }

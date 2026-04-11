@@ -4,7 +4,7 @@ namespace Bookmerang.Api.Models.DTOs;
 public class MatchCreatedDto
 {
     public required int MatchId { get; set; }
-    public required int ChatId { get; set; }
+    public required Guid ChatId { get; set; }
     public required Guid OtherUserId { get; set; }
     public required string OtherUsername { get; set; }
 }

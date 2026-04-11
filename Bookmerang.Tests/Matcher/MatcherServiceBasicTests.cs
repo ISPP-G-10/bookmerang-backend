@@ -602,7 +602,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
         var mockChatService = new Mock<IChatService>();
         mockChatService.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
             .ReturnsAsync(new ChatDto(
-                Id: 1,
+                Id: Guid.NewGuid(),
                 Type: ChatType.EXCHANGE.ToString(),
                 CreatedAt: DateTime.UtcNow,
                 Participants: [],
@@ -917,7 +917,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
         // Simular match existente (UserA ya matcheó con UserB)
         var chatMock = new Mock<IChatService>();
         chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(Id: 100, Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
+            .ReturnsAsync(new ChatDto(Id: Guid.NewGuid(), Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
         var serviceWithChat = _fixture.CreateServiceWithChat(_db, chatMock.Object);
 
         // B swipea RIGHT a libro de A → registra swipe
@@ -999,7 +999,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
 
         var chatMock = new Mock<IChatService>();
         chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(Id: 200, Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
+            .ReturnsAsync(new ChatDto(Id: Guid.NewGuid(), Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
         var serviceWithChat = _fixture.CreateServiceWithChat(_db, chatMock.Object);
 
         await serviceWithChat.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
@@ -1055,4 +1055,3 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
         Assert.Equal(book.Id, feedAfterUndo[0].Id);
     }
 }
-

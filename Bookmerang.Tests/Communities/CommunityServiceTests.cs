@@ -276,7 +276,7 @@ public class CommunityServiceTests : IAsyncLifetime
         };
 
         _chatServiceMock.Setup(c => c.CreateChat(ChatType.COMMUNITY, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(1, "COMMUNITY", DateTime.UtcNow, new List<ChatParticipantDto>(), null));
+            .ReturnsAsync(new ChatDto(Guid.NewGuid(), "COMMUNITY", DateTime.UtcNow, new List<ChatParticipantDto>(), null));
 
         // Act
         var result = await _service.CreateCommunityAsync(userId, request);
@@ -297,7 +297,7 @@ public class CommunityServiceTests : IAsyncLifetime
         var request = new CreateCommunityRequest { Name = "My New Comm", ReferenceBookspotId = bs.Id };
 
         _chatServiceMock.Setup(c => c.CreateChat(ChatType.COMMUNITY, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(1, "COMMUNITY", DateTime.UtcNow, new List<ChatParticipantDto>(), null));
+            .ReturnsAsync(new ChatDto(Guid.NewGuid(), "COMMUNITY", DateTime.UtcNow, new List<ChatParticipantDto>(), null));
 
         var result = await _service.CreateCommunityAsync(userId, request);
 
