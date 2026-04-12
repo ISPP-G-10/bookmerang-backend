@@ -311,6 +311,83 @@ public class CommunityServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreateCommunity_FreeUser_AlreadyHasOneCommunity_ThrowsForbidden()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        SeedUser(userId, "free-create-limit@test.com", PricingPlan.FREE);
+
+        var bs1 = SeedBookspot(50, MakePoint(0, 0));
+        var bs2 = SeedBookspot(51, MakePoint(1, 1));
+
+        var existingComm = new Community
+        {
+            Name = "Existing Community",
+            ReferenceBookspotId = bs1.Id,
+            Status = CommunityStatus.ACTIVE
+        };
+        _db.Communities.Add(existingComm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = existingComm.Id,
+            UserId = userId,
+            Role = CommunityRole.MODERATOR
+        });
+        await _db.SaveChangesAsync();
+
+        var request = new CreateCommunityRequest { Name = "Second Community", ReferenceBookspotId = bs2.Id };
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() => _service.CreateCommunityAsync(userId, request));
+        Assert.Contains("solo pueden pertenecer a una comunidad no archivada", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateCommunity_PremiumUser_AlreadyHasOneCommunity_Succeeds()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        SeedUser(userId, "premium-create-multi@test.com", PricingPlan.PREMIUM);
+
+        var bs1 = SeedBookspot(52, MakePoint(0, 0));
+        var bs2 = SeedBookspot(53, MakePoint(10, 10)); // Far from bs1 to avoid duplicate name check
+
+        var existingComm = new Community
+        {
+            Name = "First Community",
+            ReferenceBookspotId = bs1.Id,
+            Status = CommunityStatus.ACTIVE
+        };
+        _db.Communities.Add(existingComm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = existingComm.Id,
+            UserId = userId,
+            Role = CommunityRole.MODERATOR
+        });
+        await _db.SaveChangesAsync();
+
+        var request = new CreateCommunityRequest { Name = "Second Community", ReferenceBookspotId = bs2.Id };
+
+        _chatServiceMock.Setup(c => c.CreateChat(ChatType.COMMUNITY, It.IsAny<List<Guid>>()))
+            .ReturnsAsync(new ChatDto(Guid.NewGuid(), "COMMUNITY", DateTime.UtcNow, new List<ChatParticipantDto>(), null));
+
+        // Act
+        var result = await _service.CreateCommunityAsync(userId, request);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("Second Community", result.Name);
+
+        var memberships = await _db.CommunityMembers.Where(cm => cm.UserId == userId).CountAsync();
+        Assert.Equal(2, memberships);
+    }
+
+    [Fact]
     public async Task LeaveCommunity_RemovesMemberAndDependencies()
     {
         var userId = Guid.NewGuid();
