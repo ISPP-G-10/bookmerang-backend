@@ -16,4 +16,10 @@ public interface IStripeSubscriptionService
     /// Processes Stripe webhooks (subscription events)
     /// </summary>
     Task HandleStripeWebhookAsync(string json, string signature);
+
+    /// <summary>
+    /// Queries the Stripe API directly to sync the user's active subscription into the DB.
+    /// Used as a fallback when webhooks are unavailable (e.g. local dev).
+    /// </summary>
+    Task SyncSubscriptionFromStripeAsync(Guid userId);
 }

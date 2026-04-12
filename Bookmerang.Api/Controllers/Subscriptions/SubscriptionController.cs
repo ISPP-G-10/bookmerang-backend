@@ -139,6 +139,46 @@ public class SubscriptionsController(
     }
 
     /// <summary>
+    /// Syncs subscription state directly from the Stripe API.
+    /// Useful when webhooks are unavailable (e.g. local dev).
+    /// </summary>
+    [Authorize]
+    [HttpPost("sync")]
+    public async Task<IActionResult> SyncSubscription()
+    {
+        try
+        {
+            var userId = await GetCurrentUserId();
+            if (userId == null) return Unauthorized();
+
+            await _stripeSubscriptionService.SyncSubscriptionFromStripeAsync(userId.Value);
+
+            var subscription = await _subscriptionService.GetActiveSubscriptionAsync(userId.Value);
+            var isPremium = await _subscriptionService.IsPremiumAsync(userId.Value);
+
+            var response = new
+            {
+                isPremium,
+                subscription = subscription != null ? new
+                {
+                    subscription.Id,
+                    platform = subscription.Platform.ToString(),
+                    status = subscription.Status.ToString(),
+                    periodEnd = subscription.CurrentPeriodEnd,
+                    cancelsAtPeriodEnd = subscription.CancelsAtPeriodEnd
+                } : null
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing subscription from Stripe");
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
+    /// <summary>
     /// Resolves Supabase ID from JWT → backend User.Id
     /// </summary>
     private async Task<Guid?> GetCurrentUserId()

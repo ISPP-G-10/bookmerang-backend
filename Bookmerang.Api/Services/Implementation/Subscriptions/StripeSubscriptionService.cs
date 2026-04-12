@@ -272,4 +272,52 @@ public class StripeSubscriptionService(
 
         return null;
     }
+
+    // ── Sync from Stripe API (webhook-free fallback) ──────────────────
+
+    public async Task SyncSubscriptionFromStripeAsync(Guid userId)
+    {
+        var customerId = await FindStripeCustomerIdAsync(userId);
+        if (customerId == null)
+        {
+            _logger.LogWarning("SyncSubscription: no Stripe customer found for user {UserId}", userId);
+            return;
+        }
+
+        var subService = new Stripe.SubscriptionService();
+        var subscriptions = await subService.ListAsync(new Stripe.SubscriptionListOptions
+        {
+            Customer = customerId,
+            Status = "active",
+            Limit = 1
+        });
+
+        var stripeSub = subscriptions.Data.FirstOrDefault();
+        if (stripeSub == null)
+        {
+            _logger.LogWarning("SyncSubscription: no active Stripe subscription found for user {UserId}", userId);
+            return;
+        }
+
+        await EnsureSubscriptionCreated(userId, stripeSub.Id, stripeSub);
+
+        // Sync cancels_at_period_end in case it changed
+        var existing = await _subscriptionService.GetActiveSubscriptionAsync(userId);
+        if (existing != null && existing.CancelsAtPeriodEnd != stripeSub.CancelAtPeriodEnd)
+        {
+            await _subscriptionService.SetCancelsAtPeriodEndAsync(existing.Id, stripeSub.CancelAtPeriodEnd);
+        }
+
+        _logger.LogInformation("SyncSubscription: synced subscription for user {UserId}", userId);
+    }
+
+    private async Task<string?> FindStripeCustomerIdAsync(Guid userId)
+    {
+        var customerService = new CustomerService();
+        var result = await customerService.SearchAsync(new CustomerSearchOptions
+        {
+            Query = $"metadata['bookmerang_user_id']:'{userId}'"
+        });
+        return result.Data.FirstOrDefault()?.Id;
+    }
 }
