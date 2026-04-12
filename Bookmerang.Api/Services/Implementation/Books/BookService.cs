@@ -31,13 +31,15 @@ public class BookService(
         await ValidateGenreIdsAsync(request.GenreIds, ct);
         await ValidateLanguageIdsAsync(request.LanguageIds, ct);
 
+        var sanitizedIsbn = request.Isbn?.Replace("-", "").Replace(" ", "").Trim();
+
         var book = new Book
         {
             OwnerId = ownerId,
-            Isbn = request.Isbn,
-            Titulo = request.Titulo,
-            Autor = request.Autor,
-            Editorial = request.Editorial,
+            Isbn = sanitizedIsbn,
+            Titulo = request.Titulo?.Trim(),
+            Autor = request.Autor?.Trim(),
+            Editorial = request.Editorial?.Trim(),
             NumPaginas = request.NumPaginas,
             Cover = request.Cover,
             Condition = request.Condition,
@@ -106,10 +108,10 @@ public class BookService(
         await ValidateGenreIdsAsync(request.GenreIds, ct);
         await ValidateLanguageIdsAsync(request.LanguageIds, ct);
 
-        book.Isbn = request.Isbn;
-        book.Titulo = request.Titulo;
-        book.Autor = request.Autor;
-        book.Editorial = request.Editorial;
+        book.Isbn = request.Isbn?.Replace("-", "").Replace(" ", "").Trim();
+        book.Titulo = request.Titulo?.Trim();
+        book.Autor = request.Autor?.Trim();
+        book.Editorial = request.Editorial?.Trim();
         book.NumPaginas = request.NumPaginas;
         book.Cover = request.Cover;
 
@@ -133,7 +135,7 @@ public class BookService(
         VerifyOwner(book, ownerId);
 
         book.Condition = request.Condition;
-        book.Observaciones = request.Observaciones;
+        book.Observaciones = request.Observaciones?.Trim();
 
         await bookRepo.UpdateAsync(book, ct);
 
