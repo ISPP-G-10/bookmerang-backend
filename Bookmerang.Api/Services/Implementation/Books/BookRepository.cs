@@ -1,4 +1,5 @@
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Exceptions;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Models.DTOs.Books.Queries;
@@ -18,6 +19,12 @@ public class BookRepository(AppDbContext db) : IBookRepository
             .Include(b => b.BookLanguages)
                 .ThenInclude(bl => bl.Language)
             .FirstOrDefaultAsync(b => b.Id == bookId, ct);
+    }
+
+    public async Task<Book> GetByIdOrThrowAsync(int bookId, CancellationToken ct = default)
+    {
+        return await GetByIdAsync(bookId, ct)
+            ?? throw new NotFoundException($"Libro con id {bookId} no encontrado.");
     }
 
     public async Task<(List<Book> Items, int Total)> GetByOwnerPagedAsync(

@@ -26,11 +26,6 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
         var user = await _db.RegularUsers.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null) throw new NotFoundException("Usuario no encontrado.");
 
-        if (user.Plan == PricingPlan.FREE)
-        {
-            throw new ForbiddenException("La biblioteca virtual compartida es una funcionalidad exclusiva para usuarios premium.");
-        }
-
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para ver su biblioteca.");
 
@@ -91,11 +86,6 @@ public class CommunityLibraryService(AppDbContext db) : ICommunityLibraryService
 
         var user = await _db.RegularUsers.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null) throw new NotFoundException("Usuario no encontrado.");
-
-        if (user.Plan == PricingPlan.FREE)
-        {
-            throw new ForbiddenException("Dar 'Me gusta' en la biblioteca virtual es una funcionalidad exclusiva para usuarios premium.");
-        }
 
         var isMember = await _db.CommunityMembers.AnyAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
         if (!isMember) throw new ForbiddenException("Debes ser miembro de la comunidad para interactuar con su biblioteca.");

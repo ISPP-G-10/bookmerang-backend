@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Exceptions;
 using Bookmerang.Api.Models.Enums;
 using System.Security.Claims;
+using Bookmerang.Api.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 
@@ -11,20 +13,29 @@ namespace Bookmerang.Api.Controllers.Exchanges;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = "UserOnly")]
 
-public class ExchangeController : ControllerBase
+/// Flujo general de intercambio:
+///
+/// 1. NEGOCIACION  — Match genera Chat + Exchange (NEGOTIATING)
+///    - Cada usuario acepta  -> ACCEPTED_BY_1 / ACCEPTED_BY_2
+///    - Ambos aceptan        -> ACCEPTED
+///    - Cualquiera rechaza   -> REJECTED  (solo durante negociacion)
+///
+/// 2. QUEDADA  — Ver ExchangeMeetingController
+///    - Un usuario propone meeting (PROPOSAL)
+///    - El otro acepta o contra-propone
+///    - Ambos aceptan meeting -> meeting ACCEPTED
+///      (si es BOOKDROP se genera PIN y se gestiona desde el panel)
+///
+/// 3. CIERRE
+///    - Cada usuario marca como completado -> COMPLETED (se intercambian libros)
+///    - Cualquiera puede reportar (solo con meeting ACCEPTED) -> INCIDENT
+public class ExchangeController(IExchangeService service, IExchangeMeetingService meetingService, AppDbContext db) : ControllerBase
 {
-    private readonly IExchangeService _service;
-    private readonly IExchangeMeetingService _EMService;
-    private readonly AppDbContext _db;
-
-    public ExchangeController (IExchangeService service, AppDbContext db, IExchangeMeetingService EMService)
-    {
-        _service = service;
-        _db = db;
-        _EMService = EMService;
-    }
+    private readonly IExchangeService _service = service;
+    private readonly IExchangeMeetingService _meetingService = meetingService;
+    private readonly AppDbContext _db = db;
 
     /// Obtiene el Guid del usuario autenticado
     private async Task<Guid?> GetCurrentUserId()
@@ -43,8 +54,11 @@ public class ExchangeController : ControllerBase
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var exchange = await _service.GetExchangeById(exchangeId);
+        var exchange = await _service.GetExchangeWithMatch(exchangeId);
         if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
+
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
+            throw new ForbiddenException("No tienes permiso para acceder a este intercambio.");
 
         return Ok(exchange.ToDto());
     }
@@ -59,34 +73,10 @@ public class ExchangeController : ControllerBase
         var exchange = await _service.GetExchangeByChatIdWithMatch(chatId);
         if (exchange == null) return NotFound($"Intercambio con id {chatId} no encontrado.");
 
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
+            throw new ForbiddenException("No tienes permiso para acceder a este intercambio.");
+
         return Ok(exchange.ToWithMatchDto());
-    }
-
-    /// GET /api/exchange
-    [HttpGet]
-    public async Task<IActionResult> GetAllExchanges()
-    {
-        var userId = await GetCurrentUserId();
-        if (userId == null) return Unauthorized();
-
-        var exchanges = await _service.GetAllExchanges();
-        if (exchanges == null || exchanges.Count == 0) return NotFound("No se encontraron intercambios en el sistema.");
-
-        return Ok(exchanges.Select(e => e.ToDto()));
-    }
-
-    /// POST /api/exchange
-    [HttpPost]
-    public async Task<IActionResult> CreateExchange([FromBody] ExchangeDto dto)
-    {
-        var userId = await GetCurrentUserId();
-        if (userId == null) return Unauthorized();
-
-        if (dto.ChatId == null || dto.MatchId == null)
-            return BadRequest("Se requiere un chat y un match asociados para crear un intercambio.");
-
-        var exchange = await _service.CreateExchange(dto.ChatId.Value, dto.MatchId.Value);
-        return CreatedAtAction(nameof(GetExchange), new { exchangeId = exchange.ExchangeId }, exchange.ToDto());
     }
 
     [HttpPatch("{exchangeId}/accept")]
@@ -94,43 +84,15 @@ public class ExchangeController : ControllerBase
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
+
         var exchange = await _service.GetExchangeWithMatch(exchangeId);
-        var exchangeWithMatch = exchange!.ToWithMatchDto();
+        if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
 
-        ExchangeStatus newStatus = new();
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
+            throw new ForbiddenException("No tienes permiso para aceptar este intercambio.");
 
-        if ((exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_1 && exchangeWithMatch.User1Id == userId) 
-        || (exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_2 && exchangeWithMatch.User2Id == userId))
-        {
-            return new ObjectResult(new { message = "No tienes permiso para aceptar este intercambio." })
-            {
-                StatusCode = StatusCodes.Status403Forbidden
-            };
-        }
-        
-        if(exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_1 || exchangeWithMatch.Status == ExchangeStatus.ACCEPTED_BY_2)
-        {
-            newStatus = ExchangeStatus.ACCEPTED;
-        }
-        
-        if(exchangeWithMatch.User1Id == userId && exchangeWithMatch.Status == ExchangeStatus.NEGOTIATING)
-        {
-            newStatus = ExchangeStatus.ACCEPTED_BY_1;
-        }
-        else if(exchangeWithMatch.User2Id == userId && exchangeWithMatch.Status == ExchangeStatus.NEGOTIATING)
-        {
-            newStatus = ExchangeStatus.ACCEPTED_BY_2;
-        }
-        
-        try
-        {
-            var updated = await _service.UpdateExchangeStatus(exchangeId, newStatus);
-            return Ok(updated.ToDto());
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var updated = await _service.AcceptExchange(exchangeId, userId.Value);
+        return Ok(updated.ToDto());
     }
 
     [HttpPatch("{exchangeId}/reject")]
@@ -138,28 +100,34 @@ public class ExchangeController : ControllerBase
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
-        
-        var meeting = await _EMService.GetMeetingByExchangeId(exchangeId);
 
-        if (meeting != null)
+        var exchange = await _service.GetExchangeWithMatch(exchangeId);
+        if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
+
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
+            throw new ForbiddenException("No tienes permiso para rechazar este intercambio.");
+
+        if (exchange.Status is not (ExchangeStatus.NEGOTIATING
+                                 or ExchangeStatus.ACCEPTED_BY_1
+                                 or ExchangeStatus.ACCEPTED_BY_2
+                                 or ExchangeStatus.ACCEPTED))
         {
-            return BadRequest("Para rechazar un intercambio, no debe tener encuentros programados");
+            return BadRequest("Solo se puede rechazar un intercambio que no esta finalizado ni reportado.");
         }
 
-        try
+        // Si ya existia una quedada, la marcamos como rechazada para mantener consistencia.
+        var meeting = await _meetingService.GetMeetingByExchangeId(exchangeId);
+        if (meeting != null && meeting.MeetingStatus != ExchangeMeetingStatus.REFUSED)
         {
-            var exchange = await _service.GetExchangeById(exchangeId);
-            if (exchange == null) return NotFound("Intercambio no encontrado");
-
-            var dto = exchange.ToDto() with { Status = ExchangeStatus.REJECTED };
-
-            await _service.DeleteExchange(exchangeId);
-            return Ok(dto);
+            meeting.MeetingStatus = ExchangeMeetingStatus.REFUSED;
+            meeting.MarkAsCompletedByUser1 = false;
+            meeting.MarkAsCompletedByUser2 = false;
+            meeting.Pin = null;
+            meeting.BookDropStatus = null;
         }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+
+        var updated = await _service.UpdateExchangeStatus(exchange, ExchangeStatus.REJECTED);
+        return Ok(updated.ToDto());
     }
 
     [HttpPatch("{exchangeId}/report")]
@@ -167,36 +135,22 @@ public class ExchangeController : ControllerBase
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
-        var newStatus = ExchangeStatus.INCIDENT;
-        try
-        {
-            var updated = await _service.UpdateExchangeStatus(exchangeId, newStatus);
-            return Ok(updated.ToDto());
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+
+        var exchange = await _service.GetExchangeWithMatch(exchangeId);
+        if (exchange == null) return NotFound($"Intercambio con id {exchangeId} no encontrado.");
+
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
+            throw new ForbiddenException("No tienes permiso para reportar este intercambio.");
+
+        if (exchange.Status != ExchangeStatus.ACCEPTED)
+            return BadRequest("Solo se puede reportar un intercambio que esté en curso.");
+
+        var meeting = await _meetingService.GetMeetingByExchangeId(exchangeId);
+        if (meeting == null || meeting.MeetingStatus != ExchangeMeetingStatus.ACCEPTED)
+            return BadRequest("Solo se puede reportar cuando el meeting ha sido aceptado.");
+
+        var updated = await _service.UpdateExchangeStatus(exchange, ExchangeStatus.INCIDENT);
+        return Ok(updated.ToDto());
     }
 
-    /// DELETE /api/exchange/{exchangeId}
-    [HttpDelete("{exchangeId}")]
-    public async Task<IActionResult> DeleteExchange(int exchangeId)
-    {
-        var userId = await GetCurrentUserId();
-        if (userId == null) return Unauthorized();
-
-        try
-        {
-            var result = await _service.DeleteExchange(exchangeId);
-            if (!result) return BadRequest("No se pudo eliminar el intercambio.");
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            return NotFound(ex.Message);
-        }
-    }
-    
 }
-

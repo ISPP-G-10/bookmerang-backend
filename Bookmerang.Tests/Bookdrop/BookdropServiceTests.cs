@@ -1,6 +1,12 @@
+using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Enums;
+using Bookmerang.Api.Services.Implementation.Auth;
+using Bookmerang.Api.Services.Implementation.Bookdrop;
+using Bookmerang.Api.Services.Implementation.Inkdrops;
+using Bookmerang.Api.Services.Implementation.Leveling;
+using Bookmerang.Api.Services.Implementation.Streaks;
 using Bookmerang.Tests.Helpers;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using NetTopologySuite.Geometries;
 using Xunit;
 using System.IdentityModel.Tokens.Jwt;
@@ -8,14 +14,9 @@ using Bookmerang.Api.Models.DTOs.Bookdrop;
 
 namespace Bookmerang.Tests.Bookdrop;
 
-public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
+public class BookdropServiceTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
-    private readonly PostgresBookdropFixture _fixture;
-
-    public BookdropServiceTests(PostgresBookdropFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly PostgresFixture _fixture = fixture;
 
     private static Point CreateLocation(double lat = 37.3886, double lon = -5.9823)
     {
@@ -23,13 +24,31 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
         return factory.CreatePoint(new Coordinate(lon, lat));
     }
 
+    private static AuthService CreateAuthService(AppDbContext db)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                { "Auth:JwtSecret", "test-secret-key-at-least-32-characters-long!!" },
+                { "Auth:JwtIssuer", "bookmerang-api" },
+                { "Auth:JwtAudience", "bookmerang-client" }
+            })
+            .Build();
+        var levelingService = new LevelingService(db);
+        var streakService = new StreakService(db);
+        var inkdropsService = new InkdropsService(db, streakService);
+        return new AuthService(db, config, levelingService, inkdropsService);
+    }
+
+    private static BookdropService CreateBookdropService(AppDbContext db) => new(db);
+
     // ===== Login devuelve JWT con claim user_type correcto =====
 
     [Fact]
     public async Task Login_BookdropUser_JwtContainsUserTypeClaim()
     {
         await using var db = _fixture.CreateDbContext();
-        var authService = _fixture.CreateAuthService(db);
+        var authService = CreateAuthService(db);
 
         // Registrar bookdrop
         await authService.RegisterBusiness(
@@ -62,8 +81,8 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task GetPerfil_ExistingBookdrop_ReturnsCorrectData()
     {
         await using var db = _fixture.CreateDbContext();
-        var authService = _fixture.CreateAuthService(db);
-        var bookdropService = _fixture.CreateBookdropService(db);
+        var authService = CreateAuthService(db);
+        var bookdropService = CreateBookdropService(db);
 
         // Registrar bookdrop
         var (usuario, _, _) = await authService.RegisterBusiness(
@@ -90,7 +109,7 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task GetPerfil_NonExistentUser_ReturnsNull()
     {
         await using var db = _fixture.CreateDbContext();
-        var bookdropService = _fixture.CreateBookdropService(db);
+        var bookdropService = CreateBookdropService(db);
 
         var perfil = await bookdropService.GetPerfil("no-existe-supabase-id");
 
@@ -103,7 +122,7 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task RegisterBusiness_Success_CreatesAllEntities()
     {
         await using var db = _fixture.CreateDbContext();
-        var service = _fixture.CreateAuthService(db);
+        var service = CreateAuthService(db);
 
         var (usuario, yaExistia, error) = await service.RegisterBusiness(
             "prueba1@test.com", "Test1234", "prueba1_bookdrop", "Juan García",
@@ -132,7 +151,7 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task RegisterBusiness_DuplicateEmail_ReturnsError()
     {
         await using var db = _fixture.CreateDbContext();
-        var service = _fixture.CreateAuthService(db);
+        var service = CreateAuthService(db);
 
         await service.RegisterBusiness(
             "duplicado_email@test.com", "Test1234", "original_user", "Original",
@@ -153,7 +172,7 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task RegisterBusiness_DuplicateUsername_ReturnsError()
     {
         await using var db = _fixture.CreateDbContext();
-        var service = _fixture.CreateAuthService(db);
+        var service = CreateAuthService(db);
 
         await service.RegisterBusiness(
             "primero_usr@test.com", "Test1234", "mismo_username_bd", "Primero",
@@ -180,7 +199,7 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
         string nombreEstablecimiento, string addressText, string expectedError)
     {
         await using var db = _fixture.CreateDbContext();
-        var service = _fixture.CreateAuthService(db);
+        var service = CreateAuthService(db);
 
         var (usuario, _, error) = await service.RegisterBusiness(
             email, password, username, name,
@@ -196,7 +215,7 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task RegisterBusiness_TransactionRollback_NoDanglingData()
     {
         await using var db = _fixture.CreateDbContext();
-        var service = _fixture.CreateAuthService(db);
+        var service = CreateAuthService(db);
 
         await service.RegisterBusiness(
             "existente_tx@test.com", "Test1234", "existente_tx", "Existente",
@@ -224,8 +243,8 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task UpdatePerfil_PartialUpdate_OnlyChangesProvidedFields()
     {
         await using var db = _fixture.CreateDbContext();
-        var authService = _fixture.CreateAuthService(db);
-        var bookdropService = _fixture.CreateBookdropService(db);
+        var authService = CreateAuthService(db);
+        var bookdropService = CreateBookdropService(db);
 
         var (usuario, _, _) = await authService.RegisterBusiness(
             "partial_update@test.com", "Test1234", "partial_update", "Original Name",
@@ -249,11 +268,11 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     // ===== Actualización con coordenadas =====
 
     [Fact]
-    public async Task UpdatePerfil_WithCoordinates_UpdatesBothBookspotAndBaseUser()
+    public async Task UpdatePerfil_WithCoordinates_UpdatesBookspot()
     {
         await using var db = _fixture.CreateDbContext();
-        var authService = _fixture.CreateAuthService(db);
-        var bookdropService = _fixture.CreateBookdropService(db);
+        var authService = CreateAuthService(db);
+        var bookdropService = CreateBookdropService(db);
 
         var (usuario, _, _) = await authService.RegisterBusiness(
             "coords_update@test.com", "Test1234", "coords_update", "Coords Test",
@@ -270,10 +289,6 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
         Assert.NotNull(perfil);
         Assert.Equal(40.4168, perfil.Latitud, 4);
         Assert.Equal(-3.7038, perfil.Longitud, 4);
-
-        var baseUser = await db.Users.FirstAsync(u => u.Id == usuario.Id);
-        Assert.Equal(40.4168, baseUser.Location.Y, 4);
-        Assert.Equal(-3.7038, baseUser.Location.X, 4);
     }
 
     // ===== Listar todos los bookdrops =====
@@ -282,8 +297,8 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task GetAll_MultipleBookdrops_ReturnsAll()
     {
         await using var db = _fixture.CreateDbContext();
-        var authService = _fixture.CreateAuthService(db);
-        var bookdropService = _fixture.CreateBookdropService(db);
+        var authService = CreateAuthService(db);
+        var bookdropService = CreateBookdropService(db);
 
         var countBefore = (await bookdropService.GetAll()).Count;
 
@@ -308,8 +323,8 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task DeleteBookdrop_RemovesAllRelatedEntities()
     {
         await using var db = _fixture.CreateDbContext();
-        var authService = _fixture.CreateAuthService(db);
-        var bookdropService = _fixture.CreateBookdropService(db);
+        var authService = CreateAuthService(db);
+        var bookdropService = CreateBookdropService(db);
 
         var (usuario, _, _) = await authService.RegisterBusiness(
             "delete_test@test.com", "Test1234", "delete_test", "Delete Test",
@@ -335,7 +350,7 @@ public class BookdropServiceTests : IClassFixture<PostgresBookdropFixture>
     public async Task DeleteBookdrop_NonExistent_ReturnsNotFound()
     {
         await using var db = _fixture.CreateDbContext();
-        var bookdropService = _fixture.CreateBookdropService(db);
+        var bookdropService = CreateBookdropService(db);
 
         var (found, error) = await bookdropService.DeleteBookdrop(Guid.NewGuid());
 

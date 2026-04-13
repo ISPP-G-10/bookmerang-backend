@@ -9,8 +9,11 @@ using Bookmerang.Api.Configuration;
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
+using Bookmerang.Api.Services.Implementation.Chats;
+using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Api.Services.Implementation.Matcher;
 using Bookmerang.Api.Services.Interfaces.Chats;
+using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Tests.Helpers;
 using Bookmerang.Api.Models.DTOs;
 using Microsoft.EntityFrameworkCore;
@@ -26,12 +29,39 @@ namespace Bookmerang.Tests.Matcher;
 /// <summary>
 /// Tests básicos de funcionalidad de MatcherService contra PostgreSQL+PostGIS real, simulando prod.
 /// </summary>
-public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutputHelper output) : IClassFixture<PostgresMatcherFixture>, IAsyncLifetime
+public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper output) : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
-    private readonly PostgresMatcherFixture _fixture = fixture;
+    private readonly PostgresFixture _fixture = fixture;
     private readonly ITestOutputHelper _output = output;
     private AppDbContext _db = null!;
     private MatcherService _service = null!;
+
+    private static readonly MatcherSettings Settings = new()
+    {
+        Weights = new WeightsSettings
+        {
+            GenreMatch     = 0.40,
+            ExtensionMatch = 0.10,
+            DistanceScore  = 0.35,
+            RecencyBonus   = 0.15
+        },
+        Feed = new FeedSettings
+        {
+            PriorityToDiscoveryRatio = 3,
+            DefaultPageSize          = 20,
+            RecencyDecayDays         = 30,
+            SwipeValidDays           = 30
+        }
+    };
+
+    private static MatcherService CreateService(AppDbContext db)
+    {
+        var chatService = new ChatService(db);
+        return new MatcherService(db, Options.Create(Settings),
+            new Mock<ILogger<MatcherService>>().Object,
+            chatService,
+            new ExchangeService(db, chatService));
+    }
 
     // Coordenadas Madrid centro -> punto de referencia
     private static readonly Point Madrid = MakePoint(-3.7038, 40.4168);
@@ -50,7 +80,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
     public async Task InitializeAsync()
     {
         _db      = _fixture.CreateDbContext();
-        _service = _fixture.CreateService(_db);
+        _service = CreateService(_db);
 
         // Limpiamos todas las tablas de datos antes de cada test.
         await _db.Database.ExecuteSqlRawAsync(@"
@@ -172,6 +202,33 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
         Assert.Empty(feed);
     }
 
+    [Fact]
+    public async Task GetFeed_MatchedBook_IsNotReturned()
+    {
+        SeedUser(UserA, "userA", Madrid);
+        SeedUser(UserB, "userB", Madrid);
+        SeedPreferences(UserA, Madrid);
+
+        var bookA = SeedBook(UserA);
+        var bookB = SeedBook(UserB);
+        await _db.SaveChangesAsync();
+
+        _db.Matches.Add(new Api.Models.Entities.Match
+        {
+            User1Id = UserA,
+            User2Id = UserB,
+            Book1Id = bookA.Id,
+            Book2Id = bookB.Id,
+            Status = MatchStatus.CHAT_CREATED,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        var feed = Feed(await _service.GetFeedAsync(UserA, page: 0, pageSize: 20));
+
+        Assert.DoesNotContain(feed, b => b.Id == bookB.Id);
+    }
+
     /// <summary>
     /// Solo los libros PUBLISHED deben aparecer. DRAFT, PAUSED, RESERVED, EXCHANGED y DELETED deben quedar excluidos.
     /// </summary>
@@ -288,7 +345,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
             SwiperId  = UserB,
             BookId    = bookA.Id,
             Direction = SwipeDirection.RIGHT,
-            CreatedAt = DateTime.UtcNow.AddDays(-(PostgresMatcherFixture.Settings.Feed.SwipeValidDays + 1))
+            CreatedAt = DateTime.UtcNow.AddDays(-(Settings.Feed.SwipeValidDays + 1))
         });
         await _db.SaveChangesAsync();
 
@@ -594,21 +651,9 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
     {
         SeedUser(UserA, "userA", Madrid);
         SeedUser(UserB, "userB", Madrid);
-        var bookA = SeedBook(UserA); // Libro de A
-        var bookB = SeedBook(UserB); // Libro de B
+        var bookA = SeedBook(UserA);
+        var bookB = SeedBook(UserB);
         await _db.SaveChangesAsync();
-
-        // Configurar mock del ChatService para devolver un chat válido
-        var mockChatService = new Mock<IChatService>();
-        mockChatService.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(
-                Id: Guid.NewGuid(),
-                Type: ChatType.EXCHANGE.ToString(),
-                CreatedAt: DateTime.UtcNow,
-                Participants: [],
-                LastMessage: null
-            ));
-        var service = _fixture.CreateServiceWithChat(_db, mockChatService.Object);
 
         // B hace RIGHT en libro de A
         _db.Swipes.Add(new Swipe
@@ -621,7 +666,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
         await _db.SaveChangesAsync();
 
         // A hace RIGHT en libro de B → MATCH
-        var result = await service.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
+        var result = await _service.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
 
         Assert.Equal(SwipeOutcome.MatchCreated, result.Outcome);
         Assert.NotNull(result.Match);
@@ -647,7 +692,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
             SwiperId = UserB,
             BookId = bookA.Id,
             Direction = SwipeDirection.RIGHT,
-            CreatedAt = DateTime.UtcNow.AddDays(-(PostgresMatcherFixture.Settings.Feed.SwipeValidDays + 1))
+            CreatedAt = DateTime.UtcNow.AddDays(-(Settings.Feed.SwipeValidDays + 1))
         });
         await _db.SaveChangesAsync();
 
@@ -780,13 +825,14 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
                 DistanceScore = 0.30,
                 RecencyBonus = 0.10 // suma = 1.20
             },
-            Feed = PostgresMatcherFixture.Settings.Feed
+            Feed = Settings.Feed
         };
         var badService = new MatcherService(
             _db,
             Options.Create(badSettings),
             new Mock<ILogger<MatcherService>>().Object,
-            new Mock<IChatService>().Object);
+            new Mock<IChatService>().Object,
+            new Mock<IExchangeService>().Object);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => badService.GetFeedAsync(UserA, page: 0, pageSize: 20));
@@ -914,22 +960,16 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
         var bookB = SeedBook(UserB);
         await _db.SaveChangesAsync();
 
-        // Simular match existente (UserA ya matcheó con UserB)
-        var chatMock = new Mock<IChatService>();
-        chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(Id: Guid.NewGuid(), Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
-        var serviceWithChat = _fixture.CreateServiceWithChat(_db, chatMock.Object);
-
         // B swipea RIGHT a libro de A → registra swipe
-        await serviceWithChat.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
+        await _service.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
         // A swipea RIGHT a libro de B → debería crear match
-        var firstResult = await serviceWithChat.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
+        var firstResult = await _service.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
         Assert.Equal(SwipeOutcome.MatchCreated, firstResult.Outcome);
 
         // Ahora otro RIGHT de A sobre un 2do libro de B → no debe crear match duplicado
         var bookB2 = SeedBook(UserB);
         await _db.SaveChangesAsync();
-        var secondResult = await serviceWithChat.ProcessSwipeAsync(UserA, bookB2.Id, SwipeDirection.RIGHT);
+        var secondResult = await _service.ProcessSwipeAsync(UserA, bookB2.Id, SwipeDirection.RIGHT);
 
         Assert.Equal(SwipeOutcome.Recorded, secondResult.Outcome);
         Assert.Null(secondResult.Match);
@@ -986,7 +1026,7 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
     /// TEST-N09: Undo con swipe RIGHT que generó match → devuelve false, no elimina nada.
     /// </summary>
     [Fact]
-    public async Task UndoLastSwipe_RightSwipeWithMatch_ReturnsFalse()
+    public async Task UndoLastSwipe_RightSwipeWithMatch_RevertsMatchFlow()
     {
         SeedUser(UserA, "userA", Madrid);
         SeedUser(UserB, "userB", Madrid);
@@ -997,21 +1037,50 @@ public class MatcherServiceBasicTests(PostgresMatcherFixture fixture, ITestOutpu
         var bookB = SeedBook(UserB);
         await _db.SaveChangesAsync();
 
-        var chatMock = new Mock<IChatService>();
-        chatMock.Setup(c => c.CreateChat(ChatType.EXCHANGE, It.IsAny<List<Guid>>()))
-            .ReturnsAsync(new ChatDto(Id: Guid.NewGuid(), Type: ChatType.EXCHANGE.ToString(), CreatedAt: DateTime.UtcNow, Participants: [], LastMessage: null));
-        var serviceWithChat = _fixture.CreateServiceWithChat(_db, chatMock.Object);
-
-        await serviceWithChat.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
-        var res = await serviceWithChat.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
+        await _service.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
+        var res = await _service.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
         Assert.Equal(SwipeOutcome.MatchCreated, res.Outcome);
+        Assert.Equal(1, await _db.Matches.CountAsync());
+        Assert.Equal(1, await _db.Exchanges.CountAsync());
+        Assert.Equal(1, await _db.Chats.CountAsync());
 
-        // El último swipe de A generó match → no se puede deshacer
-        var undone = await serviceWithChat.UndoLastSwipeAsync(UserA);
+        var undone = await _service.UndoLastSwipeAsync(UserA);
 
-        Assert.False(undone);
-        // El swipe sigue en la BD
-        Assert.True(await _db.Swipes.AnyAsync(s => s.SwiperId == UserA));
+        Assert.True(undone);
+        Assert.Equal(0, await _db.Matches.CountAsync());
+        Assert.Equal(0, await _db.Exchanges.CountAsync());
+        Assert.Equal(0, await _db.Chats.CountAsync());
+        Assert.False(await _db.Swipes.AnyAsync(s => s.SwiperId == UserA && s.BookId == bookB.Id));
+        Assert.True(await _db.Swipes.AnyAsync(s => s.SwiperId == UserB && s.BookId == bookA.Id));
+    }
+
+    [Fact]
+    public async Task UndoLastSwipe_RightSwipeAfterExistingMatch_RemovesOnlyLastSwipe()
+    {
+        SeedUser(UserA, "userA", Madrid);
+        SeedUser(UserB, "userB", Madrid);
+        SeedPreferences(UserA, Madrid);
+        SeedPreferences(UserB, Madrid);
+
+        var bookA = SeedBook(UserA);
+        var bookB = SeedBook(UserB);
+        var bookB2 = SeedBook(UserB);
+        await _db.SaveChangesAsync();
+
+        await _service.ProcessSwipeAsync(UserB, bookA.Id, SwipeDirection.RIGHT);
+        var matched = await _service.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
+        Assert.Equal(SwipeOutcome.MatchCreated, matched.Outcome);
+
+        var extraSwipe = await _service.ProcessSwipeAsync(UserA, bookB2.Id, SwipeDirection.RIGHT);
+        Assert.Equal(SwipeOutcome.Recorded, extraSwipe.Outcome);
+
+        var undone = await _service.UndoLastSwipeAsync(UserA);
+
+        Assert.True(undone);
+        Assert.Equal(1, await _db.Matches.CountAsync());
+        Assert.Equal(1, await _db.Exchanges.CountAsync());
+        Assert.False(await _db.Swipes.AnyAsync(s => s.SwiperId == UserA && s.BookId == bookB2.Id));
+        Assert.True(await _db.Swipes.AnyAsync(s => s.SwiperId == UserA && s.BookId == bookB.Id));
     }
 
     /// <summary>

@@ -31,13 +31,15 @@ public class BookService(
         await ValidateGenreIdsAsync(request.GenreIds, ct);
         await ValidateLanguageIdsAsync(request.LanguageIds, ct);
 
+        var sanitizedIsbn = request.Isbn?.Replace("-", "").Replace(" ", "").Trim();
+
         var book = new Book
         {
             OwnerId = ownerId,
-            Isbn = request.Isbn,
-            Titulo = request.Titulo,
-            Autor = request.Autor,
-            Editorial = request.Editorial,
+            Isbn = sanitizedIsbn,
+            Titulo = request.Titulo?.Trim(),
+            Autor = request.Autor?.Trim(),
+            Editorial = request.Editorial?.Trim(),
             NumPaginas = request.NumPaginas,
             Cover = request.Cover,
             Condition = request.Condition,
@@ -54,7 +56,7 @@ public class BookService(
         if (request.LanguageIds.Count > 0)
             await bookRepo.ReplaceLanguagesAsync(created.Id, request.LanguageIds, ct);
 
-        var fullBook = await GetBookOrThrowAsync(created.Id, ct);
+        var fullBook = await bookRepo.GetByIdOrThrowAsync(created.Id, ct);
         return MapToDetailDTO(fullBook);
     }
 
@@ -66,7 +68,7 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         if (request.Photos.Count < RequiredPhotosToPublish || request.Photos.Count > MaxPhotosToPublish)
@@ -88,7 +90,7 @@ public class BookService(
 
         await bookRepo.ReplacePhotosAsync(bookId, newPhotos, ct);
 
-        var updatedBook = await GetBookOrThrowAsync(bookId, ct);
+        var updatedBook = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(updatedBook);
     }
 
@@ -100,16 +102,16 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         await ValidateGenreIdsAsync(request.GenreIds, ct);
         await ValidateLanguageIdsAsync(request.LanguageIds, ct);
 
-        book.Isbn = request.Isbn;
-        book.Titulo = request.Titulo;
-        book.Autor = request.Autor;
-        book.Editorial = request.Editorial;
+        book.Isbn = request.Isbn?.Replace("-", "").Replace(" ", "").Trim();
+        book.Titulo = request.Titulo?.Trim();
+        book.Autor = request.Autor?.Trim();
+        book.Editorial = request.Editorial?.Trim();
         book.NumPaginas = request.NumPaginas;
         book.Cover = request.Cover;
 
@@ -117,7 +119,7 @@ public class BookService(
         await bookRepo.ReplaceGenresAsync(bookId, request.GenreIds, ct);
         await bookRepo.ReplaceLanguagesAsync(bookId, request.LanguageIds, ct);
 
-        var updatedBook = await GetBookOrThrowAsync(bookId, ct);
+        var updatedBook = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(updatedBook);
     }
 
@@ -129,15 +131,15 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         book.Condition = request.Condition;
-        book.Observaciones = request.Observaciones;
+        book.Observaciones = request.Observaciones?.Trim();
 
         await bookRepo.UpdateAsync(book, ct);
 
-        var updatedBook = await GetBookOrThrowAsync(bookId, ct);
+        var updatedBook = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(updatedBook);
     }
 
@@ -148,7 +150,7 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         var errors = new List<string>();
@@ -178,7 +180,7 @@ public class BookService(
         book.Status = BookStatus.PUBLISHED;
         await bookRepo.UpdateAsync(book, ct);
 
-        var publishedBook = await GetBookOrThrowAsync(bookId, ct);
+        var publishedBook = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(publishedBook);
     }
 
@@ -225,7 +227,7 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(book);
     }
 
@@ -236,7 +238,7 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         book.Status = BookStatus.DELETED;
@@ -258,14 +260,6 @@ public class BookService(
                 $"No se encontró ningún usuario con supabaseId '{supabaseId}'. ¿Has llamado a /api/auth/register?");
 
         return user.Id;
-    }
-
-    private async Task<Book> GetBookOrThrowAsync(int bookId, CancellationToken ct)
-    {
-        var book = await bookRepo.GetByIdAsync(bookId, ct);
-        if (book is null)
-            throw new NotFoundException($"Libro con id {bookId} no encontrado.");
-        return book;
     }
 
     private static void VerifyOwner(Book book, Guid ownerId)

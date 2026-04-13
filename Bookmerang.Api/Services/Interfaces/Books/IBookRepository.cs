@@ -10,6 +10,9 @@ public interface IBookRepository
     /// Devuelve null si no existe.
     Task<Book?> GetByIdAsync(int bookId, CancellationToken ct = default);
 
+    /// Obtiene un libro por ID o lanza NotFoundException.
+    Task<Book> GetByIdOrThrowAsync(int bookId, CancellationToken ct = default);
+
     /// Obtiene libros del usuario paginados con filtros opcionales.
     /// Excluye siempre los libros con status DELETED.
     /// Devuelve la lista de libros Y el total sin paginar (para PagedResult).

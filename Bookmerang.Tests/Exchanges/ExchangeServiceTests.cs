@@ -1,405 +1,217 @@
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Exceptions;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
+using Bookmerang.Api.Services.Implementation.Chats;
 using Bookmerang.Api.Services.Implementation.ExchangeServices;
 using Bookmerang.Tests.Helpers;
-using Microsoft.EntityFrameworkCore;
 using Xunit;
+
+using MatchEntity = Bookmerang.Api.Models.Entities.Match;
 
 namespace Bookmerang.Tests.Exchanges;
 
-public class ExchangeServiceTests : IAsyncLifetime
+public class ExchangeServiceTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>, IAsyncLifetime
 {
-	private AppDbContext _db = null!;
-	private ExchangeService _service = null!;
+    private AppDbContext _db = null!;
+    private ExchangeService _service = null!;
+    private ChatService _chatService = null!;
 
-	public Task InitializeAsync()
-	{
-		_db = DbContextFactory.CreateInMemory();
-		_service = new ExchangeService(_db);
-		return Task.CompletedTask;
-	}
+    public Task InitializeAsync()
+    {
+        _db = fixture.CreateDbContext();
+        _chatService = new ChatService(_db);
+        _service = new ExchangeService(_db, _chatService);
+        return Task.CompletedTask;
+    }
 
-	public async Task DisposeAsync()
-	{
-		await _db.Database.EnsureDeletedAsync();
-		await _db.DisposeAsync();
-	}
+    public async Task DisposeAsync()
+    {
+        await _db.DisposeAsync();
+    }
 
-	[Fact]
-	public async Task CreateExchange_MatchDoesNotExist_ThrowsInvalidOperationException()
-	{
-		var chatId = Guid.NewGuid();
-		_db.Chats.Add(new Chat { Id = chatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow });
-		await _db.SaveChangesAsync();
+    // ── Seed helpers ────────────────────────────────────────────────
 
-		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateExchange(chatId, 999));
+    private async Task<(Exchange exchange, MatchEntity match, Guid user1Id, Guid user2Id)> SeedExchangeWithMatch(
+        string prefix, ExchangeStatus status = ExchangeStatus.NEGOTIATING)
+    {
+        var user1Id = await TestSeedHelper.SeedUser(_db, $"{prefix}_u1");
+        var user2Id = await TestSeedHelper.SeedUser(_db, $"{prefix}_u2");
 
-		Assert.Contains("Match con id 999 no existe", ex.Message);
-	}
+        var book1 = new Book { OwnerId = user1Id, Status = BookStatus.PUBLISHED };
+        var book2 = new Book { OwnerId = user2Id, Status = BookStatus.PUBLISHED };
+        _db.Books.AddRange(book1, book2);
+        await _db.SaveChangesAsync();
 
-	[Fact]
-	public async Task CreateExchange_ChatDoesNotExist_ThrowsInvalidOperationException()
-	{
-		var chatId = Guid.NewGuid();
-		_db.Matches.Add(new Match
-		{
-			Id = 44,
-			User1Id = Guid.NewGuid(),
-			User2Id = Guid.NewGuid(),
-			Book1Id = 1,
-			Book2Id = 2,
-			Status = MatchStatus.NEW,
-			CreatedAt = DateTime.UtcNow
-		});
-		await _db.SaveChangesAsync();
+        var match = new MatchEntity
+        {
+            User1Id = user1Id,
+            User2Id = user2Id,
+            Book1Id = book1.Id,
+            Book2Id = book2.Id,
+            Status = MatchStatus.CHAT_CREATED,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Matches.Add(match);
+        await _db.SaveChangesAsync();
 
-		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateExchange(chatId, 44));
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
 
-		Assert.Contains($"Chat con id {chatId} no existe", ex.Message);
-	}
+        var exchange = new Exchange { ChatId = chat.Id, MatchId = match.Id, Status = status };
+        _db.Exchanges.Add(exchange);
+        await _db.SaveChangesAsync();
 
-	[Fact]
-	public async Task CreateExchange_ValidChatAndMatch_CreatesExchangeInNegotiating()
-	{
-		var chatId = Guid.NewGuid();
-		_db.Chats.Add(new Chat { Id = chatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow });
-		_db.Matches.Add(new Match
-		{
-			Id = 55,
-			User1Id = Guid.NewGuid(),
-			User2Id = Guid.NewGuid(),
-			Book1Id = 1,
-			Book2Id = 2,
-			Status = MatchStatus.NEW,
-			CreatedAt = DateTime.UtcNow
-		});
-		await _db.SaveChangesAsync();
+        return (exchange, match, user1Id, user2Id);
+    }
 
-		var created = await _service.CreateExchange(chatId, 55);
+    // --- CreateExchange ---
 
-		Assert.True(created.ExchangeId > 0);
-		Assert.Equal(chatId, created.ChatId);
-		Assert.Equal(55, created.MatchId);
-		Assert.Equal(ExchangeStatus.NEGOTIATING, created.Status);
-		Assert.Equal(1, await _db.Exchanges.CountAsync());
-	}
+    [Fact]
+    public async Task CreateExchange_ValidData_CreatesExchange()
+    {
+        var u1 = await TestSeedHelper.SeedUser(_db, "ce_valid_u1");
+        var u2 = await TestSeedHelper.SeedUser(_db, "ce_valid_u2");
 
-	[Fact]
-	public async Task UpdateExchangeStatus_FromNegotiatingToAccepted_UpdatesStatus()
-	{
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = Guid.NewGuid(),
-			MatchId = 21,
-			Status = ExchangeStatus.NEGOTIATING,
-			CreatedAt = DateTime.UtcNow.AddMinutes(-20),
-			UpdatedAt = DateTime.UtcNow.AddMinutes(-20)
-		};
+        var book1 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED };
+        var book2 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
+        _db.Books.AddRange(book1, book2);
+        await _db.SaveChangesAsync();
 
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.Add(chat);
+        var match = new MatchEntity
+        {
+            User1Id = u1,
+            User2Id = u2,
+            Book1Id = book1.Id,
+            Book2Id = book2.Id,
+            Status = MatchStatus.CHAT_CREATED,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Matches.Add(match);
+        await _db.SaveChangesAsync();
 
-		var previousUpdatedAt = exchange.UpdatedAt;
+        var result = await _service.CreateExchange(chat.Id, match.Id);
 
-		var updated = await _service.UpdateExchangeStatus(exchange.ExchangeId, ExchangeStatus.ACCEPTED);
+        Assert.NotNull(result);
+        Assert.Equal(chat.Id, result.ChatId);
+        Assert.Equal(match.Id, result.MatchId);
+    }
 
-		Assert.Equal(ExchangeStatus.ACCEPTED, updated.Status);
-		Assert.True(updated.UpdatedAt >= previousUpdatedAt);
-	}
+    [Fact]
+    public async Task CreateExchange_ChatNotFound_ThrowsException()
+    {
+        var u1 = await TestSeedHelper.SeedUser(_db, "ce_nochat_u1");
+        var u2 = await TestSeedHelper.SeedUser(_db, "ce_nochat_u2");
 
-	[Fact]
-	public async Task UpdateExchangeStatus_AlreadyRejected_ThrowsInvalidOperationException()
-	{
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = Guid.NewGuid(),
-			MatchId = 32,
-			Status = ExchangeStatus.REJECTED,
-			CreatedAt = DateTime.UtcNow,
-			UpdatedAt = DateTime.UtcNow
-		};
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
+        var book1 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED };
+        var book2 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED };
+        _db.Books.AddRange(book1, book2);
+        await _db.SaveChangesAsync();
 
-		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-			_service.UpdateExchangeStatus(exchange.ExchangeId, ExchangeStatus.ACCEPTED));
+        var match = new MatchEntity
+        {
+            User1Id = u1,
+            User2Id = u2,
+            Book1Id = book1.Id,
+            Book2Id = book2.Id,
+            Status = MatchStatus.CHAT_CREATED,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Matches.Add(match);
+        await _db.SaveChangesAsync();
 
-		Assert.Contains("No se puede modificar un intercambio ya rechazado", ex.Message);
-	}
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.CreateExchange(Guid.NewGuid(), match.Id));
+    }
 
-	// GET TESTS
-	[Fact]
-	public async Task GetExchangeById_ExchangeExists_ReturnsExchange()
-	{
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = Guid.NewGuid(),
-			MatchId = 51,
-			Status = ExchangeStatus.NEGOTIATING,
-			CreatedAt = DateTime.UtcNow,
-			UpdatedAt = DateTime.UtcNow
-		};
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
+    [Fact]
+    public async Task CreateExchange_MatchAlreadyUsed_ThrowsException()
+    {
+        var (_, match, _, _) = await SeedExchangeWithMatch("ce_dup");
 
-		var result = await _service.GetExchangeById(exchange.ExchangeId);
+        var newChat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.Add(newChat);
+        await _db.SaveChangesAsync();
 
-		Assert.NotNull(result);
-		Assert.Equal(exchange.ExchangeId, result.ExchangeId);
-		Assert.Equal(exchange.ChatId, result.ChatId);
-	}
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.CreateExchange(newChat.Id, match.Id));
+    }
 
-	[Fact]
-	public async Task GetExchangeById_ExchangeDoesNotExist_ReturnsNull()
-	{
-		var result = await _service.GetExchangeById(9999);
+    // --- UpdateExchangeStatus ---
 
-		Assert.Null(result);
-	}
+    [Fact]
+    public async Task UpdateExchangeStatus_UpdatesStatusAndDate()
+    {
+        var (exchange, _, _, _) = await SeedExchangeWithMatch("upd_status");
+        var pastDate = DateTime.UtcNow.AddMinutes(-5);
+        exchange.UpdatedAt = pastDate;
+        await _db.SaveChangesAsync();
 
+        var result = await _service.UpdateExchangeStatus(exchange, ExchangeStatus.ACCEPTED_BY_1);
 
-	[Fact]
-	public async Task GetExchangeWithMatch_ExchangeDoesNotExist_ReturnsNull()
-	{
-		var result = await _service.GetExchangeWithMatch(9999);
+        Assert.Equal(ExchangeStatus.ACCEPTED_BY_1, result.Status);
+        Assert.True(result.UpdatedAt > pastDate);
+    }
 
-		Assert.Null(result);
-	}
+    // --- AcceptExchange ---
 
-	[Fact]
-	public async Task GetExchangeByChatIdWithMatch_ChatDoesNotExist_ReturnsNull()
-	{
-		var result = await _service.GetExchangeByChatIdWithMatch(Guid.NewGuid());
+    [Fact]
+    public async Task AcceptExchange_User1FromNegotiating_ChangesToAcceptedBy1()
+    {
+        var (exchange, _, user1Id, _) = await SeedExchangeWithMatch("acc_u1", ExchangeStatus.NEGOTIATING);
 
-		Assert.Null(result);
-	}
+        var result = await _service.AcceptExchange(exchange.ExchangeId, user1Id);
 
-	[Fact]
-	public async Task GetAllExchanges_NoExchanges_ReturnsEmptyList()
-	{
-		var result = await _service.GetAllExchanges();
+        Assert.Equal(ExchangeStatus.ACCEPTED_BY_1, result.Status);
+    }
 
-		Assert.Empty(result);
-	}
+    [Fact]
+    public async Task AcceptExchange_User2FromAcceptedBy1_ChangesToAccepted()
+    {
+        var (exchange, _, _, user2Id) = await SeedExchangeWithMatch("acc_u2", ExchangeStatus.ACCEPTED_BY_1);
 
-	// DELETE TESTS
-	[Fact]
-	public async Task DeleteExchange_ExchangeExists_DeletesSuccessfully()
-	{
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = Guid.NewGuid(),
-			MatchId = 78,
-			Status = ExchangeStatus.NEGOTIATING,
-			CreatedAt = DateTime.UtcNow,
-			UpdatedAt = DateTime.UtcNow
-		};
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
+        var result = await _service.AcceptExchange(exchange.ExchangeId, user2Id);
 
-		var result = await _service.DeleteExchange(exchange.ExchangeId);
+        Assert.Equal(ExchangeStatus.ACCEPTED, result.Status);
+    }
 
-		Assert.True(result);
-		var deletedExchange = await _db.Exchanges.FirstOrDefaultAsync(e => e.ExchangeId == exchange.ExchangeId);
-		Assert.Null(deletedExchange);
-	}
+    [Fact]
+    public async Task AcceptExchange_NotFound_ThrowsNotFoundException()
+    {
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            _service.AcceptExchange(9999, Guid.NewGuid()));
+    }
 
-	[Fact]
-	public async Task DeleteExchange_ExchangeDoesNotExist_ThrowsException()
-	{
-		var ex = await Assert.ThrowsAsync<Exception>(() => _service.DeleteExchange(9999));
+    [Fact]
+    public async Task AcceptExchange_InvalidState_ThrowsValidationException()
+    {
+        var (exchange, _, user1Id, _) = await SeedExchangeWithMatch("acc_invalid", ExchangeStatus.ACCEPTED_BY_1);
 
-		Assert.Contains("no encontrado", ex.Message.ToLower());
-	}
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            _service.AcceptExchange(exchange.ExchangeId, user1Id));
+    }
 
-	// VALIDATE UNIQUENESS TESTS
-	[Fact]
-	public async Task CreateExchange_ChatAndMatchAlreadyUsedTogether_ThrowsInvalidOperationException()
-	{
-		var chatId = Guid.NewGuid();
-		var chat = new Chat { Id = chatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
-		_db.Chats.Add(chat);
+    // --- DeleteExchange ---
 
-		var match = new Match
-		{
-			Id = 110,
-			User1Id = Guid.NewGuid(),
-			User2Id = Guid.NewGuid(),
-			Book1Id = 1,
-			Book2Id = 2,
-			Status = MatchStatus.NEW,
-			CreatedAt = DateTime.UtcNow
-		};
-		_db.Matches.Add(match);
+    [Fact]
+    public async Task DeleteExchange_Exists_DeletesAndReturnsTrue()
+    {
+        var (exchange, _, _, _) = await SeedExchangeWithMatch("del_ok");
 
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = chatId,
-			MatchId = 110,
-			Status = ExchangeStatus.NEGOTIATING,
-			CreatedAt = DateTime.UtcNow,
-			UpdatedAt = DateTime.UtcNow
-		};
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
+        var result = await _service.DeleteExchange(exchange.ExchangeId);
 
-		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-			_service.CreateExchange(chatId, 110));
+        Assert.True(result);
+        Assert.Null(await _db.Exchanges.FindAsync(exchange.ExchangeId));
+        Assert.Null(await _db.Chats.FindAsync(exchange.ChatId));
+    }
 
-		Assert.Contains("ya usado", ex.Message);
-	}
-
-	[Fact]
-	public async Task CreateExchange_ChatAlreadyUsedInOtherExchange_ThrowsInvalidOperationException()
-	{
-		var chatId = Guid.NewGuid();
-		var chat = new Chat { Id = chatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
-		_db.Chats.Add(chat);
-
-		_db.Matches.AddRange(
-			new Match
-			{
-				Id = 120,
-				User1Id = Guid.NewGuid(),
-				User2Id = Guid.NewGuid(),
-				Book1Id = 1,
-				Book2Id = 2,
-				Status = MatchStatus.NEW,
-				CreatedAt = DateTime.UtcNow
-			},
-			new Match
-			{
-				Id = 121,
-				User1Id = Guid.NewGuid(),
-				User2Id = Guid.NewGuid(),
-				Book1Id = 3,
-				Book2Id = 4,
-				Status = MatchStatus.NEW,
-				CreatedAt = DateTime.UtcNow
-			}
-		);
-
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = chatId,
-			MatchId = 120,
-			Status = ExchangeStatus.NEGOTIATING,
-			CreatedAt = DateTime.UtcNow,
-			UpdatedAt = DateTime.UtcNow
-		};
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
-
-		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-			_service.CreateExchange(chatId, 121));
-
-		Assert.Contains("ya usado en otro exchange", ex.Message);
-	}
-
-	[Fact]
-	public async Task CreateExchange_MatchAlreadyUsedInOtherExchange_ThrowsInvalidOperationException()
-	{
-		var usedChatId = Guid.NewGuid();
-		var newChatId = Guid.NewGuid();
-		_db.Chats.AddRange(
-			new Chat { Id = usedChatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow },
-			new Chat { Id = newChatId, Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow }
-		);
-
-		var match = new Match
-		{
-			Id = 130,
-			User1Id = Guid.NewGuid(),
-			User2Id = Guid.NewGuid(),
-			Book1Id = 1,
-			Book2Id = 2,
-			Status = MatchStatus.NEW,
-			CreatedAt = DateTime.UtcNow
-		};
-		_db.Matches.Add(match);
-
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = usedChatId,
-			MatchId = 130,
-			Status = ExchangeStatus.NEGOTIATING,
-			CreatedAt = DateTime.UtcNow,
-			UpdatedAt = DateTime.UtcNow
-		};
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
-
-		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-			_service.CreateExchange(newChatId, 130));
-
-		Assert.Contains("ya usado en otro exchange", ex.Message);
-	}
-
-	// STATUS TRANSITION TESTS
-	[Fact]
-	public async Task UpdateExchangeStatus_FromNegotiatingToRejected_UpdatesSuccessfully()
-	{
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = Guid.NewGuid(),
-			MatchId = 141,
-			Status = ExchangeStatus.NEGOTIATING,
-			CreatedAt = DateTime.UtcNow,
-			UpdatedAt = DateTime.UtcNow
-		};
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
-
-		var updated = await _service.UpdateExchangeStatus(exchange.ExchangeId, ExchangeStatus.REJECTED);
-
-		Assert.Equal(ExchangeStatus.REJECTED, updated.Status);
-	}
-
-	[Fact]
-	public async Task UpdateExchangeStatus_FromAcceptedByOneToAccepted_UpdatesSuccessfully()
-	{
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = Guid.NewGuid(),
-			MatchId = 151,
-			Status = ExchangeStatus.ACCEPTED_BY_1,
-			CreatedAt = DateTime.UtcNow,
-			UpdatedAt = DateTime.UtcNow
-		};
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
-
-		var updated = await _service.UpdateExchangeStatus(exchange.ExchangeId, ExchangeStatus.ACCEPTED_BY_2);
-
-		Assert.Equal(ExchangeStatus.ACCEPTED_BY_2, updated.Status);
-	}
-
-	[Fact]
-	public async Task UpdateExchangeStatus_ToIncident_UpdatesSuccessfully()
-	{
-		var exchange = new Api.Models.Entities.Exchange
-		{
-			ChatId = Guid.NewGuid(),
-			MatchId = 161,
-			Status = ExchangeStatus.NEGOTIATING,
-			CreatedAt = DateTime.UtcNow,
-			UpdatedAt = DateTime.UtcNow
-		};
-		_db.Exchanges.Add(exchange);
-		await _db.SaveChangesAsync();
-
-		var updated = await _service.UpdateExchangeStatus(exchange.ExchangeId, ExchangeStatus.INCIDENT);
-
-		Assert.Equal(ExchangeStatus.INCIDENT, updated.Status);
-	}
-
-	[Fact]
-	public async Task UpdateExchangeStatus_ExchangeDoesNotExist_ThrowsInvalidOperationException()
-	{
-		var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-			_service.UpdateExchangeStatus(9999, ExchangeStatus.ACCEPTED));
-
-		Assert.Contains("no encontrado", ex.Message);
-	}
+    [Fact]
+    public async Task DeleteExchange_NotFound_ThrowsNotFoundException()
+    {
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            _service.DeleteExchange(9999));
+    }
 }
