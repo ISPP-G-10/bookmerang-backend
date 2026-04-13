@@ -78,7 +78,7 @@ public class BookdropWebApplicationFixture : IAsyncLifetime
     {
         var t = new NpgsqlNullNameTranslator();
 
-        #pragma warning disable CS0618
+#pragma warning disable CS0618
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<ChatType>("chat_type", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BooksExtension>("books_extension", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookStatus>("book_status", t);
@@ -97,7 +97,7 @@ public class BookdropWebApplicationFixture : IAsyncLifetime
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<InkdropsActionType>("inkdrops_action_type", t);
-        #pragma warning restore CS0618
+#pragma warning restore CS0618
     }
 
     private static async Task RunMigrationsAsync(string connectionString)
@@ -113,7 +113,8 @@ public class BookdropWebApplicationFixture : IAsyncLifetime
             "20260222164018_0002_schema.sql",
             "20260307120000_0005_add_typing_indicators.sql",
             "20260329120000_0008_add_inkdrops.sql",
-            "20260408120000_0008_chats_uuid_ids.sql"
+            "20260408120000_0008_chats_uuid_ids.sql",
+            "20260413083046_add_cosmetics_to_user_progress.sql"
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));
