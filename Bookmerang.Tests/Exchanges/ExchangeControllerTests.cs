@@ -5,6 +5,7 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Tests.Helpers;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NetTopologySuite.Geometries;
 using Xunit;
@@ -126,15 +127,41 @@ public class ExchangeControllerTests(WebAppFixture fixture) : IClassFixture<WebA
     }
 
     [Fact]
-    public async Task RejectExchange_AlreadyAccepted_ReturnsBadRequest()
+    public async Task RejectExchange_AcceptedWithMeeting_ReturnsOkAndRefusesMeeting()
     {
         var data = await SeedExchangeData("reject_accepted", ExchangeStatus.ACCEPTED);
-        SetAuth(_client, data.Token1);
 
+        using (var scope = _fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.ExchangeMeetings.Add(new ExchangeMeeting
+            {
+                ExchangeId = data.ExchangeId,
+                ExchangeMode = ExchangeMode.BOOKDROP,
+                CustomLocation = new Point(0, 0) { SRID = 4326 },
+                ScheduledAt = DateTime.UtcNow.AddHours(2),
+                ProposerId = data.User1Id,
+                MeetingStatus = ExchangeMeetingStatus.ACCEPTED,
+                Pin = "123456",
+                BookDropStatus = BookdropExchangeStatus.AWAITING_DROP_1
+            });
+            await db.SaveChangesAsync();
+        }
+
+        SetAuth(_client, data.Token1);
         var response = await _client.PatchAsync($"/api/exchange/{data.ExchangeId}/reject", null);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("REJECTED", body.GetProperty("status").GetString());
         ClearAuth(_client);
+
+        using var checkScope = _fixture.Factory.Services.CreateScope();
+        var checkDb = checkScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var meeting = await checkDb.ExchangeMeetings.FirstAsync(m => m.ExchangeId == data.ExchangeId);
+        Assert.Equal(ExchangeMeetingStatus.REFUSED, meeting.MeetingStatus);
+        Assert.Null(meeting.Pin);
+        Assert.Null(meeting.BookDropStatus);
     }
 
     // ── ReportExchange ──────────────────────────────────────────────

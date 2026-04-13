@@ -109,9 +109,21 @@ public class ExchangeController(IExchangeService service, IExchangeMeetingServic
 
         if (exchange.Status is not (ExchangeStatus.NEGOTIATING
                                  or ExchangeStatus.ACCEPTED_BY_1
-                                 or ExchangeStatus.ACCEPTED_BY_2))
+                                 or ExchangeStatus.ACCEPTED_BY_2
+                                 or ExchangeStatus.ACCEPTED))
         {
-            return BadRequest("Solo se puede rechazar un intercambio que aún esté en fase de negociación.");
+            return BadRequest("Solo se puede rechazar un intercambio que no esta finalizado ni reportado.");
+        }
+
+        // Si ya existia una quedada, la marcamos como rechazada para mantener consistencia.
+        var meeting = await _meetingService.GetMeetingByExchangeId(exchangeId);
+        if (meeting != null && meeting.MeetingStatus != ExchangeMeetingStatus.REFUSED)
+        {
+            meeting.MeetingStatus = ExchangeMeetingStatus.REFUSED;
+            meeting.MarkAsCompletedByUser1 = false;
+            meeting.MarkAsCompletedByUser2 = false;
+            meeting.Pin = null;
+            meeting.BookDropStatus = null;
         }
 
         var updated = await _service.UpdateExchangeStatus(exchange, ExchangeStatus.REJECTED);
@@ -142,4 +154,3 @@ public class ExchangeController(IExchangeService service, IExchangeMeetingServic
     }
 
 }
-
