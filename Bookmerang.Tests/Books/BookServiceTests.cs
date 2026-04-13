@@ -329,7 +329,7 @@ public class BookServiceTests : IAsyncLifetime
             Id = 10,
             OwnerId = ownerId,
             Status = BookStatus.DRAFT,
-            Isbn = "ISBN 978-84-123456-7-0",
+            Isbn = "978-0-306-40615-7",
             Titulo = "Titulo de prueba",
             Autor = "Autor de prueba",
             Editorial = "Editorial de prueba",
@@ -354,7 +354,7 @@ public class BookServiceTests : IAsyncLifetime
         var result = await sut.PublishAsync(10, "supabase-ok", CancellationToken.None);
 
         Assert.Equal(BookStatus.PUBLISHED, draft.Status);
-        Assert.Equal("ISBN 978-84-123456-7-0", draft.Isbn);
+        Assert.Equal("9780306406157", draft.Isbn); // stored as normalised (no spaces/dashes, no "ISBN" prefix)
         bookRepo.Verify(x => x.UpdateAsync(It.IsAny<Book>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 

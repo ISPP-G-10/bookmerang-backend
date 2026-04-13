@@ -475,7 +475,9 @@ public class AuthServiceTests
         Assert.Equal("avatar.jpg", dto.Avatar);
         Assert.Equal(location.Y, dto.Latitud);
         Assert.Equal(location.X, dto.Longitud);
-    }[Fact]
+    }
+
+    [Fact]
     public async Task UpdatePerfil_ShouldReturnNull_WhenUserNotFound()
     {
         await using var db = CreateDbContext();
