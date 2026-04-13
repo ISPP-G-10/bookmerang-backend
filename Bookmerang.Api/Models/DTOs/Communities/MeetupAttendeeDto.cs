@@ -6,4 +6,6 @@ public class MeetupAttendeeDto
     public string Username { get; set; } = string.Empty;
     public int SelectedBookId { get; set; }
     public string SelectedBookTitle { get; set; } = string.Empty;
+    public string? ActiveFrameId { get; set; }
+    public string? ActiveColorId { get; set; }
 }
