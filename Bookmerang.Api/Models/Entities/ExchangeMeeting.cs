@@ -61,4 +61,14 @@ public class ExchangeMeeting {
     // mark_as_completed_by_user2 boolean [default: false]
     [Column("mark_as_completed_by_user2")]
     public bool MarkAsCompletedByUser2 { get; set; } = false;
+
+    // PIN de 6 digitos para identificar el intercambio en el BookDrop
+    // Se genera al aceptar el meeting si mode == BOOKDROP
+    [Column("pin")]
+    [StringLength(6)]
+    public string? Pin { get; set; }
+
+    // Estado del ciclo de vida BookDrop cuando mode == BOOKDROP)
+    [Column("bookdrop_status")]
+    public BookdropExchangeStatus? BookDropStatus { get; set; }
 }

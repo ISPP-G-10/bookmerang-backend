@@ -8,4 +8,5 @@ public interface IBookdropService
     Task<BookdropProfileDto?> UpdatePerfil(string supabaseId, UpdateBookdropProfileRequest request);
     Task<(bool found, string? error)> DeleteBookdrop(Guid bookdropUserId);
     Task<List<BookdropProfileDto>> GetAll();
+    Task<int?> GetBookspotIdBySupabaseId(string supabaseId);
 }

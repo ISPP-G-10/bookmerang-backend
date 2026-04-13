@@ -90,6 +90,7 @@ Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupStatus>("meetup_status", 
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookspotStatus>("bookspot_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", new NpgsqlNullNameTranslator());
+Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookdropExchangeStatus>("bookdrop_exchange_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<SubscriptionStatus>("subscription_status", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<SubscriptionPlatform>("subscription_platform", new NpgsqlNullNameTranslator());
 Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<InkdropsActionType>("inkdrops_action_type", new NpgsqlNullNameTranslator());
@@ -188,7 +189,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("BookdropOnly", policy =>
         policy.RequireClaim("user_type", ((int)BaseUserType.BOOKDROP_USER).ToString()));
     options.AddPolicy("UserOnly", policy =>
-        policy.RequireClaim("user_type", ((int)BaseUserType.USER).ToString()));
+        policy.RequireAssertion(ctx =>
+            ctx.User.HasClaim("user_type", ((int)BaseUserType.USER).ToString()) ||
+            ctx.User.HasClaim("user_type", ((int)BaseUserType.ADMIN).ToString())));
     options.AddPolicy("AdminOnly", policy =>
         policy.RequireClaim("user_type", ((int)BaseUserType.ADMIN).ToString()));
 });
@@ -223,6 +226,7 @@ builder.Services.AddScoped<ILanguageRepository, LanguageRepository>();
 
 // Bookdrop (establecimientos)
 builder.Services.AddScoped<IBookdropService, BookdropService>();
+builder.Services.AddScoped<IBookDropExchangeService, BookDropExchangeService>();
 
 // Bookspots
 builder.Services.AddScoped<IBookspotRepository, BookspotRepository>();

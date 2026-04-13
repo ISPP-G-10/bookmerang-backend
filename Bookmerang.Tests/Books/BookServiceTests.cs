@@ -130,7 +130,7 @@ public class BookServiceTests : IAsyncLifetime
         var genreRepo = new Mock<IGenreRepository>();
         var languageRepo = new Mock<ILanguageRepository>();
 
-        bookRepo.Setup(x => x.GetByIdAsync(10, It.IsAny<CancellationToken>()))
+        bookRepo.Setup(x => x.GetByIdOrThrowAsync(10, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(draft);
 
         var sut = CreateSut(bookRepo, genreRepo, languageRepo);
@@ -160,7 +160,7 @@ public class BookServiceTests : IAsyncLifetime
         var genreRepo = new Mock<IGenreRepository>();
         var languageRepo = new Mock<ILanguageRepository>();
 
-        bookRepo.Setup(x => x.GetByIdAsync(20, It.IsAny<CancellationToken>()))
+        bookRepo.Setup(x => x.GetByIdOrThrowAsync(20, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(book);
 
         var sut = CreateSut(bookRepo, genreRepo, languageRepo);
@@ -190,7 +190,7 @@ public class BookServiceTests : IAsyncLifetime
         var genreRepo = new Mock<IGenreRepository>();
         var languageRepo = new Mock<ILanguageRepository>();
 
-        bookRepo.Setup(x => x.GetByIdAsync(30, It.IsAny<CancellationToken>()))
+        bookRepo.Setup(x => x.GetByIdOrThrowAsync(30, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(book);
 
         var sut = CreateSut(bookRepo, genreRepo, languageRepo);
@@ -338,15 +338,15 @@ public class BookServiceTests : IAsyncLifetime
             Condition = BookCondition.LIKE_NEW,
             Observaciones = "Observaciones de prueba",
             Photos = new List<BookPhoto> { new() { Url = "https://img/1.jpg", Orden = 0 } },
-            BookGenres = new List<BookGenre> { new() { Book=null, BookId= 10, GenreId = 1, Genre = new Genre { Id = 1, Name = "Ficción" } } },
-            BookLanguages = new List<BookLanguage> { new() { Book = null, BookId = 10, LanguageId = 1, Language = new Language { Id = 1, LanguageName = "Español" } } }
+            BookGenres = new List<BookGenre> { new() { Book = null!, BookId = 10, GenreId = 1, Genre = new Genre { Id = 1, Name = "Ficción" } } },
+            BookLanguages = new List<BookLanguage> { new() { Book = null!, BookId = 10, LanguageId = 1, Language = new Language { Id = 1, LanguageName = "Español" } } }
         };
 
         var bookRepo = new Mock<IBookRepository>();
         var genreRepo = new Mock<IGenreRepository>();
         var languageRepo = new Mock<ILanguageRepository>();
 
-        bookRepo.Setup(x => x.GetByIdAsync(10, It.IsAny<CancellationToken>()))
+        bookRepo.Setup(x => x.GetByIdOrThrowAsync(10, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(draft);
 
         var sut = CreateSut(bookRepo, genreRepo, languageRepo);
@@ -384,7 +384,7 @@ public class BookServiceTests : IAsyncLifetime
         };
 
         var bookRepo = new Mock<IBookRepository>();
-        bookRepo.Setup(x => x.GetByIdAsync(10, It.IsAny<CancellationToken>()))
+        bookRepo.Setup(x => x.GetByIdOrThrowAsync(10, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(draft);
 
         var sut = CreateSut(bookRepo, new Mock<IGenreRepository>(), new Mock<ILanguageRepository>());
@@ -398,8 +398,8 @@ public class BookServiceTests : IAsyncLifetime
     {
         var bookRepo = new Mock<IBookRepository>();
 
-        bookRepo.Setup(x => x.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((Book)null);
+        bookRepo.Setup(x => x.GetByIdOrThrowAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new NotFoundException("Libro no encontrado."));
 
         var sut = CreateSut(bookRepo, new Mock<IGenreRepository>(), new Mock<ILanguageRepository>());
 

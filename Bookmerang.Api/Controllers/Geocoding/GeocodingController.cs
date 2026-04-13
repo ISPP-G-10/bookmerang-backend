@@ -13,6 +13,7 @@ public class GeocodingController(IHttpClientFactory httpClientFactory) : Control
     private const string NominatimBaseUrl = "https://nominatim.openstreetmap.org";
 
     [HttpGet("search")]
+    [AllowAnonymous]
     public async Task<ActionResult<List<LocationSuggestionDto>>> Search([FromQuery] string q, [FromQuery] int limit = 5)
     {
         var query = q?.Trim() ?? string.Empty;

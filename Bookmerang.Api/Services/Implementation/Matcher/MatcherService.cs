@@ -4,18 +4,20 @@ using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Chats;
+using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Interfaces.Matcher;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Bookmerang.Api.Services.Implementation.Matcher;
 
-public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings, ILogger<MatcherService> logger, IChatService chatService) : IMatcherService
+public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings, ILogger<MatcherService> logger, IChatService chatService, IExchangeService exchangeService) : IMatcherService
 {
     private readonly AppDbContext _db = db;
     private readonly MatcherSettings _settings = settings.Value;
     private readonly ILogger<MatcherService> _logger = logger;
     private readonly IChatService _chatService = chatService;
+    private readonly IExchangeService _exchangeService = exchangeService;
 
     public async Task<FeedResultDto> GetFeedAsync(Guid userId, int page, int pageSize)
     {
@@ -184,8 +186,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         await _db.SaveChangesAsync();
 
         var chatDto = await _chatService.CreateChat(ChatType.EXCHANGE, [userId, otherUserId]) ?? throw new InvalidOperationException("No se pudo crear el chat para el match.");
-        CreateExchange(chatDto.Id, match.Id, now);
-        await _db.SaveChangesAsync();
+        await _exchangeService.CreateExchange(chatDto.Id, match.Id);
 
         return await BuildMatchCreatedDto(match, chatDto.Id, otherUserId);
     }
@@ -203,19 +204,6 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         };
         _db.Matches.Add(match);
         return match;
-    }
-
-    // TODO: Reemplazar por el método de creación del módulo de exchanges cuando esté implementado
-    private void CreateExchange(Guid chatId, int matchId, DateTime now)
-    {
-        _db.Exchanges.Add(new Exchange
-        {
-            ChatId = chatId,
-            MatchId = matchId,
-            Status = ExchangeStatus.NEGOTIATING,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
     }
 
     /// <summary>
