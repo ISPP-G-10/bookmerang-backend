@@ -1,32 +1,27 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Bookmerang.Api.Models.DTOs;
-using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Exceptions;
+using Bookmerang.Api.Helpers;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
-using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Controllers.Exchanges;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = "UserOnly")]
 
-public class ExchangeMeetingController : ControllerBase
+/// Gestiona las quedadas (meetings) de un intercambio.
+/// Ver ExchangeController para el flujo general de intercambio.
+public class ExchangeMeetingController(IExchangeMeetingService meetingService, AppDbContext db, IExchangeService exchangeService) : ControllerBase
 {
-    private readonly IExchangeMeetingService _meetingService;
-    private readonly IExchangeService _exchangeService;
-    private readonly AppDbContext _db;
-
-    public ExchangeMeetingController(IExchangeMeetingService meetingService, AppDbContext db, IExchangeService exchangeService)
-    {
-        _meetingService = meetingService;
-        _exchangeService = exchangeService;
-        _db = db;
-    }
+    private readonly IExchangeMeetingService _meetingService = meetingService;
+    private readonly IExchangeService _exchangeService = exchangeService;
+    private readonly AppDbContext _db = db;
 
     /// Obtiene el Guid del usuario autenticado
     private async Task<Guid?> GetCurrentUserId()
@@ -47,7 +42,12 @@ public class ExchangeMeetingController : ControllerBase
         
         var meeting = await _meetingService.GetExchangeMeeting(meetingId);
         if (meeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
-        
+
+        var exchange = await _exchangeService.GetExchangeWithMatch(meeting.ExchangeId);
+
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange!))
+            throw new ForbiddenException("No tienes permiso para acceder a este meeting.");
+
         return Ok(meeting.ToDto());
     }
 
@@ -58,120 +58,83 @@ public class ExchangeMeetingController : ControllerBase
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var exchange = await _exchangeService.GetExchangeWithMatch(exchangeId);
-        if (exchange == null) return NotFound($"Exchange con id {exchangeId} no encontrado.");
-
-        if (!IsUserInExchange(userId.Value, exchange.Match)) return Forbid();
-
         var meeting = await _meetingService.GetMeetingByExchangeId(exchangeId);
         if (meeting == null) return NotFound($"No existe meeting para exchange con id {exchangeId}.");
+
+        var exchange = await _exchangeService.GetExchangeWithMatch(exchangeId);
+
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange!))
+            throw new ForbiddenException("No tienes permiso para acceder a este meeting.");
 
         return Ok(meeting.ToDto());
     }
 
-    /// GET /api/exchangemeeting/byUser/{proposerId}
-    [HttpGet("byUser/{proposerId:guid}")]
-    public async Task<IActionResult> GetMeetingsByUserId(Guid proposerId)
-    {
-        var userId = await GetCurrentUserId();
-        if (userId == null) return Unauthorized();
-
-        var meetings = await _meetingService.GetMeetingsByUserId(proposerId);
-        if (meetings == null || meetings.Count == 0)
-            return NotFound($"No se encontraron ExchangeMeetings para el usuario con id: {proposerId}");
-
-        // Convert entities to DTOs to prevent JSON serialization errors from NetTopologySuite
-        var meetingsConverted = meetings.Select(m => m.ToDto()).ToList();
-        return Ok(meetingsConverted);
-    }
-
-    /// GET /api/exchangemeeting/all
-    [HttpGet("all")]
-    public async Task<IActionResult> GetAllExchangeMeetings()
-    {
-        var userId = await GetCurrentUserId();
-        if (userId == null) return Unauthorized();
-
-        var meetings = await _meetingService.GetAllExchangeMeetings();
-        if (meetings == null || meetings.Count == 0)
-            return NotFound($"No se encontraron ExchangeMeetings");
-
-        var meetingsConverted = meetings.Select(m => m.ToDto()).ToList();
-        return Ok(meetingsConverted);
-    }
-
     /// POST /api/exchangemeeting
     [HttpPost]
-    public async Task<IActionResult> CreateExchangeMeeting([FromBody] ExchangeMeetingDto dto)
-    {
-        var userId = await GetCurrentUserId(); // Obtener el userId del usuario autenticado, que será el proposer del meeting
-        if (userId == null) return Unauthorized();
-
-        // require all necessary fields
-        if (dto.ExchangeId == 0 || dto.ExchangeId == null || !dto.ExchangeMode.HasValue || (dto.ExchangeMode == ExchangeMode.CUSTOM && dto.CustomLocation == null))
-            return BadRequest("Faltan propiedades para crear un ExchangeMeeting.");
-        
-        var exchange = await _exchangeService.GetExchangeWithMatch(dto.ExchangeId.Value);
-        if (exchange == null) return NotFound($"Exchange con id {dto.ExchangeId} no encontrado.");
-        
-        if (!IsUserInExchange(userId.Value, exchange!.Match)) return Forbid();
-        
-        // if custom location was not supplied due to serialization issues, just default to the origin
-        Point location;
-        if (dto.CustomLocation != null && dto.CustomLocation.Length >= 2)
-            location = new Point(dto.CustomLocation[0], dto.CustomLocation[1]) { SRID = 4326 };
-        else
-            location = new Point(0, 0) { SRID = 4326 };
-        var meeting = await _meetingService.CreateExchangeMeeting(dto.ExchangeId.Value, dto.ExchangeMode.Value, userId.Value, dto.BookspotId, dto.ScheduledAt, location);
-
-        // Se asigna el id para que se pueda buscar el exchange meeting para devolverlo
-        return CreatedAtAction(
-            nameof(GetExchangeMeeting),
-            new { meetingId = meeting.ExchangeMeetingId },
-            meeting.ToDto());
-    }
-
-    /// PUT /api/exchangemeeting/{meetingId}
-    [HttpPut("{meetingId}")]
-    public async Task<IActionResult> UpdateExchangeMeeting(int meetingId, [FromBody] UpdateExchangeMeetingDto dto)
+    public async Task<IActionResult> CreateExchangeMeeting([FromBody] CreateExchangeMeetingDto dto)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var oldMeeting = await _meetingService.GetExchangeMeetingWithRelations(meetingId);
-        if (oldMeeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
+        var exchange = await _exchangeService.GetExchangeWithMatch(dto.ExchangeId);
+        if (exchange == null) return NotFound($"Exchange con id {dto.ExchangeId} no encontrado.");
 
-        if (!IsUserInExchange(userId.Value, oldMeeting.Exchange.Match)) return Forbid();
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
+            throw new ForbiddenException("No tienes permiso para crear un meeting en este intercambio.");
 
-        if(!IsUserAuthorizedToMarkAsCompleted(oldMeeting.ProposerId, userId.Value, dto.MarkAsCompletedByUser1 == true, dto.MarkAsCompletedByUser2 == true))
-        {
-            return Forbid();
-        }
+        if (exchange.Status != ExchangeStatus.ACCEPTED)
+            return BadRequest("Solo se puede crear un meeting cuando el intercambio ha sido aceptado.");
 
-        //Desde este update el usuario no debería poder cambiar el estado del meeting
-        if (dto.MeetingStatus.HasValue && dto.MeetingStatus != oldMeeting.MeetingStatus)
-        {
-            return Forbid();
-        }
-        
+        var existingMeeting = await _meetingService.GetMeetingByExchangeId(dto.ExchangeId);
+        if (existingMeeting != null)
+            return Conflict("Ya existe un meeting para este intercambio.");
+
         try
         {
-            var updatedMeeting = await _meetingService.UpdateExchangeMeeting(meetingId, dto);
-            return Ok(updatedMeeting.ToDto());
+            var meeting = await _meetingService.CreateExchangeMeeting(dto, userId.Value);
+
+            return CreatedAtAction(
+                nameof(GetExchangeMeeting),
+                new { meetingId = meeting.ExchangeMeetingId },
+                meeting.ToDto());
         }
-        catch (InvalidOperationException ex)
+        catch (ArgumentException ex)
         {
             return BadRequest(ex.Message);
         }
     }
 
-    private static bool IsUserAuthorizedToMarkAsCompleted(Guid proposerId, Guid userId, bool marked1, bool marked2)
+    /// PATCH /api/exchangemeeting/{meetingId}/counter-propose
+    /// Sirve para contraponer una oferta de punto de encuentro
+    [HttpPatch("{meetingId}/counter-propose")]
+    public async Task<IActionResult> CounterProposeMeeting(int meetingId, [FromBody] CounterProposeMeetingDto dto)
     {
-        // Solo el proposer del meeting puede marcarlo como aceptado
-        if (marked1 && userId != proposerId) return false;
-        if (marked2 && userId == proposerId) return false;
-        
-        return true;
+        var userId = await GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var meeting = await _meetingService.GetExchangeMeeting(meetingId);
+        if (meeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
+
+        var exchange = await _exchangeService.GetExchangeWithMatch(meeting.ExchangeId);
+
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange!))
+            throw new ForbiddenException("No tienes permiso para modificar este meeting.");
+
+        if (meeting.MeetingStatus != ExchangeMeetingStatus.PROPOSAL)
+            return BadRequest("Solo se puede contra-proponer un meeting en estado de propuesta.");
+
+        if (meeting.ProposerId == userId.Value)
+            return BadRequest("No puedes contra-proponer tu propia propuesta.");
+
+        try
+        {
+            var updatedMeeting = await _meetingService.CounterProposeMeeting(meeting, dto, userId.Value);
+            return Ok(updatedMeeting.ToDto());
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpPut("{meetingId}/complete")]
@@ -180,82 +143,82 @@ public class ExchangeMeetingController : ControllerBase
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var oldMeeting = await _meetingService.GetExchangeMeeting(meetingId);
-        if (oldMeeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
-        
-        UpdateExchangeMeetingDto dto;
-        
-        if(oldMeeting.ProposerId == userId)
-        {
-            // Actualizar markascompletedby1 a true
-            dto = new(null, null, null, null, null, true, null);
-        }
-        else
-        {
-            // Actualizar markascompletedby2 a true
-            dto = new(null, null, null, null, null, null, true);
-        }
-        
-        try
-        {
-            var updatedMeeting = await _meetingService.UpdateExchangeMeeting(meetingId, dto);
-            return Ok(updatedMeeting.ToDto());
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
+        var meeting = await _meetingService.GetExchangeMeeting(meetingId);
+        if (meeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
 
-    private static bool IsUserInExchange(Guid userLoggedId, Match match)
-    {
-        return userLoggedId == match.User1Id || userLoggedId == match.User2Id;
+        var exchange = await _exchangeService.GetExchangeWithMatch(meeting.ExchangeId);
+
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange!))
+            throw new ForbiddenException("No tienes permiso para completar este meeting.");
+
+        if (meeting.MeetingStatus != ExchangeMeetingStatus.ACCEPTED)
+            return BadRequest("Solo se puede completar un meeting que haya sido aceptado.");
+
+        if (meeting.ExchangeMode == ExchangeMode.BOOKDROP)
+            return BadRequest("Los intercambios BookDrop se completan desde el panel del establecimiento.");
+
+        var isProposer = meeting.ProposerId == userId.Value;
+        if ((isProposer && meeting.MarkAsCompletedByUser1) || (!isProposer && meeting.MarkAsCompletedByUser2))
+            return BadRequest("Ya has marcado este intercambio como completado.");
+
+        var updatedMeeting = await _meetingService.MarkAsCompleted(meeting, userId.Value);
+        return Ok(updatedMeeting.ToDto());
     }
 
     [HttpPut("{meetingId}/accept")]
-    public async Task<IActionResult> AcceptExchangeMeeting(int meetingId) 
+    public async Task<IActionResult> AcceptExchangeMeeting(int meetingId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        UpdateExchangeMeetingDto dto;
-        dto = new(null, null, null, null, ExchangeMeetingStatus.ACCEPTED, null, null);
+        var meeting = await _meetingService.GetExchangeMeeting(meetingId);
+        if (meeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
 
-        try
-        {
-            var updatedMeeting = await _meetingService.UpdateExchangeMeeting(meetingId, dto);
-            return Ok(updatedMeeting.ToDto());
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var exchange = await _exchangeService.GetExchangeWithMatch(meeting.ExchangeId);
+
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange!))
+            throw new ForbiddenException("No tienes permiso para aceptar este meeting.");
+
+        if (meeting.MeetingStatus != ExchangeMeetingStatus.PROPOSAL)
+            return BadRequest("Solo se puede aceptar un meeting en estado de propuesta.");
+
+        if (meeting.ProposerId == userId.Value)
+            return BadRequest("No puedes aceptar tu propia propuesta.");
+
+        var acceptedMeeting = await _meetingService.AcceptMeeting(meeting);
+        return Ok(acceptedMeeting.ToDto());
     }
 
-
     /// DELETE /api/exchangemeeting/{meetingId}
-    /// Llamar a este endpoint cuando se rechace una quedada (se borran directamente)
+    /// Desestima una propuesta/quedada existente y la marca como REFUSED.
     [HttpDelete("{meetingId}")]
-    public async Task<IActionResult> DeleteExchangeMeeting(int meetingId)
+    public async Task<IActionResult> RejectExchangeMeeting(int meetingId)
     {
         var userId = await GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var oldMeeting = await _meetingService.GetExchangeMeetingWithRelations(meetingId);
+        var meeting = await _meetingService.GetExchangeMeeting(meetingId);
+        if (meeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
 
-        if (oldMeeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
+        var exchange = await _exchangeService.GetExchangeWithMatch(meeting.ExchangeId);
+        if (exchange == null) return NotFound($"Exchange con id {meeting.ExchangeId} no encontrado.");
 
-        if (!IsUserInExchange(userId.Value, oldMeeting.Exchange.Match)) return Forbid();
+        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
+            throw new ForbiddenException("No tienes permiso para desestimar esta quedada.");
 
-        try
-        {
-            var result = await _meetingService.DeleteExchangeMeeting(meetingId);
-            if (!result) return BadRequest($"No se pudo eliminar el ExchangeMeeting con id {meetingId}.");
+        if (exchange.Status is ExchangeStatus.COMPLETED or ExchangeStatus.REJECTED or ExchangeStatus.INCIDENT)
+            return BadRequest("No se puede desestimar la quedada porque el intercambio ya está cerrado.");
+
+        if (meeting.MeetingStatus == ExchangeMeetingStatus.REFUSED)
             return NoContent();
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+
+        meeting.MeetingStatus = ExchangeMeetingStatus.REFUSED;
+        meeting.MarkAsCompletedByUser1 = false;
+        meeting.MarkAsCompletedByUser2 = false;
+        meeting.Pin = null;
+        meeting.BookDropStatus = null;
+
+        await _db.SaveChangesAsync();
+        return NoContent();
     }
 }

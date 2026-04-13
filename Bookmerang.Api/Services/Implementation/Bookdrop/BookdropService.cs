@@ -60,7 +60,6 @@ public class BookdropService(AppDbContext db) : IBookdropService
             var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
             var newLocation = factory.CreatePoint(new NetTopologySuite.Geometries.Coordinate(request.Longitud.Value, request.Latitud.Value));
             bookspot.Location = newLocation;
-            baseUser.Location = newLocation;
         }
 
         bookspot.UpdatedAt = DateTime.UtcNow;
@@ -103,6 +102,15 @@ public class BookdropService(AppDbContext db) : IBookdropService
             b.Bookspot.Status,
             b.BaseUser.CreatedAt
         )).ToList();
+    }
+
+    public async Task<int?> GetBookspotIdBySupabaseId(string supabaseId)
+    {
+        var baseUser = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+        if (baseUser == null) return null;
+
+        var bookdropUser = await _db.BookdropUsers.FirstOrDefaultAsync(b => b.Id == baseUser.Id);
+        return bookdropUser?.BookSpotId;
     }
 
     public async Task<(bool found, string? error)> DeleteBookdrop(Guid bookdropUserId)

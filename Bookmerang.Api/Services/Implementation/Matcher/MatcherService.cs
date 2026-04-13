@@ -4,18 +4,20 @@ using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Chats;
+using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Interfaces.Matcher;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Bookmerang.Api.Services.Implementation.Matcher;
 
-public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings, ILogger<MatcherService> logger, IChatService chatService) : IMatcherService
+public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings, ILogger<MatcherService> logger, IChatService chatService, IExchangeService exchangeService) : IMatcherService
 {
     private readonly AppDbContext _db = db;
     private readonly MatcherSettings _settings = settings.Value;
     private readonly ILogger<MatcherService> _logger = logger;
     private readonly IChatService _chatService = chatService;
+    private readonly IExchangeService _exchangeService = exchangeService;
 
     public async Task<FeedResultDto> GetFeedAsync(Guid userId, int page, int pageSize)
     {
@@ -184,8 +186,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         await _db.SaveChangesAsync();
 
         var chatDto = await _chatService.CreateChat(ChatType.EXCHANGE, [userId, otherUserId]) ?? throw new InvalidOperationException("No se pudo crear el chat para el match.");
-        CreateExchange(chatDto.Id, match.Id, now);
-        await _db.SaveChangesAsync();
+        await _exchangeService.CreateExchange(chatDto.Id, match.Id);
 
         return await BuildMatchCreatedDto(match, chatDto.Id, otherUserId);
     }
@@ -203,19 +204,6 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         };
         _db.Matches.Add(match);
         return match;
-    }
-
-    // TODO: Reemplazar por el método de creación del módulo de exchanges cuando esté implementado
-    private void CreateExchange(Guid chatId, int matchId, DateTime now)
-    {
-        _db.Exchanges.Add(new Exchange
-        {
-            ChatId = chatId,
-            MatchId = matchId,
-            Status = ExchangeStatus.NEGOTIATING,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
     }
 
     /// <summary>
@@ -450,9 +438,18 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
     /// </summary>
     private IQueryable<Book> GetBaseCandidates(Guid userId, UserPreference prefs)
     {
+        var matchedBookIds = _db.Matches
+            .Where(m => m.User1Id == userId)
+            .Select(m => m.Book2Id)
+            .Concat(
+                _db.Matches
+                    .Where(m => m.User2Id == userId)
+                    .Select(m => m.Book1Id));
+
         return _db.Books
             .Where(b => b.Status == BookStatus.PUBLISHED)
             .Where(b => b.OwnerId != userId)
+            .Where(b => !matchedBookIds.Contains(b.Id))
             .Where(b => !_db.Swipes.Any(s => s.SwiperId == userId && s.BookId == b.Id))
             .Where(b => _db.Users
                 .Any(bu => bu.Id == b.OwnerId
@@ -556,8 +553,9 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
     }
 
     /// <summary>
-    /// Deshace el último swipe del usuario (solo si no generó match).
-    /// Devuelve true si se eliminó, false si no había swipe o ya generó match.
+    /// Deshace el ultimo swipe del usuario.
+    /// Si ese swipe creo un match activo, revierte tambien match + exchange + chat.
+    /// Devuelve false cuando no hay swipes o el match ya esta cerrado (COMPLETED/INCIDENT).
     /// </summary>
     public async Task<bool> UndoLastSwipeAsync(Guid userId)
     {
@@ -569,7 +567,9 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         if (lastSwipe == null)
             return false;
 
-        // Si fue RIGHT, verificar que no haya generado un match
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+
+        // Si fue RIGHT, comprobamos si ese swipe fue el que origino el match actual.
         if (lastSwipe.Direction == SwipeDirection.RIGHT)
         {
             var book = await _db.Books.FirstOrDefaultAsync(b => b.Id == lastSwipe.BookId);
@@ -579,16 +579,50 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
                     ? (userId, book.OwnerId)
                     : (book.OwnerId, userId);
 
-                var hasMatch = await _db.Matches.AnyAsync(m =>
+                var match = await _db.Matches.FirstOrDefaultAsync(m =>
                     m.User1Id == minId && m.User2Id == maxId);
 
-                if (hasMatch)
-                    return false; // No se puede deshacer un swipe que ya generó match
+                if (match != null)
+                {
+                    var swipeCreatedThisMatch =
+                        (match.User1Id == userId && match.Book2Id == lastSwipe.BookId)
+                        || (match.User2Id == userId && match.Book1Id == lastSwipe.BookId);
+
+                    if (swipeCreatedThisMatch)
+                    {
+                        var exchange = await _db.Exchanges.FirstOrDefaultAsync(e => e.MatchId == match.Id);
+
+                        if (exchange is { Status: ExchangeStatus.COMPLETED or ExchangeStatus.INCIDENT })
+                        {
+                            await transaction.RollbackAsync();
+                            return false;
+                        }
+
+                        if (exchange != null)
+                        {
+                            var meetings = await _db.ExchangeMeetings
+                                .Where(em => em.ExchangeId == exchange.ExchangeId)
+                                .ToListAsync();
+                            _db.ExchangeMeetings.RemoveRange(meetings);
+                            _db.Exchanges.Remove(exchange);
+                            await _db.SaveChangesAsync();
+
+                            await _chatService.DeleteChat(exchange.ChatId);
+                        }
+
+                        _db.Matches.Remove(match);
+
+                        _logger.LogInformation(
+                            "[UNDO] Reverted match {MatchId} generated by swipe {SwipeId} for user {UserId}",
+                            match.Id, lastSwipe.Id, userId);
+                    }
+                }
             }
         }
 
         _db.Swipes.Remove(lastSwipe);
         await _db.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         _logger.LogInformation("[UNDO] Removed swipe {SwipeId} (Book={BookId}, Dir={Direction}) for user {UserId}",
             lastSwipe.Id, lastSwipe.BookId, lastSwipe.Direction, userId);

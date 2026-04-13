@@ -2,6 +2,7 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Models.DTOs;
+using Bookmerang.Api.Services.Interfaces.Books;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Microsoft.EntityFrameworkCore;
@@ -9,176 +10,201 @@ using NetTopologySuite.Geometries;
 
 namespace Bookmerang.Api.Services.Implementation.ExchangeServices;
 
-public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_service, IInkdropsService inkdrops_service) : IExchangeMeetingService
+public class ExchangeMeetingService(AppDbContext db, IExchangeService exchange_service, IBookRepository bookRepository, IInkdropsService inkdrops_service) : IExchangeMeetingService
 {
     private readonly AppDbContext _db = db;
     private readonly IExchangeService _exchange_service = exchange_service;
+    private readonly IBookRepository _bookRepository = bookRepository;
+
     private readonly IInkdropsService _inkdrops_service = inkdrops_service;
+
+    private IQueryable<ExchangeMeeting> MeetingsWithProposer =>
+        _db.ExchangeMeetings.Include(m => m.Proposer).ThenInclude(p => p.BaseUser);
+
+    private async Task LoadProposer(ExchangeMeeting meeting)
+    {
+        meeting.Proposer = await _db.RegularUsers
+            .Include(u => u.BaseUser)
+            .FirstAsync(u => u.Id == meeting.ProposerId);
+    }
+
+    // Helper reutilizable para validar campos y resolver la localización
+    private async Task<Point> ValidateAndResolveLocation(ExchangeMode mode, int? bookspotId, double? latitud, double? longitud, DateTime scheduledAt)
+    {
+        if (scheduledAt < DateTime.UtcNow.AddMinutes(5))
+            throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próxima a ella.");
+
+        if (mode is ExchangeMode.BOOKSPOT or ExchangeMode.BOOKDROP && bookspotId == null)
+            throw new ArgumentException("Se debe indicar el bookspot en el que se va a producir el encuentro.");
+
+        if (mode == ExchangeMode.CUSTOM && (latitud == null || longitud == null))
+            throw new ArgumentException("Se debe indicar la ubicación para un encuentro personalizado.");
+
+        if (mode is ExchangeMode.BOOKSPOT or ExchangeMode.BOOKDROP)
+        {
+            var bookspot = await _db.Bookspots.FindAsync(bookspotId) ?? throw new ArgumentException("El bookspot indicado no existe.");
+            if (mode == ExchangeMode.BOOKDROP && !bookspot.IsBookdrop)
+                throw new ArgumentException("El bookspot indicado no es un establecimiento BookDrop.");
+            return bookspot.Location;
+        }
+
+        return new Point(longitud!.Value, latitud!.Value) { SRID = 4326 };
+    }
 
     public async Task<ExchangeMeeting?> GetExchangeMeeting(int meetingId)
     {
-        return await _db.ExchangeMeetings.Include(m => m.Proposer).FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
+        return await MeetingsWithProposer.FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
     }
 
-    public async Task<ExchangeMeeting?> GetExchangeMeetingWithRelations(int meetingId)
-    {
-        return await _db.ExchangeMeetings
-            .Include(m => m.Exchange)
-                .ThenInclude(e => e.Match)
-            .FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
-    }
-
-    // en teoría no hace falta poner los include según el diseño del modelo (navigation property)
     public async Task<List<ExchangeMeeting>> GetMeetingsByUserId(Guid proposerId)
     {
-        return await _db.ExchangeMeetings
-            .Include(m => m.Proposer)
-            .Where(m => m.ProposerId == proposerId)
-            .ToListAsync();
+        return await MeetingsWithProposer.Where(m => m.ProposerId == proposerId).ToListAsync();
     }
 
     public async Task<List<ExchangeMeeting>> GetAllExchangeMeetings()
     {
-        return await _db.ExchangeMeetings.Include(m => m.Proposer).ToListAsync();
+        return await MeetingsWithProposer.ToListAsync();
     }
 
     public async Task<ExchangeMeeting?> GetMeetingByExchangeId(int exchangeId)
     {
-        return await _db.ExchangeMeetings.FirstOrDefaultAsync(m => m.ExchangeId == exchangeId);
+        return await MeetingsWithProposer.FirstOrDefaultAsync(m => m.ExchangeId == exchangeId);
     }
 
-    // se supone que no da fallo los valores opcionales
-    public async Task<ExchangeMeeting> CreateExchangeMeeting(int exchangeId, ExchangeMode exchangeMode, Guid proposerId, int? bookspotId, DateTime? scheduledAt, Point customLocation)
+    public async Task<ExchangeMeeting> CreateExchangeMeeting(CreateExchangeMeetingDto dto, Guid proposerId)
     {
+        var location = await ValidateAndResolveLocation(dto.ExchangeMode, dto.BookspotId, dto.Latitud, dto.Longitud, dto.ScheduledAt);
 
-        if(scheduledAt != null && scheduledAt < DateTime.UtcNow.AddMinutes(5))
-        {
-            throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próximo a ella");
-        }
-        if(exchangeMode == ExchangeMode.BOOKSPOT && bookspotId == null)
-        {
-            throw new ArgumentException("Se debe indicar el bookspot en el que se va a producir el encuentro");
-        }
         var meeting = new ExchangeMeeting
         {
-            ExchangeId = exchangeId,
-            ExchangeMode = exchangeMode,
-            BookspotId = bookspotId,
-            CustomLocation = customLocation,
-            ScheduledAt = scheduledAt,
+            ExchangeId = dto.ExchangeId,
+            ExchangeMode = dto.ExchangeMode,
+            BookspotId = dto.BookspotId,
+            CustomLocation = location,
+            ScheduledAt = dto.ScheduledAt,
             ProposerId = proposerId
         };
 
         _db.ExchangeMeetings.Add(meeting);
         await _db.SaveChangesAsync();
 
+        await LoadProposer(meeting);
         return meeting;
     }
 
-    public async Task<ExchangeMeeting> UpdateExchangeMeeting(int meetingId, UpdateExchangeMeetingDto dto)
+    public async Task<ExchangeMeeting> CounterProposeMeeting(ExchangeMeeting meeting, CounterProposeMeetingDto dto, Guid newProposerId)
     {
-        var meeting = await _db.ExchangeMeetings.FirstOrDefaultAsync(m => m.ExchangeMeetingId == meetingId);
-        if (meeting == null)
-            throw new InvalidOperationException($"Meeting con id {meetingId} no encontrado");
-        
-        var exchange = await _exchange_service.GetExchangeWithMatch(meeting.ExchangeId);
-        
-        if (exchange == null)
-            throw new InvalidOperationException($"Exchange con id {meeting.ExchangeId} no encontrado");
+        var location = await ValidateAndResolveLocation(dto.ExchangeMode, dto.BookspotId, dto.Latitud, dto.Longitud, dto.ScheduledAt);
 
-        var oldStatus = exchange.Status;
+        meeting.ExchangeMode = dto.ExchangeMode;
+        meeting.BookspotId = dto.BookspotId;
+        meeting.CustomLocation = location;
+        meeting.ScheduledAt = dto.ScheduledAt;
+        meeting.ProposerId = newProposerId;
 
-        if (IsAllNull(dto)) 
-            throw new InvalidOperationException("Al menos un parámetro debe tener un valor");
+        await _db.SaveChangesAsync();
 
-        if(dto.ScheduledAt != null && dto.ScheduledAt < DateTime.UtcNow.AddMinutes(5))
+        await LoadProposer(meeting);
+        return meeting;
+    }
+
+    public async Task<ExchangeMeeting> MarkAsCompleted(ExchangeMeeting meeting, Guid userId)
+    {
+        if (meeting.ProposerId == userId)
+            meeting.MarkAsCompletedByUser1 = true;
+        else
+            meeting.MarkAsCompletedByUser2 = true;
+
+        if (meeting.MarkAsCompletedByUser1 && meeting.MarkAsCompletedByUser2)
         {
-            throw new ArgumentException("La fecha del encuentro no puede ser anterior a la actual, ni demasiado próxima a ella");
-        }
-        if(dto.ExchangeMode == ExchangeMode.BOOKSPOT && dto.BookspotId == null)
-        {
-            throw new ArgumentException("Se debe indicar el bookspot en el que se va a producir el encuentro");
-        }        
+            var exchange = (await _exchange_service.GetExchangeWithMatch(meeting.ExchangeId))!;
 
-        if (dto.ExchangeMode.HasValue)
-            meeting.ExchangeMode = dto.ExchangeMode.Value;
-
-        if (dto.BookspotId.HasValue)
-            meeting.BookspotId = dto.BookspotId.Value;
-
-        if (dto.CustomLocation != null && dto.CustomLocation.Length >= 2)
-            meeting.CustomLocation = new Point(dto.CustomLocation[0], dto.CustomLocation[1]) { SRID = 4326 };
-
-        if (dto.ScheduledAt.HasValue)
-            meeting.ScheduledAt = DateTime.SpecifyKind(dto.ScheduledAt.Value, DateTimeKind.Utc); //Conversión explicita a utc
-
-        meeting.ScheduledAt = meeting.ScheduledAt.HasValue //Si no se entra en el if anterior, la fecha puede quedar como unspecified, eso da fallos en el update
-        ? DateTime.SpecifyKind(meeting.ScheduledAt.Value, DateTimeKind.Utc)
-        : null;
-
-        if (dto.MarkAsCompletedByUser1.HasValue)
-            meeting.MarkAsCompletedByUser1 = dto.MarkAsCompletedByUser1.Value;
-
-        if (dto.MarkAsCompletedByUser2.HasValue)
-            meeting.MarkAsCompletedByUser2 = dto.MarkAsCompletedByUser2.Value;
-
-        if (IsCompleted(meeting) && oldStatus != ExchangeStatus.COMPLETED) {
             exchange.Status = ExchangeStatus.COMPLETED;
+            exchange.UpdatedAt = DateTime.UtcNow;
 
-            if (exchange.Match == null)
-                throw new InvalidOperationException($"Match no encontrado para exchange con id {exchange.ExchangeId}");
-
-            var book1 = await _db.Books.FirstOrDefaultAsync(b => b.Id == exchange.Match.Book1Id);
-            var book2 = await _db.Books.FirstOrDefaultAsync(b => b.Id == exchange.Match.Book2Id);
-
-            if (book1 == null || book2 == null)
-                throw new InvalidOperationException($"No se han encontrado los libros del match para exchange con id {exchange.ExchangeId}");
+            var book1 = await _bookRepository.GetByIdOrThrowAsync(exchange.Match!.Book1Id);
+            var book2 = await _bookRepository.GetByIdOrThrowAsync(exchange.Match.Book2Id);
 
             book1.OwnerId = exchange.Match.User2Id;
             book2.OwnerId = exchange.Match.User1Id;
+
+            book1.Status = BookStatus.EXCHANGED;
+            book2.Status = BookStatus.EXCHANGED;
+
+            await InvalidateCollateralExchanges(exchange.Match.Book1Id, exchange.Match.Book2Id, exchange.MatchId);
             await _inkdrops_service.GrantExchangeInkdropsAsync(exchange.Match.User1Id, exchange.Match.User2Id);
         }
-        else
-        {
-            if (dto.MeetingStatus.HasValue)
-                meeting.MeetingStatus = dto.MeetingStatus.Value;
-        }
 
-        if(exchange.Status != oldStatus)
+        await _db.SaveChangesAsync();
+        return meeting;
+    }
+
+    // Cambia estado de exchanges afectados por libros intercambiados para que se actualice su estado en el front
+    public async Task InvalidateCollateralExchanges(int book1Id, int book2Id, int completedMatchId)
+    {
+        var affectedExchanges = await _db.Exchanges
+            .Include(e => e.Match)
+            .Where(e => e.MatchId != completedMatchId)
+            .Where(e => e.Match.Book1Id == book1Id || e.Match.Book1Id == book2Id
+                     || e.Match.Book2Id == book1Id || e.Match.Book2Id == book2Id)
+            .Where(e => e.Status != ExchangeStatus.COMPLETED
+                     && e.Status != ExchangeStatus.REJECTED
+                     && e.Status != ExchangeStatus.INCIDENT)
+            .ToListAsync();
+
+        var affectedExchangeIds = affectedExchanges.Select(e => e.ExchangeId).ToList();
+
+        foreach (var exchange in affectedExchanges)
         {
-            // Solo actualizamos campos de estado; evitamos tocar created_at.
+            exchange.Status = ExchangeStatus.REJECTED;
             exchange.UpdatedAt = DateTime.UtcNow;
         }
-        
-        try
+
+        var affectedMeetings = await _db.ExchangeMeetings
+            .Where(m => affectedExchangeIds.Contains(m.ExchangeId))
+            .ToListAsync();
+
+        foreach (var meeting in affectedMeetings)
         {
-            await _db.SaveChangesAsync();
+            meeting.MeetingStatus = ExchangeMeetingStatus.REFUSED;
         }
-        catch (DbUpdateException ex)
+    }
+
+    public async Task<ExchangeMeeting> AcceptMeeting(ExchangeMeeting meeting)
+    {
+        meeting.MeetingStatus = ExchangeMeetingStatus.ACCEPTED;
+
+        if (meeting.ExchangeMode == ExchangeMode.BOOKDROP
+            && meeting.BookspotId.HasValue
+            && meeting.BookDropStatus == null)
         {
-            var detail = ex.InnerException?.Message ?? ex.Message;
-            throw new InvalidOperationException($"Error al guardar el cierre del intercambio: {detail}", ex);
+            meeting.Pin = await GenerateUniquePin(meeting.BookspotId.Value);
+            meeting.BookDropStatus = BookdropExchangeStatus.AWAITING_DROP_1;
         }
+
+        await _db.SaveChangesAsync();
 
         return meeting;
     }
 
-    private bool IsAllNull(UpdateExchangeMeetingDto dto)
-    => dto.ExchangeMode == null && dto.BookspotId == null && 
-       dto.CustomLocation == null && dto.ScheduledAt == null && 
-       dto.MeetingStatus == null && dto.MarkAsCompletedByUser1 == null && 
-       dto.MarkAsCompletedByUser2 == null;
-
-    private static bool IsCompleted(ExchangeMeeting meeting)
-    => meeting.MarkAsCompletedByUser1 && meeting.MarkAsCompletedByUser2;
-
-    public async Task<bool> DeleteExchangeMeeting(int meetingId)
+    /// Genera un PIN de 6 digitos unico entre los intercambios activos del mismo BookDrop
+    private async Task<string> GenerateUniquePin(int bookspotId)
     {
-        var meeting = await _db.ExchangeMeetings.FindAsync(meetingId) ?? throw new Exception($"Meeting con id {meetingId} no encontrado");
-        
-        _db.ExchangeMeetings.Remove(meeting);
-        await _db.SaveChangesAsync();
-        
-        return true;
+        var random = new Random();
+        string pin;
+        bool exists;
+
+        do
+        {
+            pin = random.Next(100000, 1000000).ToString();
+            exists = await _db.ExchangeMeetings.AnyAsync(m =>
+                m.BookspotId == bookspotId &&
+                m.Pin == pin &&
+                m.BookDropStatus != null &&
+                m.BookDropStatus != BookdropExchangeStatus.COMPLETED
+            );
+        } while (exists);
+
+        return pin;
     }
 }

@@ -34,4 +34,7 @@ public interface IChatService
 
     /// Obtiene la lista de usuarios que están escribiendo en un chat.
     Task<List<TypingUserDto>> GetTypingUsers(Guid chatId, Guid userId);
+
+    /// Elimina un chat junto con sus mensajes y participantes.
+    Task<bool> DeleteChat(Guid chatId);
 }
