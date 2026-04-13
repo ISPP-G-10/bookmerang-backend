@@ -61,15 +61,27 @@ if (!string.IsNullOrEmpty(stripeSecretKeyEnv))
 var stripePriceId = Environment.GetEnvironmentVariable("STRIPE_PREMIUM_PRICE_ID");
 if (!string.IsNullOrEmpty(stripePriceId))
     builder.Configuration["Stripe:PremiumPriceId"] = stripePriceId;
+var stripeBookdropPriceId = Environment.GetEnvironmentVariable("STRIPE_BOOKDROP_PRICE_ID");
+if (!string.IsNullOrEmpty(stripeBookdropPriceId))
+    builder.Configuration["Stripe:BookdropPriceId"] = stripeBookdropPriceId;
 var stripeSuccessUrl = Environment.GetEnvironmentVariable("STRIPE_SUCCESS_URL");
 if (!string.IsNullOrEmpty(stripeSuccessUrl))
     builder.Configuration["Stripe:SuccessUrl"] = stripeSuccessUrl;
 var stripeCancelUrl = Environment.GetEnvironmentVariable("STRIPE_CANCEL_URL");
 if (!string.IsNullOrEmpty(stripeCancelUrl))
     builder.Configuration["Stripe:CancelUrl"] = stripeCancelUrl;
+var stripeBookdropSuccessUrl = Environment.GetEnvironmentVariable("STRIPE_BOOKDROP_SUCCESS_URL");
+if (!string.IsNullOrEmpty(stripeBookdropSuccessUrl))
+    builder.Configuration["Stripe:BookdropSuccessUrl"] = stripeBookdropSuccessUrl;
+var stripeBookdropCancelUrl = Environment.GetEnvironmentVariable("STRIPE_BOOKDROP_CANCEL_URL");
+if (!string.IsNullOrEmpty(stripeBookdropCancelUrl))
+    builder.Configuration["Stripe:BookdropCancelUrl"] = stripeBookdropCancelUrl;
 var stripePublishableKey = Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY");
 if (!string.IsNullOrEmpty(stripePublishableKey))
     builder.Configuration["Stripe:PublishableKey"] = stripePublishableKey;
+var bookdropPaymentRequired = Environment.GetEnvironmentVariable("BOOKDROP_PAYMENT_REQUIRED");
+if (!string.IsNullOrEmpty(bookdropPaymentRequired))
+    builder.Configuration["Bookdrop:RequirePayment"] = bookdropPaymentRequired;
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 

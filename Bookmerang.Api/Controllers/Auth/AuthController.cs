@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
+using Bookmerang.Api.Services.Interfaces.Subscriptions;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using NetTopologySuite.Geometries;
@@ -14,10 +15,23 @@ namespace Bookmeran.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IStripeSubscriptionService? _stripeSubscriptionService;
+    private readonly IConfiguration? _config;
 
-    public AuthController(IAuthService authService)
+    public AuthController(
+        IAuthService authService,
+        IStripeSubscriptionService? stripeSubscriptionService = null,
+        IConfiguration? config = null)
     {
         _authService = authService;
+        _stripeSubscriptionService = stripeSubscriptionService;
+        _config = config;
+    }
+
+    private bool IsBookdropPaymentRequired()
+    {
+        var configured = _config?.GetValue<bool?>("Bookdrop:RequirePayment");
+        return configured ?? true;
     }
 
     [HttpPost("register")]
@@ -49,6 +63,23 @@ public class AuthController : ControllerBase
     [HttpPost("register/business")]
     public async Task<IActionResult> RegisterBusiness([FromBody] RegisterBusinessRequest request)
     {
+        if (IsBookdropPaymentRequired())
+        {
+            if (_stripeSubscriptionService == null)
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "BookDrop payment service is not configured.");
+
+            if (string.IsNullOrWhiteSpace(request.PaymentSessionId))
+                return BadRequest("Para crear un BookDrop debes completar primero el pago de 1 EUR.");
+
+            var paymentValid = await _stripeSubscriptionService.ValidateBookdropRegistrationPaymentAsync(
+                request.PaymentSessionId,
+                request.Email);
+
+            if (!paymentValid)
+                return BadRequest("No se ha validado un pago de 1 EUR para este usuario.");
+        }
+
         var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
         var location = factory.CreatePoint(new Coordinate(request.Longitud, request.Latitud));
 
@@ -71,6 +102,26 @@ public class AuthController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError, "No se pudo iniciar sesión tras el registro.");
 
         return CreatedAtAction(nameof(GetPerfil), new { }, new AuthResponse(token, usuario!.ToDto()));
+    }
+
+    [HttpPost("register/business/checkout")]
+    public async Task<IActionResult> CreateBusinessCheckout([FromBody] CreateBookdropCheckoutRequest request)
+    {
+        if (_stripeSubscriptionService == null)
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                "BookDrop payment service is not configured.");
+
+        try
+        {
+            var checkoutUrl = await _stripeSubscriptionService
+                .CreateBookdropRegistrationCheckoutSessionAsync(request.Email);
+
+            return Ok(new { checkoutUrl });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpPost("login")]
@@ -245,6 +296,17 @@ public class RegisterBusinessRequest
     [Required]
     [Range(-180, 180)]
     public double Longitud { get; set; }
+
+    // Stripe Checkout Session ID used to validate the mandatory 1 EUR payment.
+    // It is required only when BOOKDROP_PAYMENT_REQUIRED=true.
+    public string? PaymentSessionId { get; set; }
+}
+
+public class CreateBookdropCheckoutRequest
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
 }
 
 public record LoginRequest(

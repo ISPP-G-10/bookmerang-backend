@@ -22,4 +22,15 @@ public interface IStripeSubscriptionService
     /// Used as a fallback when webhooks are unavailable (e.g. local dev).
     /// </summary>
     Task SyncSubscriptionFromStripeAsync(Guid userId);
+
+    /// <summary>
+    /// Creates a Stripe Checkout session to pay 1 EUR for BookDrop business registration.
+    /// </summary>
+    Task<string> CreateBookdropRegistrationCheckoutSessionAsync(string email);
+
+    /// <summary>
+    /// Validates that a paid Checkout session corresponds to a BookDrop registration payment
+    /// for the expected email.
+    /// </summary>
+    Task<bool> ValidateBookdropRegistrationPaymentAsync(string checkoutSessionId, string expectedEmail);
 }

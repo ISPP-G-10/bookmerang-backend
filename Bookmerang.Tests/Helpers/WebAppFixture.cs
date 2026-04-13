@@ -39,6 +39,7 @@ public class WebAppFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("SUPABASE_JWT_SECRET", "fake-supabase-secret");
         Environment.SetEnvironmentVariable("SUPABASE_URL", "https://fake.supabase.co");
         Environment.SetEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY", "fake-key");
+        Environment.SetEnvironmentVariable("BOOKDROP_PAYMENT_REQUIRED", "false");
 
         Factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>

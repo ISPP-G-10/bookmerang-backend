@@ -13,6 +13,10 @@ public class StripeSubscriptionService(
     IConfiguration config,
     ILogger<StripeSubscriptionService> logger) : IStripeSubscriptionService
 {
+    private const string BookdropRegistrationPurpose = "bookdrop_registration";
+    private const int BookdropRegistrationAmountCents = 100;
+    private const string BookdropRegistrationCurrency = "eur";
+
     private readonly ISubscriptionService _subscriptionService = subscriptionService;
     private readonly AppDbContext _db = db;
     private readonly IConfiguration _config = config;
@@ -55,6 +59,87 @@ public class StripeSubscriptionService(
         var session = await service.CreateAsync(options);
 
         return session.Url ?? throw new InvalidOperationException("Stripe session URL is null");
+    }
+
+    public async Task<string> CreateBookdropRegistrationCheckoutSessionAsync(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            throw new InvalidOperationException("Email is required to create BookDrop checkout");
+
+        var priceId = _config["Stripe:BookdropPriceId"]
+            ?? throw new InvalidOperationException("Stripe:BookdropPriceId not configured");
+
+        var normalizedEmail = NormalizeEmail(email);
+
+        var options = new SessionCreateOptions
+        {
+            CustomerEmail = normalizedEmail,
+            PaymentMethodTypes = new List<string> { "card" },
+            LineItems = new List<SessionLineItemOptions>
+            {
+                new() { Price = priceId, Quantity = 1 }
+            },
+            Mode = "payment",
+            SuccessUrl = _config["Stripe:BookdropSuccessUrl"]
+                ?? "https://bookmerang.app/bookdrop/register?status=success&session_id={CHECKOUT_SESSION_ID}",
+            CancelUrl = _config["Stripe:BookdropCancelUrl"]
+                ?? "https://bookmerang.app/bookdrop/register?status=cancelled",
+            Metadata = new Dictionary<string, string>
+            {
+                { "purpose", BookdropRegistrationPurpose },
+                { "bookdrop_email", normalizedEmail }
+            }
+        };
+
+        var service = new SessionService();
+        var session = await service.CreateAsync(options);
+        return session.Url ?? throw new InvalidOperationException("Stripe session URL is null");
+    }
+
+    public async Task<bool> ValidateBookdropRegistrationPaymentAsync(string checkoutSessionId, string expectedEmail)
+    {
+        if (string.IsNullOrWhiteSpace(checkoutSessionId) || string.IsNullOrWhiteSpace(expectedEmail))
+            return false;
+
+        var normalizedEmail = NormalizeEmail(expectedEmail);
+
+        try
+        {
+            var sessionService = new SessionService();
+            var session = await sessionService.GetAsync(checkoutSessionId);
+            if (session == null)
+                return false;
+
+            if (!string.Equals(session.Mode, "payment", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (!string.Equals(session.Status, "complete", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (!string.Equals(session.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (!string.Equals(session.Currency, BookdropRegistrationCurrency, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (session.AmountTotal != BookdropRegistrationAmountCents)
+                return false;
+
+            if (session.Metadata == null
+                || !session.Metadata.TryGetValue("purpose", out var purpose)
+                || !string.Equals(purpose, BookdropRegistrationPurpose, StringComparison.Ordinal))
+                return false;
+
+            if (!session.Metadata.TryGetValue("bookdrop_email", out var paidEmail))
+                return false;
+
+            return string.Equals(NormalizeEmail(paidEmail), normalizedEmail, StringComparison.Ordinal);
+        }
+        catch (StripeException ex)
+        {
+            _logger.LogWarning(ex, "Failed to validate BookDrop registration checkout session {SessionId}", checkoutSessionId);
+            return false;
+        }
     }
 
     // ── Cancel Subscription ───────────────────────────────────────────
@@ -320,4 +405,7 @@ public class StripeSubscriptionService(
         });
         return result.Data.FirstOrDefault()?.Id;
     }
+
+    private static string NormalizeEmail(string email) =>
+        email.Trim().ToLowerInvariant();
 }

@@ -23,7 +23,11 @@ public class BookspotService(
     public async Task<List<BookspotDTO>> GetActiveAsync(CancellationToken ct = default)
     {
         var bookspots = await bookspotRepo.GetActiveAsync(ct);
-        return bookspots.Select(b => MapToDTO(b)).ToList();
+        return bookspots
+            .Select(b => MapToDTO(b))
+            .OrderByDescending(b => b.IsBookdrop)
+            .ThenBy(b => b.Id)
+            .ToList();
     }
 
     public async Task<List<BookspotDTO>> GetPendingAsync(CancellationToken ct = default)
@@ -42,7 +46,8 @@ public class BookspotService(
 
         return bookspots
             .Select(x => MapToNearbyDTO(x.bookspot, x.distanceMeters, x.creatorUsername))
-            .OrderBy(b => b.DistanceKm)
+            .OrderByDescending(b => b.IsBookdrop)
+            .ThenBy(b => b.DistanceKm)
             .ToList();
     }
 

@@ -534,4 +534,30 @@ public class BookspotServiceBasicTests(
             .Where(v => v.BookspotId == bookspotId).ToListAsync();
         Assert.Empty(validationsLeft);
     }
+
+    [Fact]
+    public async Task Priority_GetActiveAsync_BookdropsFirst()
+    {
+        await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        await SeedBookspotRaw(UserA, Madrid, BookspotStatus.ACTIVE, isBookdrop: false);
+        await SeedBookspotRaw(UserA, MadridCerca, BookspotStatus.ACTIVE, isBookdrop: true);
+
+        var result = await _service.GetActiveAsync();
+
+        Assert.Equal(2, result.Count);
+        Assert.True(result[0].IsBookdrop);
+    }
+
+    [Fact]
+    public async Task Priority_GetNearbyActiveAsync_BookdropsBeforeDistance()
+    {
+        await SeedUserRaw(UserA, SupabaseA, "userA", Madrid);
+        await SeedBookspotRaw(UserA, MakePoint(-3.7025, 40.4168), BookspotStatus.ACTIVE, isBookdrop: false);
+        await SeedBookspotRaw(UserA, MakePoint(-3.65, 40.4168), BookspotStatus.ACTIVE, isBookdrop: true);
+
+        var result = await _service.GetNearbyActiveAsync(Madrid.Y, Madrid.X, radiusKm: 10);
+
+        Assert.Equal(2, result.Count);
+        Assert.True(result[0].IsBookdrop);
+    }
 }
