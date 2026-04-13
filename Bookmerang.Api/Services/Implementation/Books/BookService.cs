@@ -31,7 +31,7 @@ public class BookService(
         await ValidateGenreIdsAsync(request.GenreIds, ct);
         await ValidateLanguageIdsAsync(request.LanguageIds, ct);
 
-        var sanitizedIsbn = request.Isbn?.Replace("-", "").Replace(" ", "").Trim();
+        var sanitizedIsbn = NormalizeAndValidateIsbn(request.Isbn);
 
         var book = new Book
         {
@@ -108,7 +108,7 @@ public class BookService(
         await ValidateGenreIdsAsync(request.GenreIds, ct);
         await ValidateLanguageIdsAsync(request.LanguageIds, ct);
 
-        book.Isbn = request.Isbn?.Replace("-", "").Replace(" ", "").Trim();
+        book.Isbn = NormalizeAndValidateIsbn(request.Isbn);
         book.Titulo = request.Titulo?.Trim();
         book.Autor = request.Autor?.Trim();
         book.Editorial = request.Editorial?.Trim();
@@ -157,8 +157,20 @@ public class BookService(
         if (book.Photos.Count < RequiredPhotosToPublish || book.Photos.Count > MaxPhotosToPublish)
             errors.Add(
                 $"Debes subir exactamente 1 foto para publicar. Actualmente hay {book.Photos.Count}.");
+        string? normalizedIsbn = null;
         if (string.IsNullOrWhiteSpace(book.Isbn))
             errors.Add("El ISBN es obligatorio para publicar.");
+        else
+        {
+            try
+            {
+                normalizedIsbn = NormalizeAndValidateIsbn(book.Isbn);
+            }
+            catch (ValidationException)
+            {
+                errors.Add("El ISBN debe ser un ISBN-10 o ISBN-13 válido.");
+            }
+        }
         if (string.IsNullOrWhiteSpace(book.Titulo))
             errors.Add("El título es obligatorio para publicar.");
         if (string.IsNullOrWhiteSpace(book.Autor))
@@ -177,6 +189,7 @@ public class BookService(
         if (errors.Count > 0)
             throw new ValidationException(string.Join(" ", errors));
 
+        book.Isbn = normalizedIsbn;
         book.Status = BookStatus.PUBLISHED;
         await bookRepo.UpdateAsync(book, ct);
 
@@ -281,6 +294,70 @@ public class BookService(
         if (ids.Count == 0) return;
         if (!await languageRepo.AllExistAsync(ids, ct))
             throw new ValidationException("Uno o más idiomas no existen.");
+    }
+
+    private static string? NormalizeAndValidateIsbn(string? rawIsbn)
+    {
+        if (string.IsNullOrWhiteSpace(rawIsbn))
+            return null;
+
+        var normalizedChars = rawIsbn
+            .Where(character => !char.IsWhiteSpace(character) && character != '-')
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+
+        var normalizedIsbn = new string(normalizedChars);
+        if (IsValidIsbn10(normalizedIsbn) || IsValidIsbn13(normalizedIsbn))
+            return normalizedIsbn;
+
+        throw new ValidationException("El ISBN debe ser un ISBN-10 o ISBN-13 válido.");
+    }
+
+    private static bool IsValidIsbn10(string isbn)
+    {
+        if (isbn.Length != 10)
+            return false;
+
+        var checksum = 0;
+        for (var index = 0; index < isbn.Length; index++)
+        {
+            var character = isbn[index];
+            if (index < 9 && !char.IsDigit(character))
+                return false;
+
+            var digit = character switch
+            {
+                >= '0' and <= '9' => character - '0',
+                'X' when index == 9 => 10,
+                _ => -1
+            };
+
+            if (digit < 0)
+                return false;
+
+            checksum += digit * (10 - index);
+        }
+
+        return checksum % 11 == 0;
+    }
+
+    private static bool IsValidIsbn13(string isbn)
+    {
+        if (isbn.Length != 13 || !isbn.All(char.IsDigit))
+            return false;
+
+        if (!isbn.StartsWith("978") && !isbn.StartsWith("979"))
+            return false;
+
+        var checksumBase = 0;
+        for (var index = 0; index < 12; index++)
+        {
+            var digit = isbn[index] - '0';
+            checksumBase += digit * (index % 2 == 0 ? 1 : 3);
+        }
+
+        var checksum = (10 - (checksumBase % 10)) % 10;
+        return checksum == isbn[12] - '0';
     }
 
     // =====================================================================

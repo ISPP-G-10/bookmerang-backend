@@ -475,7 +475,9 @@ public class AuthServiceTests
         Assert.Equal("avatar.jpg", dto.Avatar);
         Assert.Equal(location.Y, dto.Latitud);
         Assert.Equal(location.X, dto.Longitud);
-    }[Fact]
+    }
+
+    [Fact]
     public async Task UpdatePerfil_ShouldReturnNull_WhenUserNotFound()
     {
         await using var db = CreateDbContext();
@@ -1090,5 +1092,77 @@ public class AuthServiceTests
             Assert.Equal(level, dto.Level);
             Assert.Equal(expectedTier, dto.Tier);
         }
+    }
+
+    [Fact]
+    public async Task Register_ShouldReturnAlreadyExisted_WhenEmailIsDuplicate()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var location = new Point(0, 0) { SRID = 4326 };
+
+        // Register the first user
+        await service.Register(
+            "supabase-first",
+            "duplicate@test.com",
+            "firstuser",
+            "First User",
+            "photo.jpg",
+            BaseUserType.USER,
+            location
+        );
+
+        // Attempt to register a second user with the same email but different SupabaseId
+        (BaseUser? secondUser, bool alreadyExisted) = await service.Register(
+            "supabase-second",
+            "duplicate@test.com",
+            "seconduser",
+            "Second User",
+            "photo2.jpg",
+            BaseUserType.USER,
+            location
+        );
+
+        Assert.True(alreadyExisted);
+        Assert.Null(secondUser);
+        Assert.Single(db.Users);
+    }
+
+    [Fact]
+    public async Task RegisterWithCredentials_ShouldReturnError_WhenEmailIsDuplicate()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var location = new Point(0, 0) { SRID = 4326 };
+
+        // Register the first user with credentials
+        var (firstUser, _, firstError) = await service.RegisterWithCredentials(
+            "first@test.com",
+            "Password123",
+            "firstuser",
+            "First User",
+            "photo.jpg",
+            BaseUserType.USER,
+            location
+        );
+
+        Assert.Null(firstError);
+        Assert.NotNull(firstUser);
+
+        // Attempt to register a second user with the same email
+        var (secondUser, yaExistia, secondError) = await service.RegisterWithCredentials(
+            "first@test.com",
+            "Password456",
+            "seconduser",
+            "Second User",
+            "photo2.jpg",
+            BaseUserType.USER,
+            location
+        );
+
+        Assert.Null(secondUser);
+        Assert.True(yaExistia);
+        Assert.Equal("El email ya está registrado.", secondError);
+        Assert.Single(db.Users);
     }
 }
