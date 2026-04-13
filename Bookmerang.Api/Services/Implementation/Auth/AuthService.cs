@@ -71,6 +71,9 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
         var existe = await _db.Users.AnyAsync(u => u.SupabaseId == supabaseId);
         if (existe) return (null, true);
 
+        var emailExiste = await _db.Users.AnyAsync(u => u.Email == email);
+        if (emailExiste) return (null, true);
+
         var nuevoUsuario = new BaseUser
         {
             SupabaseId = supabaseId,
