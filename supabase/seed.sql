@@ -465,31 +465,31 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES
   -- Club de Lectura Triana (comunidad 1)
   (1, u01, 'MODERATOR', now_ts - INTERVAL '30 days'),  -- Laura (creador)
-  (1, u03, 'MEMBER', now_ts - INTERVAL '28 days'),     -- Sofía
+  (1, u03, 'MODERATOR', now_ts - INTERVAL '28 days'),  -- Sofía
   (1, u05, 'MEMBER', now_ts - INTERVAL '26 days'),     -- Elena
   (1, u06, 'MEMBER', now_ts - INTERVAL '24 days'),     -- Pablo
   
   -- Amantes del Thriller (comunidad 2)
   (2, u02, 'MODERATOR', now_ts - INTERVAL '25 days'),  -- Marcos (creador)
-  (2, u09, 'MEMBER', now_ts - INTERVAL '23 days'),     -- Carmen
+  (2, u09, 'MODERATOR', now_ts - INTERVAL '23 days'),  -- Carmen
   (2, u13, 'MEMBER', now_ts - INTERVAL '21 days'),     -- Isabel
   (2, u14, 'MEMBER', now_ts - INTERVAL '19 days'),     -- Rodrigo
   
   -- Fantasía y Ciencia Ficción (comunidad 3)
   (3, u03, 'MODERATOR', now_ts - INTERVAL '20 days'),  -- Sofía (creador)
-  (3, u08, 'MEMBER', now_ts - INTERVAL '18 days'),     -- Diego
+  (3, u08, 'MODERATOR', now_ts - INTERVAL '18 days'),  -- Diego
   (3, u11, 'MEMBER', now_ts - INTERVAL '16 days'),     -- Natalia
   (3, u12, 'MEMBER', now_ts - INTERVAL '14 days'),     -- Andrés
   
   -- Lectores de Dos Hermanas (comunidad 4)
   (4, u04, 'MODERATOR', now_ts - INTERVAL '15 days'),  -- Alejandro (creador)
-  (4, u06, 'MEMBER', now_ts - INTERVAL '13 days'),     -- Pablo
+  (4, u06, 'MODERATOR', now_ts - INTERVAL '13 days'),  -- Pablo
   (4, u08, 'MEMBER', now_ts - INTERVAL '11 days'),     -- Diego
   (4, u10, 'MEMBER', now_ts - INTERVAL '9 days'),      -- Javier
   
   -- Románticos Empedernidos (comunidad 5)
   (5, u05, 'MODERATOR', now_ts - INTERVAL '10 days'),  -- Elena (creador)
-  (5, u07, 'MEMBER', now_ts - INTERVAL '8 days'),      -- Lucía
+  (5, u07, 'MODERATOR', now_ts - INTERVAL '8 days'),   -- Lucía
   (5, u11, 'MEMBER', now_ts - INTERVAL '6 days'),      -- Natalia
   (5, u15, 'MEMBER', now_ts - INTERVAL '4 days')       -- María José
 ON CONFLICT (community_id, user_id) DO NOTHING;
@@ -774,6 +774,241 @@ INSERT INTO inkdrops_history (user_id, action_type, points_granted, related_id, 
   -- Pablo Moreno (u06) - Meetups (MARZO + ABRIL)
   (u06, 'MEETUP_ATTENDED', 200, 7, now_ts - INTERVAL '18 days'),  -- Marzo 20
   (u06, 'MEETUP_ATTENDED', 200, 8, now_ts - INTERVAL '3 days')  -- April 4
+ON CONFLICT DO NOTHING;
+
+-- ==============================================================
+-- 16. COBERTURA EXTRA DE MODULOS (Admin, Bookdrop, Matcher, etc.)
+-- ==============================================================
+
+-- 16.1 Usuarios de tipo ADMIN y BOOKDROP_USER
+INSERT INTO base_users (id, supabase_id, email, password_hash, username, nombre, foto_perfil_url, type, location, created_at, updated_at) VALUES
+  ('00000000-0000-0000-0000-0000000000a1'::uuid, 'admin-local-01', 'admin@bookmerang.app', crypt('Bookmerang2026!', gen_salt('bf')), 'adminbookmerang', 'Admin Bookmerang', '', 0, ST_MakePoint(-5.9905, 37.3895)::geography, now_ts, now_ts),
+  ('10000000-0000-0000-0000-0000000000b1'::uuid, 'bookdrop-local-01', 'bookdrop.centro@bookmerang.app', crypt('Bookmerang2026!', gen_salt('bf')), 'bookdropcentro', 'Bookdrop Centro Sevilla', '', 1, ST_MakePoint(-5.9940, 37.3895)::geography, now_ts, now_ts),
+  ('10000000-0000-0000-0000-0000000000b2'::uuid, 'bookdrop-local-02', 'bookdrop.nervion@bookmerang.app', crypt('Bookmerang2026!', gen_salt('bf')), 'bookdropnervion', 'Bookdrop Nervion', '', 1, ST_MakePoint(-5.9725, 37.3848)::geography, now_ts, now_ts)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO admins (id) VALUES
+  ('00000000-0000-0000-0000-0000000000a1'::uuid)
+ON CONFLICT (id) DO NOTHING;
+
+-- 16.2 Bookspots extra para pruebas de bookdrop y validaciones
+INSERT INTO bookspots (id, nombre, address_text, location, is_bookdrop, created_by_user_id, owner_id, status, created_at, updated_at) VALUES
+  (36, 'Bookdrop Centro Sevilla', 'C. Sierpes, 41, 41004 Sevilla', ST_MakePoint(-5.9940, 37.3895)::geography, true, NULL, NULL, 'ACTIVE', now_ts - INTERVAL '20 days', now_ts - INTERVAL '20 days'),
+  (37, 'Bookdrop Nervion', 'Av. Eduardo Dato, 12, 41005 Sevilla', ST_MakePoint(-5.9725, 37.3848)::geography, true, NULL, NULL, 'ACTIVE', now_ts - INTERVAL '18 days', now_ts - INTERVAL '18 days'),
+  (38, 'Bookspot Pendiente Alameda', 'Alameda de Hercules, 87, 41002 Sevilla', ST_MakePoint(-5.9974, 37.3977)::geography, false, u04, NULL, 'PENDING', now_ts - INTERVAL '4 days', now_ts - INTERVAL '4 days'),
+  (39, 'Bookspot Pendiente San Bernardo', 'C. Juan de Mata Carriazo, 10, 41018 Sevilla', ST_MakePoint(-5.9868, 37.3788)::geography, false, u10, NULL, 'PENDING', now_ts - INTERVAL '3 days', now_ts - INTERVAL '3 days'),
+  (40, 'Bookspot Rechazado La Buhaira', 'Av. de la Buhaira, 29, 41018 Sevilla', ST_MakePoint(-5.9779, 37.3811)::geography, false, u14, NULL, 'REJECTED', now_ts - INTERVAL '12 days', now_ts - INTERVAL '12 days')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO bookdrop_users (id, book_spot_id) VALUES
+  ('10000000-0000-0000-0000-0000000000b1'::uuid, 36),
+  ('10000000-0000-0000-0000-0000000000b2'::uuid, 37)
+ON CONFLICT (id) DO NOTHING;
+
+-- 16.3 Validaciones para probar flujo PENDING->ACTIVE/REJECTED
+INSERT INTO bookspot_validations (bookspot_id, validator_user_id, knows_place, safe_for_exchange, created_at) VALUES
+  (38, u01, true,  true,  now_ts - INTERVAL '3 days'),
+  (38, u02, true,  true,  now_ts - INTERVAL '2 days 20 hours'),
+  (38, u03, true,  true,  now_ts - INTERVAL '2 days 12 hours'),
+  (38, u05, true,  true,  now_ts - INTERVAL '1 day 18 hours'),
+  (39, u01, true,  false, now_ts - INTERVAL '2 days 22 hours'),
+  (39, u03, true,  false, now_ts - INTERVAL '2 days 10 hours'),
+  (39, u05, true,  false, now_ts - INTERVAL '1 day 20 hours'),
+  (39, u06, true,  false, now_ts - INTERVAL '1 day 8 hours'),
+  (39, u07, false, false, now_ts - INTERVAL '1 day 2 hours')
+ON CONFLICT (bookspot_id, validator_user_id) DO NOTHING;
+
+-- 16.4 Preferencias con generos para probar UserPreferences completo
+INSERT INTO user_preferences_genres (preferences_id, genre_id)
+SELECT up.id, v.genre_id
+FROM user_preferences up
+JOIN (VALUES
+  (u01, 1), (u01, 3),
+  (u02, 6), (u02, 12),
+  (u03, 4), (u03, 5),
+  (u05, 5), (u05, 1),
+  (u11, 3), (u11, 4)
+) AS v(user_id, genre_id)
+  ON v.user_id = up.user_id
+ON CONFLICT (preferences_id, genre_id) DO NOTHING;
+
+-- 16.5 Libros extra en distintos estados para probar my-drafts/my-library
+INSERT INTO books (id, owner_id, isbn, titulo, autor, editorial, num_paginas, cover, condition, observaciones, status, created_at, updated_at) VALUES
+  (161, u01, NULL, 'Borrador de prueba', NULL, NULL, NULL, NULL, NULL, 'Libro en construccion para probar borradores', 'DRAFT', now_ts - INTERVAL '2 days', now_ts - INTERVAL '2 days'),
+  (162, u02, '9788401022913', 'Libro en pausa', 'Autor Demo', 'Editorial Demo', 320, 'PAPERBACK', 'GOOD', 'No disponible temporalmente', 'PAUSED', now_ts - INTERVAL '9 days', now_ts - INTERVAL '9 days'),
+  (163, u03, '9788408123456', 'Libro reservado demo', 'Autora Demo', 'Editorial Demo', 280, 'PAPERBACK', 'VERY_GOOD', 'Reservado para un intercambio', 'RESERVED', now_ts - INTERVAL '7 days', now_ts - INTERVAL '7 days'),
+  (164, u05, '9788408567891', 'Libro intercambiado demo', 'Autor Historico', 'Editorial Demo', 410, 'HARDCOVER', 'LIKE_NEW', 'Ya intercambiado, para historico', 'EXCHANGED', now_ts - INTERVAL '20 days', now_ts - INTERVAL '2 days')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO books_languages (book_id, language_id) VALUES
+  (161, 1), (162, 1), (163, 1), (164, 1)
+ON CONFLICT (book_id, language_id) DO NOTHING;
+
+INSERT INTO books_genres (book_id, genre_id) VALUES
+  (161, 1), (162, 2), (163, 4), (164, 8)
+ON CONFLICT (book_id, genre_id) DO NOTHING;
+
+INSERT INTO book_photos (book_id, url, orden) VALUES
+  (162, 'https://books.google.com/books/content?vid=ISBN9788401022913&printsec=frontcover&img=1&zoom=3', 0),
+  (163, 'https://books.google.com/books/content?vid=ISBN9788408123456&printsec=frontcover&img=1&zoom=3', 0),
+  (164, 'https://books.google.com/books/content?vid=ISBN9788408567891&printsec=frontcover&img=1&zoom=3', 0)
+ON CONFLICT DO NOTHING;
+
+-- 16.6 Likes en biblioteca de comunidades para probar ranking/sugerencias
+INSERT INTO community_library_likes (community_id, user_id, book_id, created_at) VALUES
+  (1, u03, 101, now_ts - INTERVAL '2 days'),
+  (1, u05, 101, now_ts - INTERVAL '1 day 12 hours'),
+  (1, u01, 111, now_ts - INTERVAL '1 day'),
+  (3, u11, 130, now_ts - INTERVAL '3 days'),
+  (3, u03, 141, now_ts - INTERVAL '2 days 8 hours')
+ON CONFLICT (community_id, user_id, book_id) DO NOTHING;
+
+-- 16.7 Swipes para probar feed/swipe/undo en matcher
+INSERT INTO swipes (swiper_id, book_id, direction, created_at) VALUES
+  (u01, 109, 'RIGHT', now_ts - INTERVAL '6 hours'),
+  (u03, 101, 'RIGHT', now_ts - INTERVAL '5 hours'),
+  (u06, 117, 'LEFT',  now_ts - INTERVAL '4 hours'),
+  (u11, 130, 'RIGHT', now_ts - INTERVAL '3 hours')
+ON CONFLICT (swiper_id, book_id) DO NOTHING;
+
+-- 16.8 Estados de exchanges para cubrir todos los flujos principales
+INSERT INTO matches (id, user1_id, user2_id, book1_id, book2_id, status, created_at) VALUES
+  (4, u01, u11, 102, 141, 'NEW', now_ts - INTERVAL '7 days'),
+  (5, u02, u05, 106, 118, 'CHAT_CREATED', now_ts - INTERVAL '6 days'),
+  (6, u07, u09, 126, 134, 'CHAT_CREATED', now_ts - INTERVAL '5 days'),
+  (7, u10, u13, 138, 149, 'CHAT_CREATED', now_ts - INTERVAL '4 days'),
+  (8, u04, u15, 113, 157, 'CHAT_CREATED', now_ts - INTERVAL '3 days'),
+  (9, u06, u12, 121, 146, 'CHAT_CREATED', now_ts - INTERVAL '2 days'),
+  (10, u08, u14, 131, 152, 'CHAT_CREATED', now_ts - INTERVAL '36 hours'),
+  (11, u01, u04, 103, 116, 'CHAT_CREATED', now_ts - INTERVAL '30 hours'),
+  (12, u02, u08, 107, 130, 'CHAT_CREATED', now_ts - INTERVAL '28 hours'),
+  (13, u03, u10, 110, 137, 'CHAT_CREATED', now_ts - INTERVAL '26 hours'),
+  (14, u05, u14, 119, 153, 'CHAT_CREATED', now_ts - INTERVAL '24 hours'),
+  (15, u06, u13, 122, 148, 'CHAT_CREATED', now_ts - INTERVAL '22 hours'),
+  (16, u07, u15, 127, 156, 'CHAT_CREATED', now_ts - INTERVAL '20 hours'),
+  (17, u09, u11, 133, 143, 'CHAT_CREATED', now_ts - INTERVAL '18 hours')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO chats (id, type, created_at) VALUES
+  ('22222222-2222-2222-2222-222222222004'::uuid, 'EXCHANGE', now_ts - INTERVAL '7 days'),
+  ('22222222-2222-2222-2222-222222222005'::uuid, 'EXCHANGE', now_ts - INTERVAL '6 days'),
+  ('22222222-2222-2222-2222-222222222006'::uuid, 'EXCHANGE', now_ts - INTERVAL '5 days'),
+  ('22222222-2222-2222-2222-222222222007'::uuid, 'EXCHANGE', now_ts - INTERVAL '4 days'),
+  ('22222222-2222-2222-2222-222222222008'::uuid, 'EXCHANGE', now_ts - INTERVAL '3 days'),
+  ('22222222-2222-2222-2222-222222222009'::uuid, 'EXCHANGE', now_ts - INTERVAL '2 days'),
+  ('22222222-2222-2222-2222-222222222010'::uuid, 'EXCHANGE', now_ts - INTERVAL '36 hours'),
+  ('22222222-2222-2222-2222-222222222011'::uuid, 'EXCHANGE', now_ts - INTERVAL '30 hours'),
+  ('22222222-2222-2222-2222-222222222012'::uuid, 'EXCHANGE', now_ts - INTERVAL '28 hours'),
+  ('22222222-2222-2222-2222-222222222013'::uuid, 'EXCHANGE', now_ts - INTERVAL '26 hours'),
+  ('22222222-2222-2222-2222-222222222014'::uuid, 'EXCHANGE', now_ts - INTERVAL '24 hours'),
+  ('22222222-2222-2222-2222-222222222015'::uuid, 'EXCHANGE', now_ts - INTERVAL '22 hours'),
+  ('22222222-2222-2222-2222-222222222016'::uuid, 'EXCHANGE', now_ts - INTERVAL '20 hours'),
+  ('22222222-2222-2222-2222-222222222017'::uuid, 'EXCHANGE', now_ts - INTERVAL '18 hours')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO chat_participants (chat_id, user_id, joined_at) VALUES
+  ('22222222-2222-2222-2222-222222222004'::uuid, u01, now_ts - INTERVAL '7 days'),
+  ('22222222-2222-2222-2222-222222222004'::uuid, u11, now_ts - INTERVAL '7 days'),
+  ('22222222-2222-2222-2222-222222222005'::uuid, u02, now_ts - INTERVAL '6 days'),
+  ('22222222-2222-2222-2222-222222222005'::uuid, u05, now_ts - INTERVAL '6 days'),
+  ('22222222-2222-2222-2222-222222222006'::uuid, u07, now_ts - INTERVAL '5 days'),
+  ('22222222-2222-2222-2222-222222222006'::uuid, u09, now_ts - INTERVAL '5 days'),
+  ('22222222-2222-2222-2222-222222222007'::uuid, u10, now_ts - INTERVAL '4 days'),
+  ('22222222-2222-2222-2222-222222222007'::uuid, u13, now_ts - INTERVAL '4 days'),
+  ('22222222-2222-2222-2222-222222222008'::uuid, u04, now_ts - INTERVAL '3 days'),
+  ('22222222-2222-2222-2222-222222222008'::uuid, u15, now_ts - INTERVAL '3 days'),
+  ('22222222-2222-2222-2222-222222222009'::uuid, u06, now_ts - INTERVAL '2 days'),
+  ('22222222-2222-2222-2222-222222222009'::uuid, u12, now_ts - INTERVAL '2 days'),
+  ('22222222-2222-2222-2222-222222222010'::uuid, u08, now_ts - INTERVAL '36 hours'),
+  ('22222222-2222-2222-2222-222222222010'::uuid, u14, now_ts - INTERVAL '36 hours'),
+  ('22222222-2222-2222-2222-222222222011'::uuid, u01, now_ts - INTERVAL '30 hours'),
+  ('22222222-2222-2222-2222-222222222011'::uuid, u04, now_ts - INTERVAL '30 hours'),
+  ('22222222-2222-2222-2222-222222222012'::uuid, u02, now_ts - INTERVAL '28 hours'),
+  ('22222222-2222-2222-2222-222222222012'::uuid, u08, now_ts - INTERVAL '28 hours'),
+  ('22222222-2222-2222-2222-222222222013'::uuid, u03, now_ts - INTERVAL '26 hours'),
+  ('22222222-2222-2222-2222-222222222013'::uuid, u10, now_ts - INTERVAL '26 hours'),
+  ('22222222-2222-2222-2222-222222222014'::uuid, u05, now_ts - INTERVAL '24 hours'),
+  ('22222222-2222-2222-2222-222222222014'::uuid, u14, now_ts - INTERVAL '24 hours'),
+  ('22222222-2222-2222-2222-222222222015'::uuid, u06, now_ts - INTERVAL '22 hours'),
+  ('22222222-2222-2222-2222-222222222015'::uuid, u13, now_ts - INTERVAL '22 hours'),
+  ('22222222-2222-2222-2222-222222222016'::uuid, u07, now_ts - INTERVAL '20 hours'),
+  ('22222222-2222-2222-2222-222222222016'::uuid, u15, now_ts - INTERVAL '20 hours'),
+  ('22222222-2222-2222-2222-222222222017'::uuid, u09, now_ts - INTERVAL '18 hours'),
+  ('22222222-2222-2222-2222-222222222017'::uuid, u11, now_ts - INTERVAL '18 hours')
+ON CONFLICT (chat_id, user_id) DO NOTHING;
+
+INSERT INTO messages (chat_id, sender_id, body, sent_at) VALUES
+  ('22222222-2222-2222-2222-222222222004'::uuid, u01, 'Te interesa cerrar el intercambio esta semana?', now_ts - INTERVAL '6 days 20 hours'),
+  ('22222222-2222-2222-2222-222222222005'::uuid, u02, 'Yo acepto el intercambio, me viene bien el viernes.', now_ts - INTERVAL '5 days 18 hours'),
+  ('22222222-2222-2222-2222-222222222006'::uuid, u07, 'Quedamos en un bookspot intermedio?', now_ts - INTERVAL '4 days 16 hours'),
+  ('22222222-2222-2222-2222-222222222007'::uuid, u13, 'Hubo una incidencia en el intercambio.', now_ts - INTERVAL '3 days 12 hours'),
+  ('22222222-2222-2222-2222-222222222008'::uuid, u04, 'Tengo disponibilidad para quedar mañana por la tarde.', now_ts - INTERVAL '2 days 20 hours'),
+  ('22222222-2222-2222-2222-222222222009'::uuid, u12, 'Podemos hacerlo en un bookdrop para ir rapido.', now_ts - INTERVAL '35 hours'),
+  ('22222222-2222-2222-2222-222222222010'::uuid, u08, 'Te viene bien cerrar el intercambio este finde?', now_ts - INTERVAL '30 hours'),
+  ('22222222-2222-2222-2222-222222222011'::uuid, u01, 'Podemos dejarlo en un bookspot centrico?', now_ts - INTERVAL '29 hours'),
+  ('22222222-2222-2222-2222-222222222012'::uuid, u08, 'Yo ya he aceptado por mi parte, te toca confirmar.', now_ts - INTERVAL '27 hours'),
+  ('22222222-2222-2222-2222-222222222013'::uuid, u10, 'No me encaja esa ubicacion, mejor lo dejamos.', now_ts - INTERVAL '25 hours'),
+  ('22222222-2222-2222-2222-222222222014'::uuid, u05, 'Perfecto, intercambio cerrado hoy.', now_ts - INTERVAL '6 hours'),
+  ('22222222-2222-2222-2222-222222222015'::uuid, u13, 'Aprobado por ambas partes, ya podemos quedar.', now_ts - INTERVAL '21 hours'),
+  ('22222222-2222-2222-2222-222222222016'::uuid, u07, 'Te propongo un bookdrop de la zona.', now_ts - INTERVAL '19 hours'),
+  ('22222222-2222-2222-2222-222222222017'::uuid, u09, 'Estoy negociando horario para manana.', now_ts - INTERVAL '17 hours')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO exchanges (id, match_id, chat_id, status, created_at, updated_at) VALUES
+  (4, 4, '22222222-2222-2222-2222-222222222004'::uuid, 'NEGOTIATING', now_ts - INTERVAL '7 days', now_ts - INTERVAL '2 days'),
+  (5, 5, '22222222-2222-2222-2222-222222222005'::uuid, 'ACCEPTED_BY_1', now_ts - INTERVAL '6 days', now_ts - INTERVAL '1 day'),
+  (6, 6, '22222222-2222-2222-2222-222222222006'::uuid, 'ACCEPTED', now_ts - INTERVAL '5 days', now_ts - INTERVAL '1 day'),
+  (7, 7, '22222222-2222-2222-2222-222222222007'::uuid, 'INCIDENT', now_ts - INTERVAL '4 days', now_ts - INTERVAL '12 hours'),
+  (8, 8, '22222222-2222-2222-2222-222222222008'::uuid, 'ACCEPTED', now_ts - INTERVAL '3 days', now_ts - INTERVAL '18 hours'),
+  (9, 9, '22222222-2222-2222-2222-222222222009'::uuid, 'COMPLETED', now_ts - INTERVAL '2 days', now_ts - INTERVAL '6 hours'),
+  (10, 10, '22222222-2222-2222-2222-222222222010'::uuid, 'NEGOTIATING', now_ts - INTERVAL '36 hours', now_ts - INTERVAL '4 hours'),
+  (11, 11, '22222222-2222-2222-2222-222222222011'::uuid, 'ACCEPTED_BY_1', now_ts - INTERVAL '30 hours', now_ts - INTERVAL '12 hours'),
+  (12, 12, '22222222-2222-2222-2222-222222222012'::uuid, 'ACCEPTED_BY_2', now_ts - INTERVAL '28 hours', now_ts - INTERVAL '10 hours'),
+  (13, 13, '22222222-2222-2222-2222-222222222013'::uuid, 'INCIDENT', now_ts - INTERVAL '26 hours', now_ts - INTERVAL '8 hours'),
+  (14, 14, '22222222-2222-2222-2222-222222222014'::uuid, 'COMPLETED', now_ts - INTERVAL '24 hours', now_ts - INTERVAL '6 hours'),
+  (15, 15, '22222222-2222-2222-2222-222222222015'::uuid, 'ACCEPTED', now_ts - INTERVAL '22 hours', now_ts - INTERVAL '5 hours'),
+  (16, 16, '22222222-2222-2222-2222-222222222016'::uuid, 'NEGOTIATING', now_ts - INTERVAL '20 hours', now_ts - INTERVAL '3 hours'),
+  (17, 17, '22222222-2222-2222-2222-222222222017'::uuid, 'NEGOTIATING', now_ts - INTERVAL '18 hours', now_ts - INTERVAL '2 hours')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO exchange_meetings (exchange_id, proposer_id, mode, bookspot_id, custom_location, scheduled_at, mark_as_completed_by_user1, mark_as_completed_by_user2, status) VALUES
+  (6, u07, 'BOOKSPOT', 23, (SELECT location FROM bookspots WHERE id = 23), now_ts + INTERVAL '2 days', false, false, 'PROPOSAL'),
+  (7, u10, 'BOOKSPOT', 25, (SELECT location FROM bookspots WHERE id = 25), now_ts - INTERVAL '1 day', false, false, 'ACCEPTED'),
+  (8, u04, 'BOOKSPOT', 29, (SELECT location FROM bookspots WHERE id = 29), now_ts + INTERVAL '1 day', false, false, 'PROPOSAL'),
+  (9, u06, 'BOOKSPOT', 33, (SELECT location FROM bookspots WHERE id = 33), now_ts - INTERVAL '8 hours', true, true, 'ACCEPTED'),
+  (13, u03, 'BOOKSPOT', 31, (SELECT location FROM bookspots WHERE id = 31), now_ts + INTERVAL '12 hours', false, false, 'REFUSED'),
+  (14, u05, 'BOOKSPOT', 35, (SELECT location FROM bookspots WHERE id = 35), now_ts - INTERVAL '4 hours', true, true, 'ACCEPTED'),
+  (15, u06, 'BOOKDROP', 33, (SELECT location FROM bookspots WHERE id = 33), now_ts + INTERVAL '26 hours', false, false, 'ACCEPTED')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO incidents (exchange_id, meetup_id, informer_id, informed_id, admin_id, comment, status, created_at) VALUES
+  (7, 3, u13, u10, '00000000-0000-0000-0000-0000000000a1'::uuid, 'El usuario no se presento en el punto acordado.', 'PENDING', now_ts - INTERVAL '10 hours')
+ON CONFLICT DO NOTHING;
+
+-- 16.9 Typing indicators para probar /typing en chats
+INSERT INTO typing_indicators (chat_id, user_id, started_at) VALUES
+  ('11111111-1111-1111-1111-111111111003'::uuid, u08, now_ts - INTERVAL '15 seconds'),
+  ('22222222-2222-2222-2222-222222222005'::uuid, u05, now_ts - INTERVAL '10 seconds')
+ON CONFLICT (chat_id, user_id) DO NOTHING;
+
+-- 16.10 Meetups extra con estados y asistencias variadas
+INSERT INTO meetups (id, community_id, title, description, other_book_spot_id, scheduled_at, status, creator_id, created_at, updated_at) VALUES
+  (11, 2, 'Sesion cerrada de thriller', 'Meetup ya celebrado para probar historico', 12, now_ts - INTERVAL '6 days', 'CELEBRATED', u02, now_ts - INTERVAL '10 days', now_ts - INTERVAL '6 days'),
+  (12, 4, 'Encuentro cancelado por lluvia', 'Evento cancelado para probar filtros de estado', 17, now_ts + INTERVAL '4 days', 'CANCELLED', u04, now_ts - INTERVAL '2 days', now_ts - INTERVAL '1 day')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO meetup_attendance (meetup_id, user_id, selected_book_id, status) VALUES
+  (11, u02, 105, 'ATTENDED'),
+  (11, u09, 133, 'NO_SHOW'),
+  (12, u04, 113, 'CANCELLED'),
+  (12, u06, 121, 'REGISTERED')
+ON CONFLICT (meetup_id, user_id) DO NOTHING;
+
+-- 16.11 Movimientos de puntos para probar historico de gamificacion
+INSERT INTO points_ledgers (user_id, type, amount, created_at) VALUES
+  (u01, 'EXCHANGE_SUCCESS', 100, now_ts - INTERVAL '5 days'),
+  (u03, 'MEETUP_ATTENDANCE', 200, now_ts - INTERVAL '1 day'),
+  (u06, 'LOGIN_STREAK', 25, now_ts - INTERVAL '12 hours')
 ON CONFLICT DO NOTHING;
 
 END $$;
