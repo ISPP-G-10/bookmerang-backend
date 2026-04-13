@@ -3,6 +3,7 @@ using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Services.Implementation.Matcher;
 using Bookmerang.Api.Services.Interfaces.Chats;
+using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -56,7 +57,8 @@ public class MatcherServiceTests
             new AppDbContext(options),
             Options.Create(settings),
             new Mock<ILogger<MatcherService>>().Object,
-            new Mock<IChatService>().Object);
+            new Mock<IChatService>().Object,
+            new Mock<IExchangeService>().Object);
     }
 
     // ════════════════════════════════════════════════

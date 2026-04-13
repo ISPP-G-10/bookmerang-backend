@@ -1,24 +1,23 @@
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Data;
-using Bookmerang.Api.Models;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Interfaces.Leveling;
 using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Microsoft.EntityFrameworkCore;
-using System.Linq;
 using NetTopologySuite.Geometries;
-using Microsoft.Extensions.Configuration;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Bookmerang.Api.Services.Implementation.Auth;
 
 public class AuthService(AppDbContext db, IConfiguration config, ILevelingService levelingService, IInkdropsService inkdropsService) : IAuthService
 {
+    private static readonly EmailAddressAttribute EmailValidator = new();
     private readonly AppDbContext _db = db;
     private readonly IConfiguration _config = config;
     private readonly ILevelingService _levelingService = levelingService;
@@ -73,6 +72,9 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
     {
         var existe = await _db.Users.AnyAsync(u => u.SupabaseId == supabaseId);
         if (existe) return (null, true);
+
+        var emailExiste = await _db.Users.AnyAsync(u => u.Email == email);
+        if (emailExiste) return (null, true);
 
         var nuevoUsuario = new BaseUser
         {
@@ -130,18 +132,25 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
         if (string.IsNullOrWhiteSpace(email))
             return (null, false, "El email es obligatorio.");
 
+        var normalizedEmail = NormalizeEmail(email);
+        if (!IsValidEmail(normalizedEmail))
+            return (null, false, "El correo electrónico no es válido.");
+
         if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
             return (null, false, "La contraseña debe tener al menos 6 caracteres.");
 
-        if (await _db.Users.AnyAsync(u => u.Email == email))
+        if (await _db.Users.AnyAsync(u => u.Email == normalizedEmail))
             return (null, true, "El email ya está registrado.");
+
+        if (await _db.Users.AnyAsync(u => u.Username == username))
+            return (null, false, "El nombre de usuario ya está en uso.");
 
         var internalSubject = Guid.NewGuid().ToString("N");
         var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
 
         var (usuario, yaExistia) = await Register(
             internalSubject,
-            email,
+            normalizedEmail,
             username,
             name,
             profilePhoto,
@@ -161,7 +170,11 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
 
     public async Task<(BaseUser? usuario, string token, string? error)> Login(string email, string password)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        var normalizedEmail = NormalizeEmail(email);
+        if (!IsValidEmail(normalizedEmail))
+            return (null, string.Empty, "El correo electrónico no es válido.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
         if (user == null)
             return (null, string.Empty, "Credenciales inválidas.");
 
@@ -180,7 +193,15 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
             return null;
 
         if (!string.IsNullOrWhiteSpace(username))
+        {
+            var usernameEnUso = await _db.Users.AnyAsync(
+                u => u.Username == username && u.SupabaseId != supabaseId);
+
+            if (usernameEnUso)
+                throw new InvalidOperationException("El nombre de usuario ya está en uso.");
+
             user.Username = username;
+        }
 
         if (!string.IsNullOrWhiteSpace(name))
             user.Name = name;
@@ -195,21 +216,25 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
         return user;
     }
 
-    public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail)
-    {
-        if (string.IsNullOrWhiteSpace(newEmail))
-            return (null, "El email no puede estar vacío.");
+public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail)
+{
+    if (string.IsNullOrWhiteSpace(newEmail))
+        return (null, "El email no puede estar vacío.");
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
-        if (user == null)
-            return (null, "Usuario no encontrado.");
+    var normalizedEmail = NormalizeEmail(newEmail);
+    if (!IsValidEmail(normalizedEmail))
+        return (null, "El correo electrónico no es válido.");
 
-        var emailExiste = await _db.Users.AnyAsync(u => u.Email == newEmail && u.SupabaseId != supabaseId);
-        if (emailExiste)
-            return (null, "El email ya está en uso.");
+    var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+    if (user == null)
+        return (null, "Usuario no encontrado.");
 
-        user.Email = newEmail;
-        user.UpdatedAt = DateTime.UtcNow;
+    var emailExiste = await _db.Users.AnyAsync(u => u.Email == normalizedEmail && u.SupabaseId != supabaseId);
+    if (emailExiste)
+        return (null, "El email ya está en uso.");
+
+    user.Email = normalizedEmail;
+    user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
 
@@ -398,6 +423,10 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
         if (string.IsNullOrWhiteSpace(email))
             return (null, false, "El email es obligatorio.");
 
+        var normalizedEmail = NormalizeEmail(email);
+        if (!IsValidEmail(normalizedEmail))
+            return (null, false, "El correo electrónico no es válido.");
+
         if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
             return (null, false, "La contraseña debe tener al menos 6 caracteres.");
 
@@ -407,7 +436,7 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
         if (string.IsNullOrWhiteSpace(addressText))
             return (null, false, "La dirección del establecimiento es obligatoria.");
 
-        if (await _db.Users.AnyAsync(u => u.Email == email))
+        if (await _db.Users.AnyAsync(u => u.Email == normalizedEmail))
             return (null, true, "El email ya está registrado.");
 
         if (await _db.Users.AnyAsync(u => u.Username == username))
@@ -420,16 +449,20 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
 
             // 1. Crear BaseUser con tipo BOOKDROP_USER
+            // La localización del base user se fija a (0,0) porque no representa nada -> ubicación real en cada bookstop
+            var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
+            var zeroLocation = factory.CreatePoint(new Coordinate(0, 0));
+
             var baseUser = new BaseUser
             {
                 SupabaseId = internalSubject,
-                Email = email,
+                Email = normalizedEmail,
                 Username = username,
                 Name = name,
                 ProfilePhoto = profilePhoto ?? string.Empty,
                 PasswordHash = hashedPassword,
                 UserType = BaseUserType.BOOKDROP_USER,
-                Location = location
+                Location = zeroLocation
             };
 
             _db.Users.Add(baseUser);
@@ -509,6 +542,12 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    private static string NormalizeEmail(string email) =>
+        email.Trim().ToLowerInvariant();
+
+    private static bool IsValidEmail(string email) =>
+        !string.IsNullOrWhiteSpace(email) && EmailValidator.IsValid(email);
 
     public async Task<bool> UpdateCosmetics(string supabaseId, string? activeFrameId, string? activeColorId)
     {

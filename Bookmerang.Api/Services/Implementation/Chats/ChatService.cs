@@ -328,4 +328,22 @@ public class ChatService(AppDbContext db) : IChatService
 
     return chat.ToDto(userPersonalization);
 }
+
+
+    public async Task<bool> DeleteChat(Guid chatId)
+    {
+        var chat = await _db.Chats.FindAsync(chatId);
+        if (chat == null) return false;
+
+        var messages = await _db.Messages.Where(m => m.ChatId == chatId).ToListAsync();
+        _db.Messages.RemoveRange(messages);
+
+        var participants = await _db.ChatParticipants.Where(cp => cp.ChatId == chatId).ToListAsync();
+        _db.ChatParticipants.RemoveRange(participants);
+
+        // TypingIndicators se eliminan en cascada al borrar el Chat (ver AppDbContext).
+        _db.Chats.Remove(chat);
+        await _db.SaveChangesAsync();
+        return true;
+    }
 }

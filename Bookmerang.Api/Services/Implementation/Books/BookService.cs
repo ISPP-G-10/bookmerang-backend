@@ -31,13 +31,15 @@ public class BookService(
         await ValidateGenreIdsAsync(request.GenreIds, ct);
         await ValidateLanguageIdsAsync(request.LanguageIds, ct);
 
+        var sanitizedIsbn = NormalizeAndValidateIsbn(request.Isbn);
+
         var book = new Book
         {
             OwnerId = ownerId,
-            Isbn = request.Isbn,
-            Titulo = request.Titulo,
-            Autor = request.Autor,
-            Editorial = request.Editorial,
+            Isbn = sanitizedIsbn,
+            Titulo = request.Titulo?.Trim(),
+            Autor = request.Autor?.Trim(),
+            Editorial = request.Editorial?.Trim(),
             NumPaginas = request.NumPaginas,
             Cover = request.Cover,
             Condition = request.Condition,
@@ -54,7 +56,7 @@ public class BookService(
         if (request.LanguageIds.Count > 0)
             await bookRepo.ReplaceLanguagesAsync(created.Id, request.LanguageIds, ct);
 
-        var fullBook = await GetBookOrThrowAsync(created.Id, ct);
+        var fullBook = await bookRepo.GetByIdOrThrowAsync(created.Id, ct);
         return MapToDetailDTO(fullBook);
     }
 
@@ -66,7 +68,7 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         if (request.Photos.Count < RequiredPhotosToPublish || request.Photos.Count > MaxPhotosToPublish)
@@ -88,7 +90,7 @@ public class BookService(
 
         await bookRepo.ReplacePhotosAsync(bookId, newPhotos, ct);
 
-        var updatedBook = await GetBookOrThrowAsync(bookId, ct);
+        var updatedBook = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(updatedBook);
     }
 
@@ -100,16 +102,16 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         await ValidateGenreIdsAsync(request.GenreIds, ct);
         await ValidateLanguageIdsAsync(request.LanguageIds, ct);
 
-        book.Isbn = request.Isbn;
-        book.Titulo = request.Titulo;
-        book.Autor = request.Autor;
-        book.Editorial = request.Editorial;
+        book.Isbn = NormalizeAndValidateIsbn(request.Isbn);
+        book.Titulo = request.Titulo?.Trim();
+        book.Autor = request.Autor?.Trim();
+        book.Editorial = request.Editorial?.Trim();
         book.NumPaginas = request.NumPaginas;
         book.Cover = request.Cover;
 
@@ -117,7 +119,7 @@ public class BookService(
         await bookRepo.ReplaceGenresAsync(bookId, request.GenreIds, ct);
         await bookRepo.ReplaceLanguagesAsync(bookId, request.LanguageIds, ct);
 
-        var updatedBook = await GetBookOrThrowAsync(bookId, ct);
+        var updatedBook = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(updatedBook);
     }
 
@@ -129,15 +131,15 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         book.Condition = request.Condition;
-        book.Observaciones = request.Observaciones;
+        book.Observaciones = request.Observaciones?.Trim();
 
         await bookRepo.UpdateAsync(book, ct);
 
-        var updatedBook = await GetBookOrThrowAsync(bookId, ct);
+        var updatedBook = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(updatedBook);
     }
 
@@ -148,15 +150,27 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         var errors = new List<string>();
         if (book.Photos.Count < RequiredPhotosToPublish || book.Photos.Count > MaxPhotosToPublish)
             errors.Add(
                 $"Debes subir exactamente 1 foto para publicar. Actualmente hay {book.Photos.Count}.");
+        string? normalizedIsbn = null;
         if (string.IsNullOrWhiteSpace(book.Isbn))
             errors.Add("El ISBN es obligatorio para publicar.");
+        else
+        {
+            try
+            {
+                normalizedIsbn = NormalizeAndValidateIsbn(book.Isbn);
+            }
+            catch (ValidationException)
+            {
+                errors.Add("El ISBN debe ser un ISBN-10 o ISBN-13 válido.");
+            }
+        }
         if (string.IsNullOrWhiteSpace(book.Titulo))
             errors.Add("El título es obligatorio para publicar.");
         if (string.IsNullOrWhiteSpace(book.Autor))
@@ -175,10 +189,11 @@ public class BookService(
         if (errors.Count > 0)
             throw new ValidationException(string.Join(" ", errors));
 
+        book.Isbn = normalizedIsbn;
         book.Status = BookStatus.PUBLISHED;
         await bookRepo.UpdateAsync(book, ct);
 
-        var publishedBook = await GetBookOrThrowAsync(bookId, ct);
+        var publishedBook = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(publishedBook);
     }
 
@@ -225,7 +240,7 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         return MapToDetailDTO(book);
     }
 
@@ -236,7 +251,7 @@ public class BookService(
         CancellationToken ct = default)
     {
         var ownerId = await ResolveOwnerIdAsync(supabaseId, ct);
-        var book = await GetBookOrThrowAsync(bookId, ct);
+        var book = await bookRepo.GetByIdOrThrowAsync(bookId, ct);
         VerifyOwner(book, ownerId);
 
         book.Status = BookStatus.DELETED;
@@ -260,14 +275,6 @@ public class BookService(
         return user.Id;
     }
 
-    private async Task<Book> GetBookOrThrowAsync(int bookId, CancellationToken ct)
-    {
-        var book = await bookRepo.GetByIdAsync(bookId, ct);
-        if (book is null)
-            throw new NotFoundException($"Libro con id {bookId} no encontrado.");
-        return book;
-    }
-
     private static void VerifyOwner(Book book, Guid ownerId)
     {
         if (book.OwnerId != ownerId)
@@ -287,6 +294,70 @@ public class BookService(
         if (ids.Count == 0) return;
         if (!await languageRepo.AllExistAsync(ids, ct))
             throw new ValidationException("Uno o más idiomas no existen.");
+    }
+
+    private static string? NormalizeAndValidateIsbn(string? rawIsbn)
+    {
+        if (string.IsNullOrWhiteSpace(rawIsbn))
+            return null;
+
+        var normalizedChars = rawIsbn
+            .Where(character => !char.IsWhiteSpace(character) && character != '-')
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+
+        var normalizedIsbn = new string(normalizedChars);
+        if (IsValidIsbn10(normalizedIsbn) || IsValidIsbn13(normalizedIsbn))
+            return normalizedIsbn;
+
+        throw new ValidationException("El ISBN debe ser un ISBN-10 o ISBN-13 válido.");
+    }
+
+    private static bool IsValidIsbn10(string isbn)
+    {
+        if (isbn.Length != 10)
+            return false;
+
+        var checksum = 0;
+        for (var index = 0; index < isbn.Length; index++)
+        {
+            var character = isbn[index];
+            if (index < 9 && !char.IsDigit(character))
+                return false;
+
+            var digit = character switch
+            {
+                >= '0' and <= '9' => character - '0',
+                'X' when index == 9 => 10,
+                _ => -1
+            };
+
+            if (digit < 0)
+                return false;
+
+            checksum += digit * (10 - index);
+        }
+
+        return checksum % 11 == 0;
+    }
+
+    private static bool IsValidIsbn13(string isbn)
+    {
+        if (isbn.Length != 13 || !isbn.All(char.IsDigit))
+            return false;
+
+        if (!isbn.StartsWith("978") && !isbn.StartsWith("979"))
+            return false;
+
+        var checksumBase = 0;
+        for (var index = 0; index < 12; index++)
+        {
+            var digit = isbn[index] - '0';
+            checksumBase += digit * (index % 2 == 0 ? 1 : 3);
+        }
+
+        var checksum = (10 - (checksumBase % 10)) % 10;
+        return checksum == isbn[12] - '0';
     }
 
     // =====================================================================

@@ -197,6 +197,8 @@ public class AuthController : ControllerBase
 }
 
 public record RegisterRequest(
+    [Required]
+    [EmailAddress]
     string Email,
     string Password,
     string Username,
@@ -214,6 +216,8 @@ public record UpdatePerfilRequest(
 );
 
 public record PatchEmailRequest(
+    [Required]
+    [EmailAddress]
     string NewEmail,
     string CurrentPassword
 );
@@ -261,6 +265,8 @@ public class RegisterBusinessRequest
 }
 
 public record LoginRequest(
+    [Required]
+    [EmailAddress]
     string Email,
     string Password
 );

@@ -66,34 +66,46 @@ public class CommunityLibraryServiceTests : IAsyncLifetime
         });
     }
 
+    // Note: Free/Premium gating was moved from service to [RequirePremium] controller attribute.
+    // The service itself is plan-agnostic; authorization is enforced at the HTTP layer.
+
     [Fact]
-    public async Task GetCommunityLibrary_FreeUser_ThrowsForbidden()
+    public async Task GetCommunityLibrary_FreeUser_ServiceAllowsAccess()
     {
+        // Gating is now at controller level via [RequirePremium].
+        // The service itself does NOT throw for free users.
         var userId = Guid.NewGuid();
         SeedUser(userId, PricingPlan.FREE);
         var comm = SeedCommunity(1);
         _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = userId, Role = CommunityRole.MEMBER });
         await _db.SaveChangesAsync();
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => _service.GetCommunityLibraryAsync(userId, comm.Id));
+        var result = await _service.GetCommunityLibraryAsync(userId, comm.Id);
+        Assert.NotNull(result);
+        Assert.Empty(result); // No books seeded
     }
 
     [Fact]
-    public async Task ToggleLike_FreeUser_ThrowsForbidden()
+    public async Task ToggleLike_FreeUser_ServiceAllowsAccess()
     {
+        // Gating is now at controller level via [RequirePremium].
+        // The service itself does NOT throw for free users.
         var userId = Guid.NewGuid();
         SeedUser(userId, PricingPlan.FREE);
         var comm = SeedCommunity(1);
         _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = userId, Role = CommunityRole.MEMBER });
-        
+
         var ownerId = Guid.NewGuid();
-        SeedUser(ownerId, PricingPlan.FREE);
+        SeedUser(ownerId, PricingPlan.PREMIUM);
         _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = ownerId, Role = CommunityRole.MEMBER });
-        
+
         var book = SeedBook(10, ownerId, BookStatus.PUBLISHED);
         await _db.SaveChangesAsync();
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => _service.ToggleLikeAsync(userId, comm.Id, book.Id));
+        // Should succeed without throwing
+        await _service.ToggleLikeAsync(userId, comm.Id, book.Id);
+        var library = await _service.GetCommunityLibraryAsync(userId, comm.Id);
+        Assert.Equal(1, library[0].LikesCount);
     }
 
     [Fact]
@@ -126,6 +138,66 @@ public class CommunityLibraryServiceTests : IAsyncLifetime
         library = await _service.GetCommunityLibraryAsync(userId, comm.Id);
         Assert.Equal(0, library[0].LikesCount);
         Assert.False(library[0].LikedByMe);
+    }
+
+    [Fact]
+    public async Task GetCommunityLibrary_OnlyReturnsBookFromPremiumMembers()
+    {
+        // Arrange
+        var viewerId = Guid.NewGuid();
+        SeedUser(viewerId, PricingPlan.PREMIUM);
+
+        var freeOwnerId = Guid.NewGuid();
+        SeedUser(freeOwnerId, PricingPlan.FREE);
+
+        var premiumOwnerId = Guid.NewGuid();
+        SeedUser(premiumOwnerId, PricingPlan.PREMIUM);
+
+        var comm = SeedCommunity(1);
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = viewerId, Role = CommunityRole.MEMBER });
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = freeOwnerId, Role = CommunityRole.MEMBER });
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = premiumOwnerId, Role = CommunityRole.MEMBER });
+
+        SeedBook(1, freeOwnerId, BookStatus.PUBLISHED);
+        var premiumBook = SeedBook(2, premiumOwnerId, BookStatus.PUBLISHED);
+
+        await _db.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetCommunityLibraryAsync(viewerId, comm.Id);
+
+        // Assert: only the premium member's book appears; free member's book is excluded
+        Assert.Single(result);
+        Assert.Equal(premiumBook.Id, result[0].BookId);
+    }
+
+    [Fact]
+    public async Task GetCommunityLibrary_NoBooks_WhenAllMembersAreFree()
+    {
+        // Arrange
+        var viewerId = Guid.NewGuid();
+        SeedUser(viewerId, PricingPlan.FREE);
+
+        var freeOwner1 = Guid.NewGuid();
+        var freeOwner2 = Guid.NewGuid();
+        SeedUser(freeOwner1, PricingPlan.FREE);
+        SeedUser(freeOwner2, PricingPlan.FREE);
+
+        var comm = SeedCommunity(1);
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = viewerId, Role = CommunityRole.MEMBER });
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = freeOwner1, Role = CommunityRole.MEMBER });
+        _db.CommunityMembers.Add(new CommunityMember { CommunityId = comm.Id, UserId = freeOwner2, Role = CommunityRole.MEMBER });
+
+        SeedBook(1, freeOwner1, BookStatus.PUBLISHED);
+        SeedBook(2, freeOwner2, BookStatus.PUBLISHED);
+
+        await _db.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetCommunityLibraryAsync(viewerId, comm.Id);
+
+        // Assert: no books shown since all owners are free-tier
+        Assert.Empty(result);
     }
 
     [Fact]

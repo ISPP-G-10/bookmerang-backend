@@ -9,14 +9,9 @@ using Xunit;
 
 namespace Bookmerang.Tests.Chats.Integration;
 
-public class ChatsIntegrationTests : IClassFixture<PostgresChatsFixture>
+public class ChatsIntegrationTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
 {
-    private readonly PostgresChatsFixture _fixture;
-
-    public ChatsIntegrationTests(PostgresChatsFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly PostgresFixture _fixture = fixture;
 
     [Fact]
     public async Task ChatType_EnumMapping_WorksCorrectly()
