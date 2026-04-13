@@ -1,3 +1,4 @@
+using Bookmerang.Api.Attributes;
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.DTOs.Communities;
 using Bookmerang.Api.Services.Interfaces.Communities;
@@ -131,6 +132,7 @@ public class CommunitiesController(
 
     // --- LIBRARY ---
 
+    [RequirePremium]
     [HttpGet("{id}/library")]
     public async Task<IActionResult> GetLibrary(int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
@@ -140,6 +142,7 @@ public class CommunitiesController(
         return Ok(result);
     }
 
+    [RequirePremium]
     [HttpPost("{id}/library/{bookId}/like")]
     public async Task<IActionResult> ToggleLike(int id, int bookId)
     {
@@ -150,6 +153,7 @@ public class CommunitiesController(
         return NoContent();
     }
 
+    [RequirePremium]
     [HttpGet("{id}/library/suggest")]
     public async Task<IActionResult> GetSuggestedBooksForMeetup(int id)
     {

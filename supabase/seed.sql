@@ -116,6 +116,16 @@ inkdrops_last_updated = '2026-04'
 WHERE id IN (u01, u03, u05, u06);
 
 -- ==============================================================
+-- 3b. SUBSCRIPTIONS (usuarios PREMIUM del seed → platform SYSTEM)
+-- ==============================================================
+INSERT INTO subscriptions (user_id, platform, platform_subscription_id, status, current_period_start, current_period_end, cancels_at_period_end, created_at, updated_at) VALUES
+  (u01, 'SYSTEM', NULL, 'ACTIVE', '2026-04-01 00:00:00+00', '2026-05-01 00:00:00+00', false, now_ts, now_ts),
+  (u03, 'SYSTEM', NULL, 'ACTIVE', '2026-04-01 00:00:00+00', '2026-05-01 00:00:00+00', false, now_ts, now_ts),
+  (u05, 'SYSTEM', NULL, 'ACTIVE', '2026-04-01 00:00:00+00', '2026-05-01 00:00:00+00', false, now_ts, now_ts),
+  (u11, 'SYSTEM', NULL, 'ACTIVE', '2026-04-01 00:00:00+00', '2026-05-01 00:00:00+00', false, now_ts, now_ts)
+ON CONFLICT DO NOTHING;
+
+-- ==============================================================
 -- 4. USER_PREFERENCES (básicas)
 -- ============================================================== 
 INSERT INTO user_preferences (user_id, location, radio_km, extension, created_at, updated_at) VALUES

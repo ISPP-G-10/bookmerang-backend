@@ -37,6 +37,8 @@ public class AppDbContext : DbContext
     public DbSet<Meetup> Meetups => Set<Meetup>();
     public DbSet<BookdropUser> BookdropUsers => Set<BookdropUser>();
     public DbSet<MeetupAttendance> MeetupAttendances => Set<MeetupAttendance>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<SubscriptionReceipt> SubscriptionReceipts => Set<SubscriptionReceipt>();
     public DbSet<CommunityMonthlyScore> CommunityMonthlyScores => Set<CommunityMonthlyScore>();
     public DbSet<InkdropsHistory> InkdropsHistories => Set<InkdropsHistory>();
 
@@ -63,6 +65,8 @@ public class AppDbContext : DbContext
         modelBuilder.HasPostgresEnum<PricingPlan>();
         modelBuilder.HasPostgresEnum<BaseUserType>();
         modelBuilder.HasPostgresEnum<BookdropExchangeStatus>();
+        modelBuilder.HasPostgresEnum<SubscriptionStatus>();
+        modelBuilder.HasPostgresEnum<SubscriptionPlatform>();
         modelBuilder.HasPostgresEnum<InkdropsActionType>();
 
         modelBuilder.Entity<BaseUser>(entity =>
@@ -493,6 +497,51 @@ public class AppDbContext : DbContext
             e.Property(x => x.SelectedBookId).HasColumnName("selected_book_id");
             e.Property(x => x.Status).HasColumnName("status");
         });
+
+        // ===== SUBSCRIPTIONS =====
+        modelBuilder.Entity<Subscription>(e =>
+        {
+            e.ToTable("subscriptions");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.Platform).HasColumnName("platform");
+            e.Property(x => x.PlatformSubscriptionId).HasColumnName("platform_subscription_id");
+            e.Property(x => x.OriginalTransactionId).HasColumnName("original_transaction_id");
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CurrentPeriodStart).HasColumnName("current_period_start");
+            e.Property(x => x.CurrentPeriodEnd).HasColumnName("current_period_end");
+            e.Property(x => x.CancelsAtPeriodEnd).HasColumnName("cancels_at_period_end");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => new { x.UserId, x.Status });
+            e.HasIndex(x => x.CurrentPeriodEnd);
+        });
+
+        // ===== SUBSCRIPTION_RECEIPTS =====
+        modelBuilder.Entity<SubscriptionReceipt>(e =>
+        {
+            e.ToTable("subscription_receipts");
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.SubscriptionId).HasColumnName("subscription_id");
+            e.Property(x => x.Platform).HasColumnName("platform");
+            e.Property(x => x.ReceiptData).HasColumnName("receipt_data");
+            e.Property(x => x.VerifiedAt).HasColumnName("verified_at");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasOne(x => x.Subscription)
+                .WithMany(x => x.Receipts)
+                .HasForeignKey(x => x.SubscriptionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.SubscriptionId);
+        });
+
         modelBuilder.Entity<CommunityMonthlyScore>(e =>
         {
             e.ToTable("community_monthly_scores");
