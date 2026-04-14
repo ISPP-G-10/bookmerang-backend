@@ -125,6 +125,7 @@ public class WebAppFixture : IAsyncLifetime
             "20260413083046_add_cosmetics_to_user_progress.sql",
             "20260414110000_0010_subscriptions_base_user_fk.sql",
             "20260414113000_0010_add_tutorial_completed_to_users.sql",
+            "20260414120001_0011_allow_multiple_matches_per_pair.sql"
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

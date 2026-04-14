@@ -100,20 +100,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
             return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
         }
 
-        // 4. Si ya existe un match entre estos usuarios, no crear otro
-        var (minId, maxId) = userId.CompareTo(book.OwnerId) < 0
-            ? (userId, book.OwnerId)
-            : (book.OwnerId, userId);
-        var alreadyMatched = await _db.Matches.AnyAsync(m => m.User1Id == minId && m.User2Id == maxId);
-        if (alreadyMatched)
-        {
-            _logger.LogInformation("[SWIPE] RIGHT recorded, but match already exists with owner {OwnerId}", book.OwnerId);
-            await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
-            return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
-        }
-
-        // 5. Si es RIGHT, verificar match bilateral:
+        // 4. Si es RIGHT, verificar match bilateral:
         //    ¿El owner del libro ya hizo swipe RIGHT a algún libro MÍO (en los últimos 30 días)?
         var mutualSwipe = await FindMutualSwipeAsync(userId, book.OwnerId);
         if (mutualSwipe == null)
@@ -128,7 +115,27 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
             mutualSwipe.SwiperId, mutualSwipe.BookId);
 
         // 5. Match bilateral detectado → crear Match + Chat + Exchange dentro de la misma transacción
+        var orderedBooks = GetOrderedMatchBooks(userId, book, mutualSwipe);
+        var pairHasBookReuse = await HasHistoricalBookReuseAsync(
+            orderedBooks.User1Id, orderedBooks.User2Id, orderedBooks.Book1Id, orderedBooks.Book2Id);
+        if (pairHasBookReuse)
+        {
+            _logger.LogInformation(
+                "[SWIPE] RIGHT recorded, but one of the books was already used in a previous match between users {User1Id} and {User2Id}",
+                orderedBooks.User1Id, orderedBooks.User2Id);
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
+        }
+
         var matchResult = await CreateMatchAsync(userId, book, mutualSwipe);
+        if (matchResult == null)
+        {
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return new SwipeResultDto { Outcome = SwipeOutcome.Recorded };
+        }
+
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
 
@@ -144,12 +151,12 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
 
     /// <summary>
     /// Crea Match + Chat + Exchange con advisory lock para prevenir duplicados
-    /// por concurrencia entre el par de usuarios.
+    /// por concurrencia sobre el mismo par de usuarios y libros.
     /// El advisory lock se aplica sobre (hash(min_user), hash(max_user)) para que ambos
     /// usuarios adquieran el mismo lock independientemente de quién swipea primero.
     /// OJO: Se invoca dentro de la transacción ya abierta por ProcessSwipeAsync.
     /// </summary>
-    private async Task<MatchCreatedDto> CreateMatchAsync(
+    private async Task<MatchCreatedDto?> CreateMatchAsync(
         Guid userId, Book swipedBook, Swipe mutualSwipe)
     {
         var otherUserId = swipedBook.OwnerId;
@@ -164,21 +171,31 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         var lockKey1 = BitConverter.ToInt32(minId.ToByteArray(), 0);
         var lockKey2 = BitConverter.ToInt32(maxId.ToByteArray(), 0);
 
-        // Advisory lock sobre el par de usuarios para evitar match duplicado
+        // Advisory lock sobre el par de usuarios para serializar la creación concurrente de rematches
         await _db.Database.ExecuteSqlRawAsync(
             "SELECT pg_advisory_xact_lock({0}, {1})", lockKey1, lockKey2);
 
-        // Verificar que no exista ya un match entre estos usuarios
+        // Verificar que no exista ya un match idéntico para el mismo par de libros
+        var user1BookCandidate = minId == userId ? mutualSwipe.BookId : swipedBook.Id;
+        var user2BookCandidate = minId == userId ? swipedBook.Id : mutualSwipe.BookId;
         var existingMatch = await _db.Matches.FirstOrDefaultAsync(m =>
-            m.User1Id == minId && m.User2Id == maxId);
+            m.User1Id == minId
+            && m.User2Id == maxId
+            && m.Book1Id == user1BookCandidate
+            && m.Book2Id == user2BookCandidate);
 
         // Si existe simplemente lo devolvemos
         if (existingMatch != null)
             return await BuildMatchCreatedDto(existingMatch, userId);
 
+        var hasHistoricalBookReuse = await HasHistoricalBookReuseAsync(
+            minId, maxId, user1BookCandidate, user2BookCandidate);
+        if (hasHistoricalBookReuse)
+            return null;
+
         // Book1Id corresponde a User1Id, Book2Id corresponde a User2Id
-        var user1Book = minId == userId ? mutualSwipe.BookId : swipedBook.Id;
-        var user2Book = minId == userId ? swipedBook.Id : mutualSwipe.BookId;
+        var user1Book = user1BookCandidate;
+        var user2Book = user2BookCandidate;
 
         var now = DateTime.UtcNow;
 
@@ -204,6 +221,31 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         };
         _db.Matches.Add(match);
         return match;
+    }
+
+    private (Guid User1Id, Guid User2Id, int Book1Id, int Book2Id) GetOrderedMatchBooks(
+        Guid userId, Book swipedBook, Swipe mutualSwipe)
+    {
+        var otherUserId = swipedBook.OwnerId;
+        var (minId, maxId) = userId.CompareTo(otherUserId) < 0
+            ? (userId, otherUserId)
+            : (otherUserId, userId);
+
+        var user1Book = minId == userId ? mutualSwipe.BookId : swipedBook.Id;
+        var user2Book = minId == userId ? swipedBook.Id : mutualSwipe.BookId;
+        return (minId, maxId, user1Book, user2Book);
+    }
+
+    /// <summary>
+    /// Para una misma pareja, un libro usado previamente en un match no puede volver a reutilizarse
+    /// en otro match posterior, ni por User1 ni por User2.
+    /// </summary>
+    private Task<bool> HasHistoricalBookReuseAsync(Guid user1Id, Guid user2Id, int book1Id, int book2Id)
+    {
+        return _db.Matches.AnyAsync(m =>
+            m.User1Id == user1Id
+            && m.User2Id == user2Id
+            && (m.Book1Id == book1Id || m.Book2Id == book2Id));
     }
 
     /// <summary>
@@ -266,12 +308,21 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
         _logger.LogInformation("[MUTUAL] Checking if {OtherUserId} has mutual interest with {UserId}...", otherUserId, userId);
 
         var cutoff = DateTime.UtcNow.AddDays(-_settings.Feed.SwipeValidDays);
+        var (minId, maxId) = userId.CompareTo(otherUserId) < 0
+            ? (userId, otherUserId)
+            : (otherUserId, userId);
+
+        var previouslyUsedMyBookIds = _db.Matches
+            .Where(m => m.User1Id == minId && m.User2Id == maxId)
+            .Select(m => minId == userId ? m.Book1Id : m.Book2Id);
 
         var swipe = await _db.Swipes
             .Where(s => s.SwiperId == otherUserId)
             .Where(s => s.Direction == SwipeDirection.RIGHT)
             .Where(s => s.CreatedAt >= cutoff)
             .Where(s => _db.Books.Any(b => b.Id == s.BookId && b.OwnerId == userId))
+            .Where(s => !previouslyUsedMyBookIds.Contains(s.BookId))
+            .OrderByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync();
 
         _logger.LogInformation("[MUTUAL] Mutual swipe found: {Found} (SwipeId={SwipeId})",
@@ -438,18 +489,20 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
     /// </summary>
     private IQueryable<Book> GetBaseCandidates(Guid userId, UserPreference prefs)
     {
-        var matchedBookIds = _db.Matches
-            .Where(m => m.User1Id == userId)
-            .Select(m => m.Book2Id)
-            .Concat(
-                _db.Matches
-                    .Where(m => m.User2Id == userId)
-                    .Select(m => m.Book1Id));
+        var matchedBookIds = _db.Exchanges
+            .Where(e => e.Status != ExchangeStatus.COMPLETED)
+            .Where(e => e.Status != ExchangeStatus.REJECTED)
+            .Where(e => e.Status != ExchangeStatus.INCIDENT)
+            .Where(e => e.Match.User1Id == userId || e.Match.User2Id == userId)
+            .Select(e => e.Match.User1Id == userId ? e.Match.Book2Id : e.Match.Book1Id);
 
         return _db.Books
             .Where(b => b.Status == BookStatus.PUBLISHED)
             .Where(b => b.OwnerId != userId)
             .Where(b => !matchedBookIds.Contains(b.Id))
+            .Where(b => !_db.Matches.Any(m =>
+                (m.User1Id == userId && m.User2Id == b.OwnerId && m.Book2Id == b.Id)
+                || (m.User1Id == b.OwnerId && m.User2Id == userId && m.Book1Id == b.Id)))
             .Where(b => !_db.Swipes.Any(s => s.SwiperId == userId && s.BookId == b.Id))
             .Where(b => _db.Users
                 .Any(bu => bu.Id == b.OwnerId
@@ -555,7 +608,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
     /// <summary>
     /// Deshace el ultimo swipe del usuario.
     /// Si ese swipe creo un match activo, revierte tambien match + exchange + chat.
-    /// Devuelve false cuando no hay swipes o el match ya esta cerrado (COMPLETED/INCIDENT).
+    /// Devuelve false cuando no hay swipes o el intercambio asociado ya esta cerrado (COMPLETED/INCIDENT).
     /// </summary>
     public async Task<bool> UndoLastSwipeAsync(Guid userId)
     {
@@ -575,47 +628,32 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
             var book = await _db.Books.FirstOrDefaultAsync(b => b.Id == lastSwipe.BookId);
             if (book != null)
             {
-                var (minId, maxId) = userId.CompareTo(book.OwnerId) < 0
-                    ? (userId, book.OwnerId)
-                    : (book.OwnerId, userId);
-
-                var match = await _db.Matches.FirstOrDefaultAsync(m =>
-                    m.User1Id == minId && m.User2Id == maxId);
-
+                var (match, exchange) = await GetLatestMatchForUndoAsync(userId, book.OwnerId, lastSwipe.BookId);
                 if (match != null)
                 {
-                    var swipeCreatedThisMatch =
-                        (match.User1Id == userId && match.Book2Id == lastSwipe.BookId)
-                        || (match.User2Id == userId && match.Book1Id == lastSwipe.BookId);
-
-                    if (swipeCreatedThisMatch)
+                    if (exchange is { Status: ExchangeStatus.COMPLETED or ExchangeStatus.INCIDENT })
                     {
-                        var exchange = await _db.Exchanges.FirstOrDefaultAsync(e => e.MatchId == match.Id);
-
-                        if (exchange is { Status: ExchangeStatus.COMPLETED or ExchangeStatus.INCIDENT })
-                        {
-                            await transaction.RollbackAsync();
-                            return false;
-                        }
-
-                        if (exchange != null)
-                        {
-                            var meetings = await _db.ExchangeMeetings
-                                .Where(em => em.ExchangeId == exchange.ExchangeId)
-                                .ToListAsync();
-                            _db.ExchangeMeetings.RemoveRange(meetings);
-                            _db.Exchanges.Remove(exchange);
-                            await _db.SaveChangesAsync();
-
-                            await _chatService.DeleteChat(exchange.ChatId);
-                        }
-
-                        _db.Matches.Remove(match);
-
-                        _logger.LogInformation(
-                            "[UNDO] Reverted match {MatchId} generated by swipe {SwipeId} for user {UserId}",
-                            match.Id, lastSwipe.Id, userId);
+                        await transaction.RollbackAsync();
+                        return false;
                     }
+
+                    if (exchange != null)
+                    {
+                        var meetings = await _db.ExchangeMeetings
+                            .Where(em => em.ExchangeId == exchange.ExchangeId)
+                            .ToListAsync();
+                        _db.ExchangeMeetings.RemoveRange(meetings);
+                        _db.Exchanges.Remove(exchange);
+                        await _db.SaveChangesAsync();
+
+                        await _chatService.DeleteChat(exchange.ChatId);
+                    }
+
+                    _db.Matches.Remove(match);
+
+                    _logger.LogInformation(
+                        "[UNDO] Reverted match {MatchId} generated by swipe {SwipeId} for user {UserId}",
+                        match.Id, lastSwipe.Id, userId);
                 }
             }
         }
@@ -628,5 +666,33 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
             lastSwipe.Id, lastSwipe.BookId, lastSwipe.Direction, userId);
 
         return true;
+    }
+
+    /// <summary>
+    /// Localiza el match mas reciente que pudo haber sido creado por este swipe RIGHT.
+    /// Se identifica por la pareja de usuarios y por el libro swipeado asignado al rol correcto dentro del match.
+    /// </summary>
+    private async Task<(Match? Match, Exchange? Exchange)> GetLatestMatchForUndoAsync(
+        Guid userId, Guid otherUserId, int swipedBookId)
+    {
+        var (minId, maxId) = userId.CompareTo(otherUserId) < 0
+            ? (userId, otherUserId)
+            : (otherUserId, userId);
+
+        var candidateMatches = await _db.Matches
+            .Where(m => m.User1Id == minId && m.User2Id == maxId)
+            .Where(m =>
+                (m.User1Id == userId && m.Book2Id == swipedBookId)
+                || (m.User2Id == userId && m.Book1Id == swipedBookId))
+            .OrderByDescending(m => m.CreatedAt)
+            .ToListAsync();
+
+        foreach (var match in candidateMatches)
+        {
+            var exchange = await _db.Exchanges.FirstOrDefaultAsync(e => e.MatchId == match.Id);
+            return (match, exchange);
+        }
+
+        return (null, null);
     }
 }

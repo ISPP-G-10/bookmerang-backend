@@ -322,7 +322,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.Status).HasColumnName("status");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
 
-            e.HasIndex(x => new { x.User1Id, x.User2Id }).IsUnique();
+            e.HasIndex(x => new { x.User1Id, x.User2Id });
 
             e.HasOne(x => x.Book1)
                 .WithMany()
