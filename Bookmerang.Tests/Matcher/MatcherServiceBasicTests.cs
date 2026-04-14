@@ -203,7 +203,7 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
     }
 
     [Fact]
-    public async Task GetFeed_MatchedBook_IsNotReturned()
+    public async Task GetFeed_ActiveExchangeBook_IsNotReturned()
     {
         SeedUser(UserA, "userA", Madrid);
         SeedUser(UserB, "userB", Madrid);
@@ -224,9 +224,98 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
         });
         await _db.SaveChangesAsync();
 
+        var match = await _db.Matches.SingleAsync();
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        _db.Exchanges.Add(new Exchange
+        {
+            ChatId = chat.Id,
+            MatchId = match.Id,
+            Status = ExchangeStatus.NEGOTIATING,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
         var feed = Feed(await _service.GetFeedAsync(UserA, page: 0, pageSize: 20));
 
         Assert.DoesNotContain(feed, b => b.Id == bookB.Id);
+    }
+
+    [Theory]
+    [InlineData(ExchangeStatus.COMPLETED)]
+    [InlineData(ExchangeStatus.REJECTED)]
+    [InlineData(ExchangeStatus.INCIDENT)]
+    public async Task GetFeed_PreviouslyMatchedBook_IsNotReturnedAgain(ExchangeStatus exchangeStatus)
+    {
+        SeedUser(UserA, "userA", Madrid);
+        SeedUser(UserB, "userB", Madrid);
+        SeedPreferences(UserA, Madrid);
+
+        var bookA = SeedBook(UserA);
+        var bookB = SeedBook(UserB);
+        await _db.SaveChangesAsync();
+
+        _db.Matches.Add(new Api.Models.Entities.Match
+        {
+            User1Id = UserA,
+            User2Id = UserB,
+            Book1Id = bookA.Id,
+            Book2Id = bookB.Id,
+            Status = MatchStatus.CHAT_CREATED,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        var match = await _db.Matches.SingleAsync();
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
+
+        _db.Exchanges.Add(new Exchange
+        {
+            ChatId = chat.Id,
+            MatchId = match.Id,
+            Status = exchangeStatus,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        var feed = Feed(await _service.GetFeedAsync(UserA, page: 0, pageSize: 20));
+
+        Assert.DoesNotContain(feed, b => b.Id == bookB.Id);
+    }
+
+    [Fact]
+    public async Task GetFeed_OtherBookFromSameUser_IsReturnedAfterPreviousMatch()
+    {
+        SeedUser(UserA, "userA", Madrid);
+        SeedUser(UserB, "userB", Madrid);
+        SeedPreferences(UserA, Madrid);
+
+        var bookA = SeedBook(UserA);
+        var usedBookB = SeedBook(UserB);
+        var freshBookB = SeedBook(UserB);
+        await _db.SaveChangesAsync();
+
+        _db.Matches.Add(new Api.Models.Entities.Match
+        {
+            User1Id = UserA,
+            User2Id = UserB,
+            Book1Id = bookA.Id,
+            Book2Id = usedBookB.Id,
+            Status = MatchStatus.CHAT_CREATED,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        var feed = Feed(await _service.GetFeedAsync(UserA, page: 0, pageSize: 20));
+
+        Assert.DoesNotContain(feed, b => b.Id == usedBookB.Id);
+        Assert.Contains(feed, b => b.Id == freshBookB.Id);
     }
 
     /// <summary>
@@ -945,11 +1034,52 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
     // ── Duplicate match prevention ──────────────────────────────────────
 
     /// <summary>
-    /// TEST-N06: Si ya existe un match entre dos usuarios, un nuevo RIGHT swipe
-    /// devuelve Recorded (no crea match duplicado).
+    /// TEST-N06A: La base de datos permite guardar varios matches historicos
+    /// para la misma pareja de usuarios cuando se trata de libros distintos.
     /// </summary>
     [Fact]
-    public async Task ProcessSwipe_AlreadyMatched_ReturnsRecordedNoDuplicate()
+    public async Task Matches_SamePairDifferentBooks_CanBePersisted()
+    {
+        SeedUser(UserA, "userA", Madrid);
+        SeedUser(UserB, "userB", Madrid);
+
+        var bookA1 = SeedBook(UserA);
+        var bookB1 = SeedBook(UserB);
+        var bookA2 = SeedBook(UserA);
+        var bookB2 = SeedBook(UserB);
+        await _db.SaveChangesAsync();
+
+        _db.Matches.AddRange(
+            new Api.Models.Entities.Match
+            {
+                User1Id = UserA,
+                User2Id = UserB,
+                Book1Id = bookA1.Id,
+                Book2Id = bookB1.Id,
+                Status = MatchStatus.CHAT_CREATED,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+            },
+            new Api.Models.Entities.Match
+            {
+                User1Id = UserA,
+                User2Id = UserB,
+                Book1Id = bookA2.Id,
+                Book2Id = bookB2.Id,
+                Status = MatchStatus.CHAT_CREATED,
+                CreatedAt = DateTime.UtcNow
+            });
+
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(2, await _db.Matches.CountAsync());
+    }
+
+    /// <summary>
+    /// TEST-N06: La misma pareja puede generar un nuevo match con otros libros
+    /// aunque ya exista otro exchange activo entre ellos.
+    /// </summary>
+    [Fact]
+    public async Task ProcessSwipe_ActiveExchangeExists_CreatesAnotherMatchForDifferentBooks()
     {
         SeedUser(UserA, "userA", Madrid);
         SeedUser(UserB, "userB", Madrid);
@@ -958,6 +1088,8 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
 
         var bookA = SeedBook(UserA);
         var bookB = SeedBook(UserB);
+        var bookA2 = SeedBook(UserA);
+        var bookB2 = SeedBook(UserB);
         await _db.SaveChangesAsync();
 
         // B swipea RIGHT a libro de A → registra swipe
@@ -966,15 +1098,78 @@ public class MatcherServiceBasicTests(PostgresFixture fixture, ITestOutputHelper
         var firstResult = await _service.ProcessSwipeAsync(UserA, bookB.Id, SwipeDirection.RIGHT);
         Assert.Equal(SwipeOutcome.MatchCreated, firstResult.Outcome);
 
-        // Ahora otro RIGHT de A sobre un 2do libro de B → no debe crear match duplicado
-        var bookB2 = SeedBook(UserB);
-        await _db.SaveChangesAsync();
+        // El otro usuario muestra interés por un segundo libro de A
+        await _service.ProcessSwipeAsync(UserB, bookA2.Id, SwipeDirection.RIGHT);
+
+        // Ahora A hace RIGHT sobre un segundo libro de B → debe crear otro match
         var secondResult = await _service.ProcessSwipeAsync(UserA, bookB2.Id, SwipeDirection.RIGHT);
 
-        Assert.Equal(SwipeOutcome.Recorded, secondResult.Outcome);
-        Assert.Null(secondResult.Match);
-        // Solo un match debe existir
+        Assert.Equal(SwipeOutcome.MatchCreated, secondResult.Outcome);
+        Assert.NotNull(secondResult.Match);
+        Assert.Equal(2, await _db.Matches.CountAsync());
+        Assert.Equal(2, await _db.Exchanges.CountAsync());
+    }
+
+    [Fact]
+    public async Task ProcessSwipe_ReusingCurrentUserBook_DoesNotCreateAnotherMatch()
+    {
+        SeedUser(UserA, "userA", Madrid);
+        SeedUser(UserB, "userB", Madrid);
+        SeedPreferences(UserA, Madrid);
+        SeedPreferences(UserB, Madrid);
+
+        var bookA1 = SeedBook(UserA);
+        var bookB1 = SeedBook(UserB);
+        var bookB2 = SeedBook(UserB);
+        await _db.SaveChangesAsync();
+
+        await _service.ProcessSwipeAsync(UserB, bookA1.Id, SwipeDirection.RIGHT);
+        var firstMatch = await _service.ProcessSwipeAsync(UserA, bookB1.Id, SwipeDirection.RIGHT);
+        Assert.Equal(SwipeOutcome.MatchCreated, firstMatch.Outcome);
+
+        var secondAttempt = await _service.ProcessSwipeAsync(UserA, bookB2.Id, SwipeDirection.RIGHT);
+
+        Assert.Equal(SwipeOutcome.Recorded, secondAttempt.Outcome);
+        Assert.Null(secondAttempt.Match);
         Assert.Equal(1, await _db.Matches.CountAsync());
+    }
+
+    [Fact]
+    public async Task ProcessSwipe_UsesNewestMutualSwipeWithUnusedBook_ForRematch()
+    {
+        SeedUser(UserA, "userA", Madrid);
+        SeedUser(UserB, "userB", Madrid);
+        SeedPreferences(UserA, Madrid);
+        SeedPreferences(UserB, Madrid);
+
+        var bookA1 = SeedBook(UserA);
+        var bookB1 = SeedBook(UserB);
+        var bookA2 = SeedBook(UserA);
+        var bookB2 = SeedBook(UserB);
+        await _db.SaveChangesAsync();
+
+        await _service.ProcessSwipeAsync(UserB, bookA1.Id, SwipeDirection.RIGHT);
+        var firstMatch = await _service.ProcessSwipeAsync(UserA, bookB1.Id, SwipeDirection.RIGHT);
+        Assert.Equal(SwipeOutcome.MatchCreated, firstMatch.Outcome);
+
+        _db.Swipes.Add(new Swipe
+        {
+            SwiperId = UserB,
+            BookId = bookA2.Id,
+            Direction = SwipeDirection.RIGHT,
+            CreatedAt = DateTime.UtcNow.AddMinutes(1)
+        });
+        await _db.SaveChangesAsync();
+
+        var secondMatch = await _service.ProcessSwipeAsync(UserA, bookB2.Id, SwipeDirection.RIGHT);
+
+        Assert.Equal(SwipeOutcome.MatchCreated, secondMatch.Outcome);
+        Assert.NotNull(secondMatch.Match);
+        Assert.Equal(2, await _db.Matches.CountAsync());
+
+        var latestMatch = await _db.Matches.OrderByDescending(m => m.Id).FirstAsync();
+        Assert.Equal(bookA2.Id, latestMatch.Book1Id);
+        Assert.Equal(bookB2.Id, latestMatch.Book2Id);
     }
 
     // ── Undo swipe ──────────────────────────────────────────────────────
