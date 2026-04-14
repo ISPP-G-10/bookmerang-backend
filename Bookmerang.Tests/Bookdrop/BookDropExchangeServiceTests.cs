@@ -29,7 +29,7 @@ public class BookDropExchangeServiceTests(PostgresFixture fixture) : IClassFixtu
         var streakService = new StreakService(_db);
         var inkdropsService = new InkdropsService(_db, streakService);
         var meetingService = new ExchangeMeetingService(_db, exchangeService, bookRepository, inkdropsService);
-        _service = new BookDropExchangeService(_db, meetingService);
+        _service = new BookDropExchangeService(_db, meetingService, inkdropsService);
         return Task.CompletedTask;
     }
 

@@ -38,6 +38,12 @@ public class ChatService(AppDbContext db) : IChatService
                 .ToDictionaryAsync(cc => cc.ChatId, cc => cc.Community.Name);
         }
 
+        // Obtener datos de personalizacion de todos los participantes
+        var participantIds = chats.SelectMany(c => c.Participants.Select(p => p.UserId)).Distinct().ToList();
+        var userPersonalization = await _db.UserProgresses
+            .Where(p => participantIds.Contains(p.UserId))
+            .ToDictionaryAsync(p => p.UserId, p => (p.ActiveFrameId, p.ActiveColorId));
+
         var result = new List<ChatDto>();
 
         foreach (var chat in chats)
@@ -55,10 +61,9 @@ public class ChatService(AppDbContext db) : IChatService
                 name = commName;
             }
 
-            result.Add(chat.ToDto(lastMessage, name));
+            result.Add(chat.ToDto(userPersonalization, lastMessage, name));
         }
 
-        // Ordenar por último mensaje (los chats con mensajes más recientes primero)
         result = result
             .OrderByDescending(c => c.LastMessage?.SentAt ?? c.CreatedAt)
             .ToList();
@@ -91,6 +96,12 @@ public class ChatService(AppDbContext db) : IChatService
             .OrderByDescending(m => m.SentAt)
             .FirstOrDefaultAsync();
 
+        // Obtener datos de personalizacion de los participantes
+        var participantIds = chat.Participants.Select(p => p.UserId).ToList();
+        var userPersonalization = await _db.UserProgresses
+            .Where(p => participantIds.Contains(p.UserId))
+            .ToDictionaryAsync(p => p.UserId, p => (p.ActiveFrameId, p.ActiveColorId));
+
         string? name = null;
         Dictionary<Guid, CommunityRole>? userRoles = null;
 
@@ -110,10 +121,10 @@ public class ChatService(AppDbContext db) : IChatService
 
         if (userRoles != null)
         {
-            return chat.ToDtoWithRoles(userRoles, lastMessage, name);
+            return chat.ToDtoWithRoles(userRoles, userPersonalization, lastMessage, name);
         }
 
-        return chat.ToDto(lastMessage, name);
+        return chat.ToDto(userPersonalization, lastMessage, name);
     }
 
     public async Task<List<MessageDto>> GetMessages(Guid chatId, Guid userId, int page, int pageSize)
@@ -130,7 +141,25 @@ public class ChatService(AppDbContext db) : IChatService
             .Take(pageSize)
             .ToListAsync();
 
-        return messages.Select(m => m.ToDto()).ToList();
+        // Obtener datos de personalización (frames y colores)
+        var senderIds = messages.Select(m => m.SenderId).Distinct().ToList();
+        var progressMap = await _db.UserProgresses
+            .Where(p => senderIds.Contains(p.UserId))
+            .ToDictionaryAsync(p => p.UserId);
+
+        return messages.Select(m => {
+            progressMap.TryGetValue(m.SenderId, out var progress);
+            return new MessageDto(
+                m.Id,
+                m.ChatId,
+                m.SenderId,
+                m.Sender?.BaseUser?.Username ?? string.Empty,
+                m.Body,
+                m.SentAt,
+                progress?.ActiveFrameId,
+                progress?.ActiveColorId
+            );
+        }).ToList();
     }
 
     public async Task<MessageDto?> SendMessage(Guid chatId, Guid senderId, string body)
@@ -158,7 +187,19 @@ public class ChatService(AppDbContext db) : IChatService
                 .ThenInclude(s => s.BaseUser)
             .FirstAsync(m => m.Id == message.Id);
 
-        return saved.ToDto();
+        // Obtener datos de personalización
+        var progress = await _db.UserProgresses.FirstOrDefaultAsync(p => p.UserId == senderId);
+
+        return new MessageDto(
+            saved.Id,
+            saved.ChatId,
+            saved.SenderId,
+            saved.Sender?.BaseUser?.Username ?? string.Empty,
+            saved.Body,
+            saved.SentAt,
+            progress?.ActiveFrameId,
+            progress?.ActiveColorId
+        );
     }
 
     public async Task<ChatDto?> CreateChat(ChatType type, List<Guid> participantIds)
@@ -271,15 +312,23 @@ public class ChatService(AppDbContext db) : IChatService
     }
 
     private async Task<ChatDto?> GetChatByIdInternal(Guid chatId)
-    {
-        var chat = await _db.Chats
-            .Include(c => c.Participants)
-                .ThenInclude(p => p.User)
-                    .ThenInclude(u => u.BaseUser)
-            .FirstOrDefaultAsync(c => c.Id == chatId);
+{
+    var chat = await _db.Chats
+        .Include(c => c.Participants)
+            .ThenInclude(p => p.User)
+                .ThenInclude(u => u.BaseUser)
+        .FirstOrDefaultAsync(c => c.Id == chatId);
 
-        return chat?.ToDto();
-    }
+    if (chat == null) return null;
+
+    var participantIds = chat.Participants.Select(p => p.UserId).ToList();
+    var userPersonalization = await _db.UserProgresses
+        .Where(p => participantIds.Contains(p.UserId))
+        .ToDictionaryAsync(p => p.UserId, p => (p.ActiveFrameId, p.ActiveColorId));
+
+    return chat.ToDto(userPersonalization);
+}
+
 
     public async Task<bool> DeleteChat(Guid chatId)
     {

@@ -27,4 +27,12 @@ public class UserProgress
 
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; }
+
+    [Column("active_frame_id")]
+    [MaxLength(64)]
+    public string? ActiveFrameId { get; set; }
+
+    [Column("active_color_id")]
+    [MaxLength(64)]
+    public string? ActiveColorId { get; set; }
 }

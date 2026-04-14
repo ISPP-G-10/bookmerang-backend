@@ -89,7 +89,6 @@ public class InkdropsService(AppDbContext db, IStreakService streakService) : II
 
         progress.XpTotal += finalPoints;
         progress.UpdatedAt = DateTime.UtcNow;
-        _db.UserProgresses.Update(progress);
     }
 
     private async Task RecordInkdropsHistoryAsync(Guid userId, InkdropsActionType? actionType, int finalPoints)
@@ -170,12 +169,15 @@ public class InkdropsService(AppDbContext db, IStreakService streakService) : II
             .OrderByDescending(r => r.InkdropsThisMonth)
             .ToListAsync();
 
-        var rankingDtos = ranking.Select(r => new CommunityRankingEntryDto(
-            r.Id,
-            r.Username,
-            r.Name,
-            r.InkdropsThisMonth
-        )).ToList();
+        var rankingUserIds = ranking.Select(r => r.Id).ToList();
+        var personalizationMap = await _db.UserProgresses
+            .Where(p => rankingUserIds.Contains(p.UserId))
+            .ToDictionaryAsync(p => p.UserId, p => (p.ActiveFrameId, p.ActiveColorId));
+
+        var rankingDtos = ranking.Select(r => {
+            personalizationMap.TryGetValue(r.Id, out var pers);
+            return new CommunityRankingEntryDto(r.Id, r.Username, r.Name, r.InkdropsThisMonth, pers.ActiveFrameId, pers.ActiveColorId);
+        }).ToList();
 
         return new CommunityRankingDto(communityId, currentMonth, rankingDtos);
     }

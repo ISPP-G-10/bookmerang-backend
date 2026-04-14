@@ -978,8 +978,14 @@ INSERT INTO exchange_meetings (exchange_id, proposer_id, mode, bookspot_id, cust
   (9, u06, 'BOOKSPOT', 33, (SELECT location FROM bookspots WHERE id = 33), now_ts - INTERVAL '8 hours', true, true, 'ACCEPTED'),
   (13, u03, 'BOOKSPOT', 31, (SELECT location FROM bookspots WHERE id = 31), now_ts + INTERVAL '12 hours', false, false, 'REFUSED'),
   (14, u05, 'BOOKSPOT', 35, (SELECT location FROM bookspots WHERE id = 35), now_ts - INTERVAL '4 hours', true, true, 'ACCEPTED'),
-  (15, u06, 'BOOKDROP', 33, (SELECT location FROM bookspots WHERE id = 33), now_ts + INTERVAL '26 hours', false, false, 'ACCEPTED')
+  (15, u06, 'BOOKDROP', 36, (SELECT location FROM bookspots WHERE id = 36), now_ts + INTERVAL '26 hours', false, false, 'ACCEPTED')
 ON CONFLICT DO NOTHING;
+
+-- Fix bookdrop exchange 15: PIN conocido y estado inicial para pruebas con Postman
+UPDATE exchange_meetings
+SET pin = '123456',
+    bookdrop_status = 'AWAITING_DROP_1'::bookdrop_exchange_status
+WHERE exchange_id = 15;
 
 INSERT INTO incidents (exchange_id, meetup_id, informer_id, informed_id, admin_id, comment, status, created_at) VALUES
   (7, 3, u13, u10, '00000000-0000-0000-0000-0000000000a1'::uuid, 'El usuario no se presento en el punto acordado.', 'PENDING', now_ts - INTERVAL '10 hours')
