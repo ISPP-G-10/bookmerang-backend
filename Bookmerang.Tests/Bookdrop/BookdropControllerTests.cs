@@ -134,6 +134,77 @@ public class BookdropControllerTests(WebAppFixture fixture) : IClassFixture<WebA
     // ── CASO POSITIVO: GET /api/bookdrop/perfil con token bookdrop ──
 
     [Fact]
+    public async Task RegisterBusiness_WithoutCoordinates_Returns400()
+    {
+        var response = await _client.PostAsJsonAsync("/api/auth/register/business", new
+        {
+            email = "missing_coords@test.com",
+            password = "Test1234",
+            username = "missing_coords",
+            name = "Missing Coords Owner",
+            profilePhoto = (string?)null,
+            nombreEstablecimiento = "Bookdrop Missing Coords",
+            addressText = "Calle Missing 1, Sevilla"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RegisterBusiness_WithZeroCoordinates_Returns400()
+    {
+        var response = await _client.PostAsJsonAsync("/api/auth/register/business", new
+        {
+            email = "zero_coords@test.com",
+            password = "Test1234",
+            username = "zero_coords",
+            name = "Zero Coords Owner",
+            profilePhoto = (string?)null,
+            nombreEstablecimiento = "Bookdrop Zero Coords",
+            addressText = "Calle Zero 1, Sevilla",
+            latitud = 0.0,
+            longitud = 0.0
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RegisterBusiness_WithEnglishCoordinateNames_IsVisibleInNearbyMap()
+    {
+        var registerResponse = await _client.PostAsJsonAsync("/api/auth/register/business", new
+        {
+            email = "english_coords@test.com",
+            password = "Test1234",
+            username = "english_coords",
+            name = "English Coords Owner",
+            profilePhoto = (string?)null,
+            nombreEstablecimiento = "Bookdrop English Coords",
+            addressText = "Calle Alias 1, Sevilla",
+            latitude = 37.3886,
+            longitude = -5.9823
+        });
+        Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
+
+        var (userToken, _) = await RegisterUser(
+            _client,
+            "map_viewer@test.com",
+            "map_viewer");
+
+        SetAuth(_client, userToken);
+        var nearbyResponse = await _client.GetAsync("/api/bookspots/nearby?latitude=37.3886&longitude=-5.9823&radiusKm=10");
+        Assert.Equal(HttpStatusCode.OK, nearbyResponse.StatusCode);
+
+        var body = await nearbyResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var exists = body.EnumerateArray().Any(x =>
+            x.GetProperty("isBookdrop").GetBoolean() &&
+            x.GetProperty("nombre").GetString() == "Bookdrop English Coords");
+
+        Assert.True(exists);
+        ClearAuth(_client);
+    }
+
+    [Fact]
     public async Task GetBookdropPerfil_WithValidToken_Returns200()
     {
         var (token, _) = await RegisterBookdrop(_client,
@@ -174,6 +245,33 @@ public class BookdropControllerTests(WebAppFixture fixture) : IClassFixture<WebA
     }
 
     // ── CASO POSITIVO: DELETE /api/bookdrop/perfil ──
+
+    [Fact]
+    public async Task PatchBookdropPerfil_WithEnglishCoordinateNames_UpdatesCoordinates()
+    {
+        var (token, _) = await RegisterBookdrop(_client,
+            "patch_alias@test.com", "patch_alias", "Libreria Alias");
+
+        SetAuth(_client, token);
+
+        var patchResponse = await _client.PatchAsJsonAsync("/api/bookdrop/perfil", new
+        {
+            latitude = 37.4001,
+            longitude = -5.9901
+        });
+        Assert.Equal(HttpStatusCode.OK, patchResponse.StatusCode);
+
+        var getResponse = await _client.GetAsync("/api/bookdrop/perfil");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+
+        var body = await getResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var lat = body.GetProperty("latitud").GetDouble();
+        var lon = body.GetProperty("longitud").GetDouble();
+
+        Assert.InRange(lat, 37.4000, 37.4002);
+        Assert.InRange(lon, -5.9902, -5.9900);
+        ClearAuth(_client);
+    }
 
     [Fact]
     public async Task DeleteBookdropPerfil_WithValidToken_Returns200()

@@ -30,14 +30,15 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
 
         var results = await (
             from b in db.Bookspots
-            join bu in db.Users on b.CreatedByUserId equals bu.Id
+            join bu in db.Users on (b.CreatedByUserId ?? b.OwnerId) equals bu.Id into creators
+            from creator in creators.DefaultIfEmpty()
             where b.Status == BookspotStatus.ACTIVE
                && b.Location.IsWithinDistance(userLocation, radiusMeters)
             select new
             {
                 Bookspot = b,
                 Distance = b.Location.Distance(userLocation),
-                Username = bu.Username
+                Username = creator != null ? creator.Username : string.Empty
             }
         ).ToListAsync(ct);
 
@@ -48,6 +49,11 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
 
     public async Task<Bookspot> CreateAsync(Bookspot bookspot, CancellationToken ct = default)
     {
+        // Autocorreccion defensiva: si hubo inserts manuales, realineamos la secuencia.
+        await db.Database.ExecuteSqlRawAsync(
+            "SELECT setval('bookspots_id_seq', COALESCE((SELECT MAX(id) FROM bookspots), 0) + 1, false)",
+            ct);
+
         db.Bookspots.Add(bookspot);
         await db.SaveChangesAsync(ct);
         return bookspot;

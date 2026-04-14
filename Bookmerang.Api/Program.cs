@@ -300,8 +300,13 @@ using (var scope = app.Services.CreateScope())
         "SELECT setval('matches_id_seq',           COALESCE((SELECT MAX(id) FROM matches), 0) + 1, false)",
         "SELECT setval('messages_id_seq',          COALESCE((SELECT MAX(id) FROM messages), 0) + 1, false)",
         "SELECT setval('exchanges_id_seq',         COALESCE((SELECT MAX(id) FROM exchanges), 0) + 1, false)",
+        "SELECT setval('exchange_meetings_id_seq', COALESCE((SELECT MAX(id) FROM exchange_meetings), 0) + 1, false)",
+        "SELECT setval('bookspots_id_seq',         COALESCE((SELECT MAX(id) FROM bookspots), 0) + 1, false)",
+        "SELECT setval('bookspot_validations_id_seq', COALESCE((SELECT MAX(id) FROM bookspot_validations), 0) + 1, false)",
         "SELECT setval('user_preferences_id_seq',  COALESCE((SELECT MAX(id) FROM user_preferences), 0) + 1, false)",
         "SELECT setval('communities_id_seq',       COALESCE((SELECT MAX(id) FROM communities), 0) + 1, false)",
+        "SELECT setval('subscriptions_id_seq',     COALESCE((SELECT MAX(id) FROM subscriptions), 0) + 1, false)",
+        "SELECT setval('inkdrops_history_id_seq',  COALESCE((SELECT MAX(id) FROM inkdrops_history), 0) + 1, false)",
     };
     foreach (var sql in sequences)
         db.Database.ExecuteSqlRaw(sql);

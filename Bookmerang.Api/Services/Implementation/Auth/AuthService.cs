@@ -469,6 +469,10 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
             await _db.SaveChangesAsync();
 
             // 2. Crear Bookspot sin owner (aún no existe bookdrop_user)
+            // Defensive sequence realignment for environments with manual seeded IDs.
+            await _db.Database.ExecuteSqlRawAsync(
+                "SELECT setval('bookspots_id_seq', COALESCE((SELECT MAX(id) FROM bookspots), 0) + 1, false)");
+
             var bookspot = new Bookspot
             {
                 Nombre = nombreEstablecimiento,
