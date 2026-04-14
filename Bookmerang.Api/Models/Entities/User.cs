@@ -30,6 +30,10 @@ public class User
     [Column("inkdrops_last_updated")]
     public string InkdropsLastUpdated { get; set; } = "1970-01";
 
+    [Required]
+    [Column("tutorial_completed")]
+    public bool TutorialCompleted { get; set; } = false;
+
     // Navigation properties
     [ForeignKey("Id")]
     public BaseUser BaseUser { get; set; } = null!;
