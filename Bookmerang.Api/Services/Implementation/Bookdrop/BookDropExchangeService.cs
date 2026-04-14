@@ -3,14 +3,16 @@ using Bookmerang.Api.Models.DTOs.Bookdrop;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Bookdrop;
 using Bookmerang.Api.Services.Interfaces.ExchangeInterfaces;
+using Bookmerang.Api.Services.Interfaces.Inkdrops;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bookmerang.Api.Services.Implementation.Bookdrop;
 
-public class BookDropExchangeService(AppDbContext db, IExchangeMeetingService meetingService) : IBookDropExchangeService
+public class BookDropExchangeService(AppDbContext db, IExchangeMeetingService meetingService, IInkdropsService inkdropsService) : IBookDropExchangeService
 {
     private readonly AppDbContext _db = db;
     private readonly IExchangeMeetingService _meetingService = meetingService;
+    private readonly IInkdropsService _inkdropsService = inkdropsService;
 
     public async Task<List<BookDropExchangeDto>> GetActiveExchanges(int bookspotId)
     {
@@ -96,6 +98,7 @@ public class BookDropExchangeService(AppDbContext db, IExchangeMeetingService me
         book2.Status = BookStatus.EXCHANGED;
 
         await _meetingService.InvalidateCollateralExchanges(exchange.Match.Book1Id, exchange.Match.Book2Id, exchange.MatchId);
+        await _inkdropsService.GrantExchangeInkdropsAsync(exchange.Match.User1Id, exchange.Match.User2Id);
 
         await _db.SaveChangesAsync();
         return await BuildDto(meeting);

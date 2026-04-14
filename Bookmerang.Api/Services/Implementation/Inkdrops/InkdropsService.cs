@@ -89,7 +89,6 @@ public class InkdropsService(AppDbContext db, IStreakService streakService) : II
 
         progress.XpTotal += finalPoints;
         progress.UpdatedAt = DateTime.UtcNow;
-        _db.UserProgresses.Update(progress);
     }
 
     private async Task RecordInkdropsHistoryAsync(Guid userId, InkdropsActionType? actionType, int finalPoints)
