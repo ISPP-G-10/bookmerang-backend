@@ -115,6 +115,43 @@ public class BookspotServiceBasicTests(
             .FirstAsync();
     }
 
+    private async Task<int> SeedBookdropBookspotRaw(
+        Guid bookdropId,
+        string supabaseId,
+        string username,
+        Point? location = null)
+    {
+        var loc = location ?? Madrid;
+        var lon = loc.X.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var lat = loc.Y.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var wkt = $"SRID=4326;POINT({lon} {lat})";
+        var nombre = $"Bookdrop-{Guid.NewGuid():N}";
+
+        await _db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO base_users (id, supabase_id, email, username, nombre, foto_perfil_url, type, location, created_at, updated_at)
+            VALUES ({bookdropId}, {supabaseId}, {username + "@test.com"}, {username}, {username}, '', 1, ST_GeomFromEWKT({wkt}), NOW(), NOW())");
+
+        await _db.Database.ExecuteSqlRawAsync(@$"
+            INSERT INTO bookspots (nombre, address_text, location, is_bookdrop, created_by_user_id, status, created_at, updated_at)
+            VALUES ('{nombre}', 'Calle Bookdrop 1', ST_GeomFromEWKT('{wkt}'), true, NULL, 'ACTIVE'::bookspot_status, NOW(), NOW())");
+
+        var bookspotId = await _db.Bookspots
+            .OrderByDescending(b => b.Id)
+            .Select(b => b.Id)
+            .FirstAsync();
+
+        await _db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO bookdrop_users (id, book_spot_id)
+            VALUES ({bookdropId}, {bookspotId})");
+
+        await _db.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE bookspots
+            SET owner_id = {bookdropId}
+            WHERE id = {bookspotId}");
+
+        return bookspotId;
+    }
+
     private void Log(IEnumerable<BookspotDTO> items)
     {
         foreach (var b in items)
@@ -304,6 +341,23 @@ public class BookspotServiceBasicTests(
         Assert.Equal(2, result.Count);
         Assert.True(result[0].DistanceKm < result[1].DistanceKm,
             "El resultado debe estar ordenado de más cercano a más lejano");
+    }
+
+    [Fact]
+    public async Task GetNearbyActiveAsync_BookdropWithoutCreatedBy_IsReturned()
+    {
+        await SeedBookdropBookspotRaw(
+            new Guid("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            "sup-bookdrop-c",
+            "bookdropC",
+            MadridCerca);
+
+        var result = await _service.GetNearbyActiveAsync(Madrid.Y, Madrid.X, radiusKm: 10);
+        Log(result);
+
+        Assert.Single(result);
+        Assert.True(result[0].IsBookdrop);
+        Assert.Equal("bookdropC", result[0].CreatorUsername);
     }
 
     [Fact]

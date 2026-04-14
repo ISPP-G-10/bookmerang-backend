@@ -22,7 +22,7 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
             .Where(b => b.Status == BookspotStatus.PENDING)
             .ToListAsync(ct);
 
-    public async Task<List<(Bookspot bookspot, double distanceMeters, string creatorUsername)>> GetNearbyActiveAsync(
+    public async Task<List<(Bookspot bookspot, double distanceMeters, string? creatorUsername)>> GetNearbyActiveAsync(
     double latitude, double longitude, double radiusKm, CancellationToken ct = default)
     {
         var userLocation = new Point(longitude, latitude) { SRID = 4326 };
@@ -30,19 +30,30 @@ public class BookspotRepository(AppDbContext db) : IBookspotRepository
 
         var results = await (
             from b in db.Bookspots
-            join bu in db.Users on b.CreatedByUserId equals bu.Id
+            join creator in db.Users on b.CreatedByUserId equals creator.Id into creatorJoin
+            from creator in creatorJoin.DefaultIfEmpty()
+            join owner in db.Users on b.OwnerId equals owner.Id into ownerJoin
+            from owner in ownerJoin.DefaultIfEmpty()
             where b.Status == BookspotStatus.ACTIVE
                && b.Location.IsWithinDistance(userLocation, radiusMeters)
             select new
             {
                 Bookspot = b,
                 Distance = b.Location.Distance(userLocation),
-                Username = bu.Username
+                Username = (string?)(
+                    creator != null
+                        ? creator.Username
+                        : owner != null
+                            ? owner.Username
+                            : null)
             }
         ).ToListAsync(ct);
 
         return results
-            .Select(x => (x.Bookspot, x.Distance, x.Username))
+            .Select(x => (
+                bookspot: x.Bookspot,
+                distanceMeters: x.Distance,
+                creatorUsername: (string?)x.Username))
             .ToList();
     }
 
