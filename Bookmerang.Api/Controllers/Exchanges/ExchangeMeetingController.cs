@@ -188,37 +188,4 @@ public class ExchangeMeetingController(IExchangeMeetingService meetingService, A
         var acceptedMeeting = await _meetingService.AcceptMeeting(meeting);
         return Ok(acceptedMeeting.ToDto());
     }
-
-    /// DELETE /api/exchangemeeting/{meetingId}
-    /// Desestima una propuesta/quedada existente y la marca como REFUSED.
-    [HttpDelete("{meetingId}")]
-    public async Task<IActionResult> RejectExchangeMeeting(int meetingId)
-    {
-        var userId = await GetCurrentUserId();
-        if (userId == null) return Unauthorized();
-
-        var meeting = await _meetingService.GetExchangeMeeting(meetingId);
-        if (meeting == null) return NotFound($"ExchangeMeeting con id {meetingId} no encontrado.");
-
-        var exchange = await _exchangeService.GetExchangeWithMatch(meeting.ExchangeId);
-        if (exchange == null) return NotFound($"Exchange con id {meeting.ExchangeId} no encontrado.");
-
-        if (!ExchangeAuthorizationHelper.IsAdminOrExchangeMember(User, userId.Value, exchange))
-            throw new ForbiddenException("No tienes permiso para desestimar esta quedada.");
-
-        if (exchange.Status is ExchangeStatus.COMPLETED or ExchangeStatus.REJECTED or ExchangeStatus.INCIDENT)
-            return BadRequest("No se puede desestimar la quedada porque el intercambio ya está cerrado.");
-
-        if (meeting.MeetingStatus == ExchangeMeetingStatus.REFUSED)
-            return NoContent();
-
-        meeting.MeetingStatus = ExchangeMeetingStatus.REFUSED;
-        meeting.MarkAsCompletedByUser1 = false;
-        meeting.MarkAsCompletedByUser2 = false;
-        meeting.Pin = null;
-        meeting.BookDropStatus = null;
-
-        await _db.SaveChangesAsync();
-        return NoContent();
-    }
 }
