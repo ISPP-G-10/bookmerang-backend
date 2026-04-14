@@ -18,43 +18,139 @@ public class StripeSubscriptionService(
     private readonly IConfiguration _config = config;
     private readonly ILogger<StripeSubscriptionService> _logger = logger;
 
+    public bool IsBookdropPaymentEnabled()
+    {
+        var secret = _config["Stripe:SecretKey"] ?? Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
+        var priceId = _config["Stripe:BookdropPriceId"];
+        return !string.IsNullOrWhiteSpace(secret) && !string.IsNullOrWhiteSpace(priceId);
+    }
+
     // ── Checkout Session ──────────────────────────────────────────────
 
-    public async Task<string> CreateCheckoutSessionAsync(Guid userId)
-    {
-        var priceId = _config["Stripe:PremiumPriceId"]
-            ?? throw new InvalidOperationException("Stripe:PremiumPriceId not configured");
+    public Task<string> CreateCheckoutSessionAsync(Guid userId) =>
+        CreateCheckoutSessionInternalAsync(
+            userId,
+            _config["Stripe:PremiumPriceId"],
+            _config["Stripe:SuccessUrl"] ?? "https://bookmerang.app/subscription?status=success",
+            _config["Stripe:CancelUrl"] ?? "https://bookmerang.app/subscription?status=cancelled",
+            "premium");
 
-        // Get or create a Stripe Customer
-        var baseUser = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
-        var email = baseUser?.Email ?? "";
-        var customerId = await GetOrCreateStripeCustomerAsync(userId, email);
+    public Task<string> CreateBookdropCheckoutSessionAsync(Guid userId) =>
+        CreateCheckoutSessionInternalAsync(
+            userId,
+            _config["Stripe:BookdropPriceId"],
+            _config["Stripe:BookdropSuccessUrl"] ?? _config["Stripe:SuccessUrl"] ?? "https://bookmerang.app/subscription?status=success",
+            _config["Stripe:BookdropCancelUrl"] ?? _config["Stripe:CancelUrl"] ?? "https://bookmerang.app/subscription?status=cancelled",
+            "bookdrop");
+
+    public async Task<string> CreateBookdropRegistrationCheckoutSessionAsync(string email)
+    {
+        var priceId = _config["Stripe:BookdropPriceId"]
+            ?? throw new InvalidOperationException("Stripe:BookdropPriceId not configured");
+
+        var successUrl = _config["Stripe:BookdropRegisterSuccessUrl"]
+            ?? _config["Stripe:BookdropSuccessUrl"]
+            ?? _config["Stripe:SuccessUrl"]
+            ?? "http://localhost:8081/register/business?status=success&session_id={CHECKOUT_SESSION_ID}";
+
+        if (!successUrl.Contains("{CHECKOUT_SESSION_ID}", StringComparison.Ordinal))
+            successUrl += (successUrl.Contains('?') ? "&" : "?") + "session_id={CHECKOUT_SESSION_ID}";
+
+        var cancelUrl = _config["Stripe:BookdropRegisterCancelUrl"]
+            ?? _config["Stripe:BookdropCancelUrl"]
+            ?? _config["Stripe:CancelUrl"]
+            ?? "http://localhost:8081/register/business?status=cancelled";
 
         var options = new SessionCreateOptions
         {
-            Customer = customerId,
+            CustomerEmail = email,
             PaymentMethodTypes = new List<string> { "card" },
             LineItems = new List<SessionLineItemOptions>
             {
                 new() { Price = priceId, Quantity = 1 }
             },
             Mode = "subscription",
-            SuccessUrl = _config["Stripe:SuccessUrl"] ?? "https://bookmerang.app/subscription?status=success",
-            CancelUrl = _config["Stripe:CancelUrl"] ?? "https://bookmerang.app/subscription?status=cancelled",
-            ClientReferenceId = userId.ToString(),
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
             SubscriptionData = new SessionSubscriptionDataOptions
             {
                 Metadata = new Dictionary<string, string>
                 {
-                    { "bookmerang_user_id", userId.ToString() }
+                    { "bookmerang_subscription_context", "bookdrop_registration" }
                 }
             }
         };
 
-        var service = new SessionService();
-        var session = await service.CreateAsync(options);
-
+        var session = await new SessionService().CreateAsync(options);
         return session.Url ?? throw new InvalidOperationException("Stripe session URL is null");
+    }
+
+    public async Task<string?> ValidateAndGetBookdropRegistrationSubscriptionIdAsync(string checkoutSessionId, string expectedEmail)
+    {
+        if (string.IsNullOrWhiteSpace(checkoutSessionId))
+            return null;
+
+        Session? session;
+        try
+        {
+            session = await new SessionService().GetAsync(checkoutSessionId);
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (session == null) return null;
+        if (!string.Equals(session.Mode, "subscription", StringComparison.OrdinalIgnoreCase)) return null;
+        if (!string.Equals(session.Status, "complete", StringComparison.OrdinalIgnoreCase)) return null;
+        if (!string.Equals(session.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(session.PaymentStatus, "no_payment_required", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (string.IsNullOrWhiteSpace(session.SubscriptionId))
+            return null;
+
+        var checkoutEmail = session.CustomerDetails?.Email ?? session.CustomerEmail;
+        if (!string.IsNullOrWhiteSpace(expectedEmail) &&
+            !string.Equals(checkoutEmail?.Trim(), expectedEmail.Trim(), StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var lineItems = await new SessionService().ListLineItemsAsync(
+            checkoutSessionId,
+            new SessionLineItemListOptions { Limit = 10 });
+
+        var expectedPriceId = _config["Stripe:BookdropPriceId"];
+        if (!string.IsNullOrWhiteSpace(expectedPriceId))
+        {
+            var hasExpectedPrice = lineItems.Data.Any(li => li.Price?.Id == expectedPriceId);
+            if (!hasExpectedPrice) return null;
+        }
+
+        var alreadyUsed = await _db.Subscriptions
+            .AsNoTracking()
+            .AnyAsync(s => s.Platform == SubscriptionPlatform.STRIPE &&
+                           s.PlatformSubscriptionId == session.SubscriptionId);
+        if (alreadyUsed) return null;
+
+        return session.SubscriptionId;
+    }
+
+    public async Task LinkBookdropSubscriptionToUserAsync(Guid userId, string stripeSubscriptionId)
+    {
+        if (string.IsNullOrWhiteSpace(stripeSubscriptionId))
+            throw new InvalidOperationException("Stripe subscription id is required");
+
+        var stripeSubService = new Stripe.SubscriptionService();
+        await stripeSubService.UpdateAsync(stripeSubscriptionId, new Stripe.SubscriptionUpdateOptions
+        {
+            Metadata = new Dictionary<string, string>
+            {
+                { "bookmerang_user_id", userId.ToString() },
+                { "bookmerang_subscription_context", "bookdrop_registration" }
+            }
+        });
+
+        await EnsureSubscriptionCreated(userId, stripeSubscriptionId);
     }
 
     // ── Cancel Subscription ───────────────────────────────────────────
@@ -200,6 +296,48 @@ public class StripeSubscriptionService(
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
+
+    private async Task<string> CreateCheckoutSessionInternalAsync(
+        Guid userId,
+        string? priceId,
+        string successUrl,
+        string cancelUrl,
+        string subscriptionContext)
+    {
+        if (string.IsNullOrWhiteSpace(priceId))
+            throw new InvalidOperationException("Stripe price id not configured for the requested checkout flow.");
+
+        var baseUser = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId)
+            ?? throw new InvalidOperationException($"User {userId} not found");
+
+        var customerId = await GetOrCreateStripeCustomerAsync(userId, baseUser.Email);
+
+        var options = new SessionCreateOptions
+        {
+            Customer = customerId,
+            PaymentMethodTypes = new List<string> { "card" },
+            LineItems = new List<SessionLineItemOptions>
+            {
+                new() { Price = priceId, Quantity = 1 }
+            },
+            Mode = "subscription",
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            ClientReferenceId = userId.ToString(),
+            SubscriptionData = new SessionSubscriptionDataOptions
+            {
+                Metadata = new Dictionary<string, string>
+                {
+                    { "bookmerang_user_id", userId.ToString() },
+                    { "bookmerang_subscription_context", subscriptionContext }
+                }
+            }
+        };
+
+        var service = new SessionService();
+        var session = await service.CreateAsync(options);
+        return session.Url ?? throw new InvalidOperationException("Stripe session URL is null");
+    }
 
     private async Task EnsureSubscriptionCreated(Guid userId, string stripeSubscriptionId, Stripe.Subscription? stripeSub = null)
     {

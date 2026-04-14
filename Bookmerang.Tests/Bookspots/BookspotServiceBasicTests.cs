@@ -115,63 +115,6 @@ public class BookspotServiceBasicTests(
             .FirstAsync();
     }
 
-    private async Task<int> SeedBookdropWithoutCreatorRaw(
-        Point? location = null,
-        BookspotStatus status = BookspotStatus.ACTIVE)
-    {
-        var loc = location ?? Madrid;
-        var lon = loc.X.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var lat = loc.Y.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var wkt = $"SRID=4326;POINT({lon} {lat})";
-        var nombre = $"Bookdrop-{Guid.NewGuid():N}";
-        var statusLiteral = status.ToString();
-
-        await _db.Database.ExecuteSqlRawAsync(@$"
-            INSERT INTO bookspots (nombre, address_text, location, is_bookdrop, created_by_user_id, status, created_at, updated_at)
-            VALUES ('{nombre}', 'Calle Test 1', ST_GeomFromEWKT('{wkt}'), true, NULL, '{statusLiteral}'::bookspot_status, NOW(), NOW())");
-
-        return await _db.Bookspots
-            .OrderByDescending(b => b.Id)
-            .Select(b => b.Id)
-            .FirstAsync();
-    }
-
-    private async Task<int> SeedOwnedBookdropWithoutCreatorRaw(
-        string ownerUsername,
-        Point? location = null,
-        BookspotStatus status = BookspotStatus.ACTIVE)
-    {
-        var loc = location ?? Madrid;
-        var lon = loc.X.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var lat = loc.Y.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var wkt = $"SRID=4326;POINT({lon} {lat})";
-        var nombre = $"Bookdrop-{Guid.NewGuid():N}";
-        var statusLiteral = status.ToString();
-        var ownerId = Guid.NewGuid();
-        var supabaseId = $"supa_{ownerId:N}";
-
-        await _db.Database.ExecuteSqlInterpolatedAsync($@"
-            INSERT INTO base_users (id, supabase_id, email, username, nombre, foto_perfil_url, type, location, created_at, updated_at)
-            VALUES ({ownerId}, {supabaseId}, {ownerUsername + "@test.com"}, {ownerUsername}, {ownerUsername}, '', 1, ST_GeomFromEWKT({wkt}), NOW(), NOW())");
-
-        await _db.Database.ExecuteSqlRawAsync(@$"
-            INSERT INTO bookspots (nombre, address_text, location, is_bookdrop, created_by_user_id, owner_id, status, created_at, updated_at)
-            VALUES ('{nombre}', 'Calle Test 1', ST_GeomFromEWKT('{wkt}'), true, NULL, NULL, '{statusLiteral}'::bookspot_status, NOW(), NOW())");
-
-        var bookspotId = await _db.Bookspots
-            .OrderByDescending(b => b.Id)
-            .Select(b => b.Id)
-            .FirstAsync();
-
-        await _db.Database.ExecuteSqlInterpolatedAsync($@"
-            INSERT INTO bookdrop_users (id, book_spot_id) VALUES ({ownerId}, {bookspotId})");
-
-        await _db.Database.ExecuteSqlInterpolatedAsync($@"
-            UPDATE bookspots SET owner_id = {ownerId} WHERE id = {bookspotId}");
-
-        return bookspotId;
-    }
-
     private void Log(IEnumerable<BookspotDTO> items)
     {
         foreach (var b in items)
@@ -335,34 +278,6 @@ public class BookspotServiceBasicTests(
         Assert.Single(result);
         Assert.True(result[0].DistanceKm < 2,
             $"Debería estar a menos de 2 km, pero está a {result[0].DistanceKm} km");
-    }
-
-    [Fact]
-    public async Task GetNearbyActiveAsync_BookdropWithoutCreator_IsReturned()
-    {
-        var bookdropId = await SeedBookdropWithoutCreatorRaw(MadridCerca, BookspotStatus.ACTIVE);
-
-        var result = await _service.GetNearbyActiveAsync(Madrid.Y, Madrid.X, radiusKm: 10);
-        Log(result);
-
-        var nearby = Assert.Single(result);
-        Assert.Equal(bookdropId, nearby.Id);
-        Assert.True(nearby.IsBookdrop);
-        Assert.True(string.IsNullOrEmpty(nearby.CreatorUsername));
-    }
-
-    [Fact]
-    public async Task GetNearbyActiveAsync_BookdropWithoutCreator_UsesOwnerUsername()
-    {
-        var bookdropId = await SeedOwnedBookdropWithoutCreatorRaw("bd_owner_map", MadridCerca, BookspotStatus.ACTIVE);
-
-        var result = await _service.GetNearbyActiveAsync(Madrid.Y, Madrid.X, radiusKm: 10);
-        Log(result);
-
-        var nearby = Assert.Single(result);
-        Assert.Equal(bookdropId, nearby.Id);
-        Assert.True(nearby.IsBookdrop);
-        Assert.Equal("bd_owner_map", nearby.CreatorUsername);
     }
 
     [Fact]

@@ -8,7 +8,6 @@ using NetTopologySuite.Geometries;
 using Bookmerang.Api.Models.DTOs;
 using Bookmerang.Api.Services.Interfaces.Subscriptions;
 using Stripe;
-using System.Text.Json.Serialization;
 
 namespace Bookmeran.Controllers;
 
@@ -95,12 +94,8 @@ public class AuthController : ControllerBase
                 return BadRequest("No se ha podido verificar el pago en Stripe.");
         }
 
-        // Evita crear bookdrops en (0,0) cuando el cliente no ha resuelto coordenadas.
-        if (request.Latitud == 0 && request.Longitud == 0)
-            return BadRequest("No se pudo resolver la ubicacion del establecimiento. Verifica la direccion e intentalo de nuevo.");
-
         var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
-        var location = factory.CreatePoint(new Coordinate(request.Longitud!.Value, request.Latitud!.Value));
+        var location = factory.CreatePoint(new Coordinate(request.Longitud, request.Latitud));
 
         var (usuario, yaExistia, error) = await _authService.RegisterBusiness(
             request.Email,
@@ -317,39 +312,13 @@ public class RegisterBusinessRequest
     [StringLength(200, MinimumLength = 5)]
     public string AddressText { get; set; } = string.Empty;
 
-    private double? _latitud;
-    private double? _longitud;
-
     [Required]
     [Range(-90, 90)]
-    [JsonPropertyName("latitud")]
-    public double? Latitud
-    {
-        get => _latitud;
-        set => _latitud = value;
-    }
+    public double Latitud { get; set; }
 
     [Required]
     [Range(-180, 180)]
-    [JsonPropertyName("longitud")]
-    public double? Longitud
-    {
-        get => _longitud;
-        set => _longitud = value;
-    }
-
-    // Backward-compatible aliases used by some clients.
-    [JsonPropertyName("latitude")]
-    public double? Latitude
-    {
-        set => _latitud = value;
-    }
-
-    [JsonPropertyName("longitude")]
-    public double? Longitude
-    {
-        set => _longitud = value;
-    }
+    public double Longitud { get; set; }
 
     public string? StripeSessionId { get; set; }
 }

@@ -61,12 +61,27 @@ if (!string.IsNullOrEmpty(stripeSecretKeyEnv))
 var stripePriceId = Environment.GetEnvironmentVariable("STRIPE_PREMIUM_PRICE_ID");
 if (!string.IsNullOrEmpty(stripePriceId))
     builder.Configuration["Stripe:PremiumPriceId"] = stripePriceId;
+var stripeBookdropPriceId = Environment.GetEnvironmentVariable("STRIPE_BOOKDROP_PRICE_ID");
+if (!string.IsNullOrEmpty(stripeBookdropPriceId))
+    builder.Configuration["Stripe:BookdropPriceId"] = stripeBookdropPriceId;
 var stripeSuccessUrl = Environment.GetEnvironmentVariable("STRIPE_SUCCESS_URL");
 if (!string.IsNullOrEmpty(stripeSuccessUrl))
     builder.Configuration["Stripe:SuccessUrl"] = stripeSuccessUrl;
 var stripeCancelUrl = Environment.GetEnvironmentVariable("STRIPE_CANCEL_URL");
 if (!string.IsNullOrEmpty(stripeCancelUrl))
     builder.Configuration["Stripe:CancelUrl"] = stripeCancelUrl;
+var stripeBookdropSuccessUrl = Environment.GetEnvironmentVariable("STRIPE_BOOKDROP_SUCCESS_URL");
+if (!string.IsNullOrEmpty(stripeBookdropSuccessUrl))
+    builder.Configuration["Stripe:BookdropSuccessUrl"] = stripeBookdropSuccessUrl;
+var stripeBookdropCancelUrl = Environment.GetEnvironmentVariable("STRIPE_BOOKDROP_CANCEL_URL");
+if (!string.IsNullOrEmpty(stripeBookdropCancelUrl))
+    builder.Configuration["Stripe:BookdropCancelUrl"] = stripeBookdropCancelUrl;
+var stripeBookdropRegisterSuccessUrl = Environment.GetEnvironmentVariable("STRIPE_BOOKDROP_REGISTER_SUCCESS_URL");
+if (!string.IsNullOrEmpty(stripeBookdropRegisterSuccessUrl))
+    builder.Configuration["Stripe:BookdropRegisterSuccessUrl"] = stripeBookdropRegisterSuccessUrl;
+var stripeBookdropRegisterCancelUrl = Environment.GetEnvironmentVariable("STRIPE_BOOKDROP_REGISTER_CANCEL_URL");
+if (!string.IsNullOrEmpty(stripeBookdropRegisterCancelUrl))
+    builder.Configuration["Stripe:BookdropRegisterCancelUrl"] = stripeBookdropRegisterCancelUrl;
 var stripePublishableKey = Environment.GetEnvironmentVariable("STRIPE_PUBLISHABLE_KEY");
 if (!string.IsNullOrEmpty(stripePublishableKey))
     builder.Configuration["Stripe:PublishableKey"] = stripePublishableKey;
@@ -292,6 +307,30 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.ExecuteSqlRaw("ALTER TABLE base_users ADD COLUMN IF NOT EXISTS password_hash text;");
+    db.Database.ExecuteSqlRaw("""
+        DO $$
+        BEGIN
+            IF to_regclass('public.subscriptions') IS NULL OR to_regclass('public.base_users') IS NULL THEN
+                RETURN;
+            END IF;
+
+            IF EXISTS (
+                SELECT 1
+                FROM pg_constraint c
+                WHERE c.conname = 'subscriptions_user_id_fkey'
+                  AND c.conrelid = 'public.subscriptions'::regclass
+            ) THEN
+                ALTER TABLE public.subscriptions DROP CONSTRAINT subscriptions_user_id_fkey;
+            END IF;
+
+            ALTER TABLE public.subscriptions
+                ADD CONSTRAINT subscriptions_user_id_fkey
+                FOREIGN KEY (user_id) REFERENCES public.base_users(id) ON DELETE CASCADE;
+        EXCEPTION
+            WHEN duplicate_object THEN
+                NULL;
+        END $$;
+        """);
     var sequences = new[]
     {
         "SELECT setval('books_id_seq',            COALESCE((SELECT MAX(id) FROM books), 0) + 1, false)",
@@ -300,13 +339,8 @@ using (var scope = app.Services.CreateScope())
         "SELECT setval('matches_id_seq',           COALESCE((SELECT MAX(id) FROM matches), 0) + 1, false)",
         "SELECT setval('messages_id_seq',          COALESCE((SELECT MAX(id) FROM messages), 0) + 1, false)",
         "SELECT setval('exchanges_id_seq',         COALESCE((SELECT MAX(id) FROM exchanges), 0) + 1, false)",
-        "SELECT setval('exchange_meetings_id_seq', COALESCE((SELECT MAX(id) FROM exchange_meetings), 0) + 1, false)",
-        "SELECT setval('bookspots_id_seq',         COALESCE((SELECT MAX(id) FROM bookspots), 0) + 1, false)",
-        "SELECT setval('bookspot_validations_id_seq', COALESCE((SELECT MAX(id) FROM bookspot_validations), 0) + 1, false)",
         "SELECT setval('user_preferences_id_seq',  COALESCE((SELECT MAX(id) FROM user_preferences), 0) + 1, false)",
         "SELECT setval('communities_id_seq',       COALESCE((SELECT MAX(id) FROM communities), 0) + 1, false)",
-        "SELECT setval('subscriptions_id_seq',     COALESCE((SELECT MAX(id) FROM subscriptions), 0) + 1, false)",
-        "SELECT setval('inkdrops_history_id_seq',  COALESCE((SELECT MAX(id) FROM inkdrops_history), 0) + 1, false)",
     };
     foreach (var sql in sequences)
         db.Database.ExecuteSqlRaw(sql);

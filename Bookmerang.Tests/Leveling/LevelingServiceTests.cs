@@ -241,4 +241,28 @@ public class LevelingServiceTests : IAsyncLifetime
         Assert.True(level1 <= level2);
         Assert.True(level2 < level3);
     }
+
+    [Fact]
+    public async Task GetXpRequiredForLevel_ConcurrentAccess_IsThreadSafe()
+    {
+        var tasks = new List<Task>();
+
+        for (var t = 0; t < 32; t++)
+        {
+            tasks.Add(Task.Run(() =>
+            {
+                for (var i = 0; i < 5000; i++)
+                {
+                    var level = (i % 70) - 10;
+                    var xp = _service.GetXpRequiredForLevel(level);
+                    Assert.True(xp >= 0);
+                }
+            }));
+        }
+
+        await Task.WhenAll(tasks);
+
+        Assert.Equal(0, _service.GetXpRequiredForLevel(1));
+        Assert.Equal(100, _service.GetXpRequiredForLevel(2));
+    }
 }
