@@ -48,6 +48,23 @@ public class SubscriptionServiceTests : IAsyncLifetime
         return id;
     }
 
+    private async Task<Guid> SeedBookdropUser()
+    {
+        var id = Guid.NewGuid();
+        _db.Users.Add(new BaseUser
+        {
+            Id = id,
+            SupabaseId = $"sup-bd-{id}",
+            Email = $"bd_{id}@test.com",
+            Username = $"bookdrop_{id}",
+            Name = "Bookdrop Test",
+            UserType = BaseUserType.BOOKDROP_USER,
+            Location = MakePoint()
+        });
+        await _db.SaveChangesAsync();
+        return id;
+    }
+
     private async Task<Subscription> SeedActiveSubscription(Guid userId, DateTime? periodEnd = null)
     {
         var sub = new Subscription
@@ -88,6 +105,28 @@ public class SubscriptionServiceTests : IAsyncLifetime
         Assert.False(await _service.IsPremiumAsync(Guid.NewGuid()));
     }
 
+    [Fact]
+    public async Task HasActiveSubscriptionAsync_ActiveSubscription_ReturnsTrue()
+    {
+        var userId = await SeedUser(PricingPlan.FREE);
+        await SeedActiveSubscription(userId, DateTime.UtcNow.AddDays(10));
+
+        var hasActive = await _service.HasActiveSubscriptionAsync(userId);
+
+        Assert.True(hasActive);
+    }
+
+    [Fact]
+    public async Task HasActiveSubscriptionAsync_ExpiredSubscription_ReturnsFalse()
+    {
+        var userId = await SeedUser(PricingPlan.FREE);
+        await SeedActiveSubscription(userId, DateTime.UtcNow.AddDays(-1));
+
+        var hasActive = await _service.HasActiveSubscriptionAsync(userId);
+
+        Assert.False(hasActive);
+    }
+
     // ── CreateSubscriptionAsync ───────────────────────────────────────
 
     [Fact]
@@ -117,6 +156,20 @@ public class SubscriptionServiceTests : IAsyncLifetime
             _service.CreateSubscriptionAsync(
                 Guid.NewGuid(), SubscriptionPlatform.STRIPE, "sub_abc", null,
                 DateTime.UtcNow, DateTime.UtcNow.AddMonths(1)));
+    }
+
+    [Fact]
+    public async Task CreateSubscription_BookdropUser_CreatesRecord()
+    {
+        var userId = await SeedBookdropUser();
+        var start = DateTime.UtcNow;
+        var end = start.AddMonths(1);
+
+        var sub = await _service.CreateSubscriptionAsync(
+            userId, SubscriptionPlatform.STRIPE, "sub_bookdrop_123", null, start, end);
+
+        Assert.Equal(SubscriptionStatus.ACTIVE, sub.Status);
+        Assert.Equal(userId, sub.UserId);
     }
 
     // ── GetActiveSubscriptionAsync ────────────────────────────────────

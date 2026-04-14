@@ -8,7 +8,8 @@ namespace Bookmerang.Api.Services.Implementation.Leveling;
 public class LevelingService(AppDbContext db) : ILevelingService
 {
     private readonly AppDbContext _db = db;
-    private static readonly Dictionary<int, int> XpThresholdCache = new();
+    private const int MaxLevel = 50;
+    private static readonly int[] XpThresholds = BuildXpThresholds();
 
     public async Task<int> GetTotalXpAsync(Guid userId)
     {
@@ -35,8 +36,8 @@ public class LevelingService(AppDbContext db) : ILevelingService
             }
         }
 
-        if (currentLevel > 50)
-            currentLevel = 50;
+        if (currentLevel > MaxLevel)
+            currentLevel = MaxLevel;
 
         int xpForNextLevel = GetXpRequiredForLevel(currentLevel + 1);
         int xpInCurrentLevel = totalXp - xpForCurrentLevel;
@@ -67,15 +68,21 @@ public class LevelingService(AppDbContext db) : ILevelingService
     public int GetXpRequiredForLevel(int level)
     {
         if (level < 1) return 0;
-        if (level > 50) level = 50;
+        if (level > MaxLevel) level = MaxLevel;
 
-        if (XpThresholdCache.TryGetValue(level, out var cached))
-            return cached;
-        
-        int cumulativeXp = 0;
+        return XpThresholds[level];
+    }
+
+    private static int[] BuildXpThresholds()
+    {
+        var thresholds = new int[MaxLevel + 1];
+        var cumulativeXp = 0;
         double previousLevelXp = 100;
 
-        for (int lv = 2; lv <= level; lv++)
+        thresholds[0] = 0;
+        thresholds[1] = 0;
+
+        for (var lv = 2; lv <= MaxLevel; lv++)
         {
             if (lv == 2)
             {
@@ -93,10 +100,10 @@ public class LevelingService(AppDbContext db) : ILevelingService
                 previousLevelXp = currentLevelXp;
                 cumulativeXp += (int)Math.Round(currentLevelXp);
             }
+
+            thresholds[lv] = cumulativeXp;
         }
 
-        // Cache the result
-        XpThresholdCache[level] = cumulativeXp;
-        return cumulativeXp;
+        return thresholds;
     }
 }

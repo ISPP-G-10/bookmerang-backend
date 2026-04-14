@@ -51,7 +51,7 @@ public class Subscription
 
     // Navigation property
     [ForeignKey("UserId")]
-    public User? User { get; set; }
+    public BaseUser? User { get; set; }
 
     public ICollection<SubscriptionReceipt> Receipts { get; set; } = new List<SubscriptionReceipt>();
 }

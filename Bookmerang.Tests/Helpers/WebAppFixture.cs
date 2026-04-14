@@ -97,6 +97,8 @@ public class WebAppFixture : IAsyncLifetime
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<MeetupAttendanceStatus>("meetup_attendance_status", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<PricingPlan>("pricing_plan", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<BookdropExchangeStatus>("bookdrop_exchange_status", t);
+        Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<SubscriptionStatus>("subscription_status", t);
+        Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<SubscriptionPlatform>("subscription_platform", t);
         Npgsql.NpgsqlConnection.GlobalTypeMapper.MapEnum<InkdropsActionType>("inkdrops_action_type", t);
 #pragma warning restore CS0618
     }
@@ -116,10 +118,12 @@ public class WebAppFixture : IAsyncLifetime
             "20260307120000_0005_add_typing_indicators.sql",
             "20260317110000_0004_match_pair_unique_index.sql",
             "20260329120000_0008_add_inkdrops.sql",
+            "20260329120001_0008_subscriptions.sql",
             "20260405120000_0009_add_inkdrops_history.sql",
             "20260407000000_0008_bookdrop_exchange_status.sql",
             "20260408120000_0008_chats_uuid_ids.sql",
-            "20260413083046_add_cosmetics_to_user_progress.sql"
+            "20260413083046_add_cosmetics_to_user_progress.sql",
+            "20260414110000_0010_subscriptions_base_user_fk.sql"
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

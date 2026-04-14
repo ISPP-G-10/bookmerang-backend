@@ -2,12 +2,14 @@ using Moq;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Bookmerang.Api.Services.Interfaces.Auth;
+using Bookmerang.Api.Services.Interfaces.Subscriptions;
 using Bookmerang.Api.Models.DTOs;
 using Bookmeran.Controllers;
 using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using NetTopologySuite.Geometries;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 using System;
 using System.Collections.Generic;
@@ -18,12 +20,17 @@ namespace Bookmerang.Tests.Auth;
 public class AuthControllerTests
 {
     private readonly Mock<IAuthService> _mockAuthService;
+    private readonly Mock<IStripeSubscriptionService> _mockStripeSubscriptionService;
     private readonly AuthController _authController;
 
     public AuthControllerTests()
     {
         _mockAuthService = new Mock<IAuthService>();
-        _authController = new AuthController(_mockAuthService.Object);
+        _mockStripeSubscriptionService = new Mock<IStripeSubscriptionService>();
+        _authController = new AuthController(
+            _mockAuthService.Object,
+            _mockStripeSubscriptionService.Object,
+            NullLogger<AuthController>.Instance);
     }
 
     private void SetupControllerContext(string? supabaseId, string? email)
@@ -145,6 +152,37 @@ public class AuthControllerTests
         // Assert
         var conflictResult = Assert.IsType<ConflictObjectResult>(result);
         Assert.Equal("El usuario ya existe en el sistema.", conflictResult.Value);
+    }
+
+    [Fact]
+    public async Task RegisterBusiness_WhenPaymentEnabledAndNoSessionId_ReturnsCheckoutUrl()
+    {
+        // Arrange
+        var request = new RegisterBusinessRequest
+        {
+            Email = "bookdrop@test.com",
+            Password = "Test1234",
+            Username = "bookdrop_user",
+            Name = "Bookdrop",
+            NombreEstablecimiento = "Bookdrop Centro",
+            AddressText = "Calle Test 1",
+            Latitud = 37.38,
+            Longitud = -5.98
+        };
+
+        _mockStripeSubscriptionService.Setup(s => s.IsBookdropPaymentEnabled()).Returns(true);
+        _mockStripeSubscriptionService
+            .Setup(s => s.CreateBookdropRegistrationCheckoutSessionAsync(request.Email))
+            .ReturnsAsync("https://checkout.stripe.com/pay/bookdrop");
+
+        // Act
+        var result = await _authController.RegisterBusiness(request);
+
+        // Assert
+        var ok = Assert.IsType<OkObjectResult>(result);
+        dynamic body = ok.Value!;
+        Assert.True((bool)body.RequiresPayment);
+        Assert.Equal("https://checkout.stripe.com/pay/bookdrop", (string)body.CheckoutUrl);
     }
 
     [Fact]
