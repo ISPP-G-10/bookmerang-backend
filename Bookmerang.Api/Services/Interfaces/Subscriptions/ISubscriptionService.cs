@@ -11,6 +11,11 @@ public interface ISubscriptionService
     Task<bool> IsPremiumAsync(Guid userId);
 
     /// <summary>
+    /// Checks whether a user (regular or bookdrop) has an ACTIVE non-expired subscription.
+    /// </summary>
+    Task<bool> HasActiveSubscriptionAsync(Guid userId);
+
+    /// <summary>
     /// Gets the active subscription for a user, if any
     /// </summary>
     Task<Subscription?> GetActiveSubscriptionAsync(Guid userId);

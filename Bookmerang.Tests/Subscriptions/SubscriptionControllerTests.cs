@@ -29,6 +29,9 @@ public class SubscriptionControllerTests : IAsyncLifetime
         _db = DbContextFactory.CreateInMemory();
         _subscriptionService = new Mock<ISubscriptionService>();
         _stripeService = new Mock<IStripeSubscriptionService>();
+        _subscriptionService
+            .Setup(s => s.HasActiveSubscriptionAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(false);
 
         _controller = new SubscriptionsController(
             _subscriptionService.Object,
@@ -168,6 +171,32 @@ public class SubscriptionControllerTests : IAsyncLifetime
         var result = await _controller.CreateCheckoutSession();
 
         Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    // â”€â”€ POST /checkout/bookdrop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    [Fact]
+    public async Task BookdropCheckout_NoActiveSubscription_ReturnsCheckoutUrl()
+    {
+        _subscriptionService.Setup(s => s.HasActiveSubscriptionAsync(_userId)).ReturnsAsync(false);
+        _stripeService.Setup(s => s.CreateBookdropCheckoutSessionAsync(_userId))
+            .ReturnsAsync("https://checkout.stripe.com/pay/bookdrop");
+
+        var result = await _controller.CreateBookdropCheckoutSession();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        dynamic value = ok.Value!;
+        Assert.Equal("https://checkout.stripe.com/pay/bookdrop", (string)value.checkoutUrl);
+    }
+
+    [Fact]
+    public async Task BookdropCheckout_WithActiveSubscription_ReturnsBadRequest()
+    {
+        _subscriptionService.Setup(s => s.HasActiveSubscriptionAsync(_userId)).ReturnsAsync(true);
+
+        var result = await _controller.CreateBookdropCheckoutSession();
+
+        Assert.IsType<BadRequestObjectResult>(result);
     }
 
     // ── POST /cancel ──────────────────────────────────────────────────────

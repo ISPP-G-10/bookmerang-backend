@@ -33,10 +33,12 @@ public class SubscriptionsController(
 
             var subscription = await _subscriptionService.GetActiveSubscriptionAsync(userId.Value);
             var isPremium = await _subscriptionService.IsPremiumAsync(userId.Value);
+            var hasActiveSubscription = await _subscriptionService.HasActiveSubscriptionAsync(userId.Value);
 
             var response = new
             {
                 isPremium,
+                hasActiveSubscription,
                 subscription = subscription != null ? new
                 {
                     subscription.Id,
@@ -111,6 +113,33 @@ public class SubscriptionsController(
     }
 
     /// <summary>
+    /// Create a Stripe Checkout session for Bookdrop monthly billing.
+    /// </summary>
+    [Authorize(Policy = "BookdropOnly")]
+    [HttpPost("checkout/bookdrop")]
+    public async Task<IActionResult> CreateBookdropCheckoutSession()
+    {
+        try
+        {
+            var userId = await GetCurrentUserId();
+            if (userId == null) return Unauthorized();
+
+            var hasActiveSubscription = await _subscriptionService.HasActiveSubscriptionAsync(userId.Value);
+            if (hasActiveSubscription)
+                return BadRequest(new { error = "Bookdrop already has an active subscription" });
+
+            var checkoutUrl = await _stripeSubscriptionService.CreateBookdropCheckoutSessionAsync(userId.Value);
+
+            return Ok(new { checkoutUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating bookdrop checkout session");
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
+    /// <summary>
     /// Webhook endpoint for Stripe events
     /// </summary>
     [AllowAnonymous]
@@ -155,10 +184,12 @@ public class SubscriptionsController(
 
             var subscription = await _subscriptionService.GetActiveSubscriptionAsync(userId.Value);
             var isPremium = await _subscriptionService.IsPremiumAsync(userId.Value);
+            var hasActiveSubscription = await _subscriptionService.HasActiveSubscriptionAsync(userId.Value);
 
             var response = new
             {
                 isPremium,
+                hasActiveSubscription,
                 subscription = subscription != null ? new
                 {
                     subscription.Id,
