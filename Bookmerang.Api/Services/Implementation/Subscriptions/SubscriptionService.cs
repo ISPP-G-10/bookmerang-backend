@@ -18,6 +18,15 @@ public class SubscriptionService(AppDbContext db) : ISubscriptionService
         return user.Plan == PricingPlan.PREMIUM;
     }
 
+    public async Task<bool> HasActiveSubscriptionAsync(Guid userId)
+    {
+        var now = DateTime.UtcNow;
+        return await _db.Subscriptions
+            .AnyAsync(s => s.UserId == userId &&
+                           s.Status == SubscriptionStatus.ACTIVE &&
+                           s.CurrentPeriodEnd > now);
+    }
+
     public async Task<Subscription?> GetActiveSubscriptionAsync(Guid userId)
     {
         return await _db.Subscriptions
@@ -34,8 +43,8 @@ public class SubscriptionService(AppDbContext db) : ISubscriptionService
         DateTime periodStart,
         DateTime periodEnd)
     {
-        var user = await _db.RegularUsers.FindAsync(userId);
-        if (user == null)
+        var baseUser = await _db.Users.FindAsync(userId);
+        if (baseUser == null)
             throw new InvalidOperationException($"User {userId} not found");
 
         var subscription = new Subscription
@@ -54,9 +63,13 @@ public class SubscriptionService(AppDbContext db) : ISubscriptionService
         _db.Subscriptions.Add(subscription);
         await _db.SaveChangesAsync();
 
-        // Sync the user's plan
-        user.Plan = PricingPlan.PREMIUM;
-        await _db.SaveChangesAsync();
+        // Sync plan only for regular users
+        var regularUser = await _db.RegularUsers.FindAsync(userId);
+        if (regularUser != null)
+        {
+            regularUser.Plan = PricingPlan.PREMIUM;
+            await _db.SaveChangesAsync();
+        }
 
         return subscription;
     }
