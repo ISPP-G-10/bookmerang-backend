@@ -176,7 +176,17 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
             .OrderBy(m => m.ScheduledAt)
             .ToListAsync();
 
-        return meetups.Select(MapToDto).ToList();
+        var allAttendeeIds = meetups
+            .SelectMany(m => m.Attendances.Select(a => a.UserId))
+            .Distinct().ToList();
+
+        var personalizationMap = allAttendeeIds.Count > 0
+            ? await _db.UserProgresses
+                .Where(p => allAttendeeIds.Contains(p.UserId))
+                .ToDictionaryAsync(p => p.UserId, p => (p.ActiveFrameId, p.ActiveColorId))
+            : new Dictionary<Guid, (string? ActiveFrameId, string? ActiveColorId)>();
+
+        return meetups.Select(m => MapToDto(m, personalizationMap)).ToList();
     }
 
     public async Task<MeetupAttendanceDto> AttendMeetupAsync(Guid userId, int meetupId, AttendMeetupRequest request)
@@ -304,7 +314,7 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
         };
     }
 
-    private static MeetupDto MapToDto(Meetup meetup)
+    private static MeetupDto MapToDto(Meetup meetup, Dictionary<Guid, (string? ActiveFrameId, string? ActiveColorId)>? personalization = null)
     {
         return new MeetupDto
         {
@@ -321,12 +331,17 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
             UpdatedAt = meetup.UpdatedAt,
             Attendees = meetup.Attendances
                 .Where(a => a.Status == MeetupAttendanceStatus.REGISTERED || a.Status == MeetupAttendanceStatus.ATTENDED)
-                .Select(a => new MeetupAttendeeDto
-                {
-                    UserId = a.UserId,
-                    Username = a.User?.BaseUser?.Username ?? string.Empty,
-                    SelectedBookId = a.SelectedBookId,
-                    SelectedBookTitle = a.SelectedBook?.Titulo ?? string.Empty
+                .Select(a => {
+                    var pers = personalization?.GetValueOrDefault(a.UserId) ?? default;
+                    return new MeetupAttendeeDto
+                    {
+                        UserId = a.UserId,
+                        Username = a.User?.BaseUser?.Username ?? string.Empty,
+                        SelectedBookId = a.SelectedBookId,
+                        SelectedBookTitle = a.SelectedBook?.Titulo ?? string.Empty,
+                        ActiveFrameId = pers.ActiveFrameId,
+                        ActiveColorId = pers.ActiveColorId
+                    };
                 })
                 .ToList()
         };

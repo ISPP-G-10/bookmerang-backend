@@ -12,7 +12,9 @@ public record CommunityRankingEntryDto(
     Guid UserId,
     string Username,
     string Name,
-    int InkdropsThisMonth
+    int InkdropsThisMonth,
+    string? ActiveFrameId = null,
+    string? ActiveColorId = null
 );
 
 public record CommunityRankingDto(

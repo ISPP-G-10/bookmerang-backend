@@ -159,6 +159,19 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Contraseña actualizada correctamente." });
     }
 
+    [HttpPatch("cosmetics")]
+    [Authorize(Policy = "UserOnly")]
+    public async Task<IActionResult> PatchCosmetics([FromBody] UpdateCosmeticsRequest request)
+    {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var ok = await _authService.UpdateCosmetics(supabaseId, request.ActiveFrameId, request.ActiveColorId);
+        if (!ok) return NotFound("Usuario o progreso no encontrado.");
+
+        return NoContent();
+    }
+
     [HttpDelete("perfil")]
     [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> DeletePerfil()
@@ -180,7 +193,7 @@ public class AuthController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
-    
+
 }
 
 public record RegisterRequest(
@@ -261,4 +274,9 @@ public record LoginRequest(
 public record AuthResponse(
     string AccessToken,
     BaseUserDto User
+);
+
+public record UpdateCosmeticsRequest(
+    string? ActiveFrameId,
+    string? ActiveColorId
 );

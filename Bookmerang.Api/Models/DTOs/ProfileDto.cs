@@ -12,7 +12,7 @@ public class ProfileDto
     public string Avatar { get; set; } = string.Empty; // Maps to ProfilePhoto in DB
     public double Latitud { get; set; }
     public double Longitud { get; set; }
-    
+
     // Gamification Stats
     public int Level { get; set; }
     public string Tier { get; set; } = string.Empty;
@@ -22,4 +22,6 @@ public class ProfileDto
     public double Progress { get; set; }
     public int Streak { get; set; }
     public int Bonus { get; set; }
+    public string? ActiveFrameId { get; set; }
+    public string? ActiveColorId { get; set; }
 }

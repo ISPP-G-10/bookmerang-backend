@@ -61,7 +61,9 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
             InksToNextLevel = inksToNextLevel,
             Progress = progressPercent,
             Streak = streak,
-            Bonus = bonus
+            Bonus = bonus,
+            ActiveFrameId = progress?.ActiveFrameId,
+            ActiveColorId = progress?.ActiveColorId,
         };
     }
 
@@ -183,7 +185,7 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
         return (user, token, null);
     }
 
-    public async Task<BaseUser?> UpdatePerfil(string supabaseId,string? username, string? name, string? profilePhoto)
+    public async Task<BaseUser?> UpdatePerfil(string supabaseId, string? username, string? name, string? profilePhoto)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
 
@@ -234,10 +236,10 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
     user.Email = normalizedEmail;
     user.UpdatedAt = DateTime.UtcNow;
 
-    await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync();
 
-    return (user, null);
-}
+        return (user, null);
+    }
 
     public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail, string currentPassword)
     {
@@ -294,7 +296,7 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
     public async Task<BaseUser?> DeletePerfil(string supabaseId)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
-        
+
         if (user == null)
         {
             return null;
@@ -305,8 +307,8 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
         // 1. Validar intercambios activos (Cualquiera que no sea COMPLETED o REJECTED)
         var hasActiveExchanges = await _db.Exchanges
             .Include(e => e.Match)
-            .AnyAsync(e => (e.Match.User1Id == userId || e.Match.User2Id == userId) && 
-                           e.Status != ExchangeStatus.COMPLETED && 
+            .AnyAsync(e => (e.Match.User1Id == userId || e.Match.User2Id == userId) &&
+                           e.Status != ExchangeStatus.COMPLETED &&
                            e.Status != ExchangeStatus.REJECTED);
 
         if (hasActiveExchanges)
@@ -546,5 +548,36 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
 
     private static bool IsValidEmail(string email) =>
         !string.IsNullOrWhiteSpace(email) && EmailValidator.IsValid(email);
+
+    public async Task<bool> UpdateCosmetics(string supabaseId, string? activeFrameId, string? activeColorId)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+        if (user == null) return false;
+
+        var progress = await _db.UserProgresses.FirstOrDefaultAsync(p => p.UserId == user.Id);
+        if (progress == null) return false;
+
+        if (activeFrameId != null)
+            progress.ActiveFrameId = string.IsNullOrEmpty(activeFrameId) ? null : activeFrameId;
+
+        if (activeColorId != null)
+            progress.ActiveColorId = string.IsNullOrEmpty(activeColorId) ? null : activeColorId;
+
+        // Normalizar fechas nullable a UTC para que Npgsql no las rechace
+        if (progress.LastActiveDate.HasValue && progress.LastActiveDate.Value.Kind == DateTimeKind.Unspecified)
+            progress.LastActiveDate = DateTime.SpecifyKind(progress.LastActiveDate.Value, DateTimeKind.Utc);
+
+        if (progress.LastDecrementDate.HasValue && progress.LastDecrementDate.Value.Kind == DateTimeKind.Unspecified)
+            progress.LastDecrementDate = DateTime.SpecifyKind(progress.LastDecrementDate.Value, DateTimeKind.Utc);
+
+        if (progress.StreakStartDate.HasValue && progress.StreakStartDate.Value.Kind == DateTimeKind.Unspecified)
+            progress.StreakStartDate = DateTime.SpecifyKind(progress.StreakStartDate.Value, DateTimeKind.Utc);
+
+        progress.UpdatedAt = DateTime.UtcNow;
+        _db.UserProgresses.Update(progress);
+        await _db.SaveChangesAsync();
+
+        return true;
+    }
 
 }
