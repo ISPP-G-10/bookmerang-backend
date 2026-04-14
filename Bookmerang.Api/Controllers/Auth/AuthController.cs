@@ -17,10 +17,17 @@ namespace Bookmeran.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IStripeSubscriptionService _stripeSubscriptionService;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService)
+    public AuthController(
+        IAuthService authService,
+        IStripeSubscriptionService stripeSubscriptionService,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
+        _stripeSubscriptionService = stripeSubscriptionService;
+        _logger = logger;
     }
 
     [HttpPost("register")]
@@ -111,11 +118,23 @@ public class AuthController : ControllerBase
 
         var (_, token, loginError) = await _authService.Login(request.Email, request.Password);
         if (!string.IsNullOrWhiteSpace(loginError) || string.IsNullOrWhiteSpace(token))
-            return StatusCode(StatusCodes.Status500InternalServerError, "No se pudo iniciar sesión tras el registro.");
+            return StatusCode(StatusCodes.Status500InternalServerError, "No se pudo iniciar sesion tras el registro.");
 
-        return CreatedAtAction(nameof(GetPerfil), new { }, new AuthResponse(token, usuario!.ToDto()));
+        if (!string.IsNullOrWhiteSpace(stripeSubscriptionId))
+        {
+            try
+            {
+                await _stripeSubscriptionService.LinkBookdropSubscriptionToUserAsync(usuario!.Id, stripeSubscriptionId);
+            }
+            catch
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "La cuenta se ha creado, pero no se ha podido vincular la suscripcion.");
+            }
+        }
+
+        return CreatedAtAction(nameof(GetPerfil), new { }, new AuthBusinessResponse(token, usuario!.ToDto(), null));
     }
-
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
@@ -347,7 +366,20 @@ public record AuthResponse(
     BaseUserDto User
 );
 
+public record AuthBusinessResponse(
+    string AccessToken,
+    BaseUserDto User,
+    string? CheckoutUrl
+);
+
+public record BookdropCheckoutInitResponse(
+    bool RequiresPayment,
+    string CheckoutUrl
+);
+
 public record UpdateCosmeticsRequest(
     string? ActiveFrameId,
     string? ActiveColorId
 );
+
+
