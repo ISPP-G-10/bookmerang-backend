@@ -41,3 +41,13 @@ public class UpsertUserPreferenceDto
 
     public List<int>? GenreIds { get; set; }
 }
+
+public class TutorialStatusDto
+{
+    public bool TutorialCompleted { get; set; }
+}
+
+public class UpdateTutorialStatusDto
+{
+    public bool TutorialCompleted { get; set; }
+}

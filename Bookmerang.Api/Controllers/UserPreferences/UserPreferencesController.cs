@@ -34,4 +34,31 @@ public class UserPreferencesController : ControllerBase
         var result = await _userPreferenceService.UpsertAsync(userId, request, cancellationToken);
         return Ok(result);
     }
+
+    [HttpGet("tutorial")]
+    public async Task<ActionResult<TutorialStatusDto>> GetTutorialStatus(
+        [FromRoute] Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _userPreferenceService.GetTutorialStatusAsync(userId, cancellationToken);
+
+        if (result is null)
+            return NotFound();
+
+        return Ok(result);
+    }
+
+    [HttpPut("tutorial")]
+    public async Task<ActionResult<TutorialStatusDto>> SetTutorialStatus(
+        [FromRoute] Guid userId,
+        [FromBody] UpdateTutorialStatusDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _userPreferenceService.SetTutorialStatusAsync(userId, request, cancellationToken);
+
+        if (result is null)
+            return NotFound();
+
+        return Ok(result);
+    }
 }

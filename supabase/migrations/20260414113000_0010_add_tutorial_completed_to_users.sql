@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS tutorial_completed boolean NOT NULL DEFAULT false;
+
+COMMIT;

@@ -123,7 +123,8 @@ public class WebAppFixture : IAsyncLifetime
             "20260407000000_0008_bookdrop_exchange_status.sql",
             "20260408120000_0008_chats_uuid_ids.sql",
             "20260413083046_add_cosmetics_to_user_progress.sql",
-            "20260414110000_0010_subscriptions_base_user_fk.sql"
+            "20260414110000_0010_subscriptions_base_user_fk.sql",
+            "20260414113000_0010_add_tutorial_completed_to_users.sql",
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

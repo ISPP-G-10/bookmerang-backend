@@ -94,6 +94,31 @@ public class UserPreferenceService : IUserPreferenceService
         return ToDto(pref);
     }
 
+    public async Task<TutorialStatusDto?> GetTutorialStatusAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _dbContext.RegularUsers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+
+        return user is null
+            ? null
+            : new TutorialStatusDto { TutorialCompleted = user.TutorialCompleted };
+    }
+
+    public async Task<TutorialStatusDto?> SetTutorialStatusAsync(Guid userId, UpdateTutorialStatusDto request, CancellationToken cancellationToken = default)
+    {
+        var user = await _dbContext.RegularUsers
+            .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+
+        if (user is null)
+            return null;
+
+        user.TutorialCompleted = request.TutorialCompleted;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new TutorialStatusDto { TutorialCompleted = user.TutorialCompleted };
+    }
+
     private static UserPreferenceDto ToDto(UserPreference pref)
     {
         return new UserPreferenceDto
