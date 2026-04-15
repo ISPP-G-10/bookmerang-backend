@@ -151,7 +151,8 @@ builder.Services.AddCors(options =>
                 "http://localhost:3000",
                 "https://bookmerang-frontend.onrender.com",
                 "https://bookmerang-front.jollytree-74260255.spaincentral.azurecontainerapps.io",
-                "https://bookmerang-frontend.whitedune-16348441.spaincentral.azurecontainerapps.io"
+                "https://bookmerang-frontend.whitedune-16348441.spaincentral.azurecontainerapps.io",
+                "https://bookmerang-frontend-s3.whitedune-16348441.spaincentral.azurecontainerapps.io"
             )
             .AllowAnyHeader()
             .AllowAnyMethod()
