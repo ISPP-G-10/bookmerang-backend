@@ -1,5 +1,6 @@
 using Bookmerang.Api.Data;
 using Bookmerang.Api.Models.DTOs.Bookdrop;
+using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Interfaces.Bookdrop;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +9,14 @@ namespace Bookmerang.Api.Services.Implementation.Bookdrop;
 public class BookdropService(AppDbContext db) : IBookdropService
 {
     private readonly AppDbContext _db = db;
+
+    private static readonly ExchangeStatus[] ActiveExchangeStatuses =
+    [
+        ExchangeStatus.NEGOTIATING,
+        ExchangeStatus.ACCEPTED_BY_1,
+        ExchangeStatus.ACCEPTED_BY_2,
+        ExchangeStatus.ACCEPTED
+    ];
 
     public async Task<BookdropProfileDto?> GetPerfil(string supabaseId)
     {
@@ -124,6 +133,18 @@ public class BookdropService(AppDbContext db) : IBookdropService
         try
         {
             var bookspot = bookdropUser.Bookspot;
+
+            // Intercambios asociados al bookspot: error si hay activos, desvincular los finalizados (quitar bookspot_id)
+            var meetings = await _db.ExchangeMeetings
+                .Include(m => m.Exchange)
+                .Where(m => m.BookspotId == bookspot.Id)
+                .ToListAsync();
+
+            if (meetings.Any(m => ActiveExchangeStatuses.Contains(m.Exchange.Status)))
+                return (true, "No se puede eliminar el establecimiento porque tiene intercambios activos.");
+
+            foreach (var meeting in meetings)
+                meeting.BookspotId = null;
 
             // Eliminar validaciones del bookspot
             var validations = await _db.BookspotValidations
