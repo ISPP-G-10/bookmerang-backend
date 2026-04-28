@@ -309,12 +309,17 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
             .Include(e => e.Match)
             .AnyAsync(e => (e.Match.User1Id == userId || e.Match.User2Id == userId) &&
                            e.Status != ExchangeStatus.COMPLETED &&
-                           e.Status != ExchangeStatus.REJECTED);
+                           e.Status != ExchangeStatus.REJECTED &&
+                           e.Status != ExchangeStatus.INCIDENT);
 
         if (hasActiveExchanges)
         {
             throw new Exception("No puedes borrar tu cuenta porque tienes intercambios en proceso.");
         }
+
+        await using var tx = _db.Database.IsRelational()
+            ? await _db.Database.BeginTransactionAsync()
+            : null;
 
         // 2. Borrado en cascada local manual (ya que EF tiene Restrict/NoAction en muchas de estas)
 
@@ -478,13 +483,21 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
             await _db.Database.ExecuteSqlRawAsync("DELETE FROM incidents WHERE informer_id = {0} OR informed_id = {0}", userId);
         }
 
-        // Finalmente, el usuario base
+        // Finalmente, el usuario base — limpiar primero subtipos por si la fila no es de tipo User
         var regularUser = await _db.RegularUsers.FindAsync(userId);
         if (regularUser != null) _db.RegularUsers.Remove(regularUser);
+
+        var bookdropUser = await _db.BookdropUsers.FindAsync(userId);
+        if (bookdropUser != null) _db.BookdropUsers.Remove(bookdropUser);
 
         _db.Users.Remove(user);
 
         await _db.SaveChangesAsync();
+
+        if (tx != null)
+        {
+            await tx.CommitAsync();
+        }
 
         return user;
     }
