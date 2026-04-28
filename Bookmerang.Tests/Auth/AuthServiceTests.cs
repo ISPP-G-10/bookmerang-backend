@@ -368,6 +368,9 @@ public class AuthServiceTests
         db.Matches.Add(new Bookmerang.Api.Models.Entities.Match { Id = matchId, User1Id = userId, User2Id = Guid.NewGuid(), Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow });
         db.Exchanges.Add(new Exchange { ExchangeId = 200, ChatId = chatId, MatchId = matchId, Status = ExchangeStatus.COMPLETED, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
 
+        db.Bookspots.Add(new Bookspot { Id = 1, Nombre = "Spot", AddressText = "Addr", Location = new Point(0, 0) { SRID = 4326 }, Status = Bookmerang.Api.Models.Enums.BookspotStatus.ACTIVE, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        db.BookspotValidations.Add(new BookspotValidation { Id = 1, BookspotId = 1, ValidatorUserId = userId, KnowsPlace = true, SafeForExchange = true });
+
         await db.SaveChangesAsync();
 
         var deleted = await service.DeletePerfil(supabaseId);
@@ -385,6 +388,7 @@ public class AuthServiceTests
         Assert.False(await db.Messages.AnyAsync(m => m.SenderId == userId));
         Assert.False(await db.ChatParticipants.AnyAsync(cp => cp.UserId == userId));
         Assert.False(await db.TypingIndicators.AnyAsync(t => t.UserId == userId));
+        Assert.False(await db.BookspotValidations.AnyAsync(bv => bv.ValidatorUserId == userId));
     }
 
      [Fact]
