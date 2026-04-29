@@ -176,16 +176,23 @@ public class AuthController : ControllerBase
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
         if (supabaseId == null) return Unauthorized();
 
-        var usuario = await _authService.UpdatePerfil(
-            supabaseId,
-            request.Username,
-            request.Name,
-            request.ProfilePhoto
-        );
+        try
+        {
+            var usuario = await _authService.UpdatePerfil(
+                supabaseId,
+                request.Username,
+                request.Name,
+                request.ProfilePhoto
+            );
 
-        if (usuario == null) return NotFound("Usuario no encontrado.");
+            if (usuario == null) return NotFound("Usuario no encontrado.");
 
-        return Ok(usuario.ToDto());
+            return Ok(usuario.ToDto());
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
     }
 
     [HttpPatch("email")]
