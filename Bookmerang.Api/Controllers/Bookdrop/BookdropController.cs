@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Bookmerang.Api.Models.DTOs.Bookdrop;
+using Bookmerang.Api.Services.Interfaces.Auth;
 using Bookmerang.Api.Services.Interfaces.Bookdrop;
 
 namespace Bookmerang.Api.Controllers.Bookdrop;
@@ -9,10 +10,11 @@ namespace Bookmerang.Api.Controllers.Bookdrop;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Policy = "BookdropOnly")]
-public class BookdropController(IBookdropService bookdropService, IBookDropExchangeService exchangeService) : ControllerBase
+public class BookdropController(IBookdropService bookdropService, IBookDropExchangeService exchangeService, IAuthService authService) : ControllerBase
 {
     private readonly IBookdropService _bookdropService = bookdropService;
     private readonly IBookDropExchangeService _exchangeService = exchangeService;
+    private readonly IAuthService _authService = authService;
 
     private string? GetSupabaseId() =>
         User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
@@ -51,16 +53,20 @@ public class BookdropController(IBookdropService bookdropService, IBookDropExcha
     [HttpDelete("perfil")]
     public async Task<IActionResult> DeletePerfil()
     {
-        var userId = User.FindFirstValue("user_id");
-        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var targetId))
-            return Unauthorized();
+        var supabaseId = GetSupabaseId();
+        if (supabaseId == null) return Unauthorized();
 
-        var (found, error) = await _bookdropService.DeleteBookdrop(targetId);
+        try
+        {
+            var deleted = await _authService.DeletePerfil(supabaseId);
+            if (deleted == null) return NotFound("Establecimiento no encontrado.");
 
-        if (!found) return NotFound("Establecimiento no encontrado.");
-        if (error != null) return BadRequest(error);
-
-        return Ok(new { message = "Establecimiento eliminado correctamente." });
+            return Ok(new { message = "Establecimiento eliminado correctamente." });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpGet("exchanges")]
