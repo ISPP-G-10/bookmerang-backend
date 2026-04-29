@@ -309,12 +309,17 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
             .Include(e => e.Match)
             .AnyAsync(e => (e.Match.User1Id == userId || e.Match.User2Id == userId) &&
                            e.Status != ExchangeStatus.COMPLETED &&
-                           e.Status != ExchangeStatus.REJECTED);
+                           e.Status != ExchangeStatus.REJECTED &&
+                           e.Status != ExchangeStatus.INCIDENT);
 
         if (hasActiveExchanges)
         {
             throw new Exception("No puedes borrar tu cuenta porque tienes intercambios en proceso.");
         }
+
+        await using var tx = _db.Database.IsRelational()
+            ? await _db.Database.BeginTransactionAsync()
+            : null;
 
         // 2. Borrado en cascada local manual (ya que EF tiene Restrict/NoAction en muchas de estas)
 
@@ -365,6 +370,69 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
         var userSwipes = await _db.Swipes.Where(s => s.SwiperId == userId).ToListAsync();
         if (userSwipes.Any()) _db.Swipes.RemoveRange(userSwipes);
 
+        // Participaciones en comunidades y quedadas
+        var meetupAttendances = await _db.MeetupAttendances.Where(ma => ma.UserId == userId).ToListAsync();
+        if (meetupAttendances.Any()) _db.MeetupAttendances.RemoveRange(meetupAttendances);
+
+        var libraryLikes = await _db.CommunityLibraryLikes.Where(ll => ll.UserId == userId).ToListAsync();
+        if (libraryLikes.Any()) _db.CommunityLibraryLikes.RemoveRange(libraryLikes);
+
+        // Transferir rol de creator/admin de comunidades a otro miembro antes de remover membresías
+        var communitiesAsCreator = await _db.Communities
+            .Include(c => c.Members)
+            .Where(c => c.CreatorId == userId)
+            .ToListAsync();
+
+        foreach (var community in communitiesAsCreator)
+        {
+            var otherMemberIds = community.Members
+                .Where(m => m.UserId != userId)
+                .Select(m => m.UserId)
+                .ToList();
+
+            if (otherMemberIds.Count == 0)
+            {
+                community.CreatorId = null;
+            }
+            else
+            {
+                var newCreatorId = otherMemberIds[Random.Shared.Next(otherMemberIds.Count)];
+                community.CreatorId = newCreatorId;
+
+                var newCreatorMembership = community.Members.FirstOrDefault(m => m.UserId == newCreatorId);
+                if (newCreatorMembership != null)
+                {
+                    newCreatorMembership.Role = CommunityRole.MODERATOR;
+                }
+            }
+        }
+
+        var communityMembers = await _db.CommunityMembers.Where(cm => cm.UserId == userId).ToListAsync();
+        if (communityMembers.Any()) _db.CommunityMembers.RemoveRange(communityMembers);
+
+        // Validaciones de bookspots hechas por el usuario
+        var bookspotValidations = await _db.BookspotValidations.Where(bv => bv.ValidatorUserId == userId).ToListAsync();
+        if (bookspotValidations.Any()) _db.BookspotValidations.RemoveRange(bookspotValidations);
+
+        // Bookspots y Meetups (Desvincular en lugar de borrar para que la comunidad no los pierda)
+        if (_db.Database.IsRelational())
+        {
+            await _db.Database.ExecuteSqlRawAsync("UPDATE bookspots SET created_by_user_id = NULL WHERE created_by_user_id = {0}", userId);
+            await _db.Database.ExecuteSqlRawAsync("UPDATE bookspots SET owner_id = NULL WHERE owner_id = {0}", userId);
+            await _db.Database.ExecuteSqlRawAsync("UPDATE meetups SET creator_id = NULL WHERE creator_id = {0}", userId);
+        }
+        else
+        {
+            var userCreatedBookspots = await _db.Bookspots.Where(b => b.CreatedByUserId == userId).ToListAsync();
+            foreach (var spot in userCreatedBookspots) spot.CreatedByUserId = null;
+
+            var userOwnedBookspots = await _db.Bookspots.Where(b => b.OwnerId == userId).ToListAsync();
+            foreach (var spot in userOwnedBookspots) spot.OwnerId = null;
+
+            var userMeetups = await _db.Meetups.Where(m => m.CreatorId == userId).ToListAsync();
+            foreach (var meetup in userMeetups) meetup.CreatorId = null;
+        }
+
         // Libros y sus dependencias
         var userBooks = await _db.Books.Where(b => b.OwnerId == userId).ToListAsync();
         if (userBooks.Any())
@@ -384,6 +452,14 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
             var swipesToUserBooks = await _db.Swipes.Where(s => bookIds.Contains(s.BookId)).ToListAsync();
             if (swipesToUserBooks.Any()) _db.Swipes.RemoveRange(swipesToUserBooks);
 
+            // Likes de biblioteca hacia los libros del usuario
+            var otherLibraryLikes = await _db.CommunityLibraryLikes.Where(ll => bookIds.Contains(ll.BookId)).ToListAsync();
+            if (otherLibraryLikes.Any()) _db.CommunityLibraryLikes.RemoveRange(otherLibraryLikes);
+
+            // Asistencias a quedadas usando los libros del usuario (por si acaso)
+            var otherMeetupAttendances = await _db.MeetupAttendances.Where(ma => bookIds.Contains(ma.SelectedBookId)).ToListAsync();
+            if (otherMeetupAttendances.Any()) _db.MeetupAttendances.RemoveRange(otherMeetupAttendances);
+
             _db.Books.RemoveRange(userBooks);
         }
 
@@ -399,13 +475,30 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
             _db.UserPreferences.Remove(preferences);
         }
 
-        // Finalmente, el usuario base
+        // Tablas sin entidad EF que referencian al usuario (limpieza por SQL crudo)
+        if (_db.Database.IsRelational())
+        {
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM points_ledgers WHERE user_id = {0}", userId);
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM community_monthly_scores WHERE user_id = {0}", userId);
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM incidents WHERE informer_id = {0} OR informed_id = {0} OR admin_id = {0}", userId);
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM admins WHERE id = {0}", userId);
+        }
+
+        // Finalmente, el usuario base — limpiar primero subtipos por si la fila no es de tipo User
         var regularUser = await _db.RegularUsers.FindAsync(userId);
         if (regularUser != null) _db.RegularUsers.Remove(regularUser);
+
+        var bookdropUser = await _db.BookdropUsers.FindAsync(userId);
+        if (bookdropUser != null) _db.BookdropUsers.Remove(bookdropUser);
 
         _db.Users.Remove(user);
 
         await _db.SaveChangesAsync();
+
+        if (tx != null)
+        {
+            await tx.CommitAsync();
+        }
 
         return user;
     }

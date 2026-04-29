@@ -368,6 +368,9 @@ public class AuthServiceTests
         db.Matches.Add(new Bookmerang.Api.Models.Entities.Match { Id = matchId, User1Id = userId, User2Id = Guid.NewGuid(), Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow });
         db.Exchanges.Add(new Exchange { ExchangeId = 200, ChatId = chatId, MatchId = matchId, Status = ExchangeStatus.COMPLETED, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
 
+        db.Bookspots.Add(new Bookspot { Id = 1, Nombre = "Spot", AddressText = "Addr", Location = new Point(0, 0) { SRID = 4326 }, Status = Bookmerang.Api.Models.Enums.BookspotStatus.ACTIVE, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        db.BookspotValidations.Add(new BookspotValidation { Id = 1, BookspotId = 1, ValidatorUserId = userId, KnowsPlace = true, SafeForExchange = true });
+
         await db.SaveChangesAsync();
 
         var deleted = await service.DeletePerfil(supabaseId);
@@ -385,6 +388,7 @@ public class AuthServiceTests
         Assert.False(await db.Messages.AnyAsync(m => m.SenderId == userId));
         Assert.False(await db.ChatParticipants.AnyAsync(cp => cp.UserId == userId));
         Assert.False(await db.TypingIndicators.AnyAsync(t => t.UserId == userId));
+        Assert.False(await db.BookspotValidations.AnyAsync(bv => bv.ValidatorUserId == userId));
     }
 
      [Fact]
@@ -1126,6 +1130,506 @@ public class AuthServiceTests
         Assert.True(alreadyExisted);
         Assert.Null(secondUser);
         Assert.Single(db.Users);
+    }
+
+    [Fact]
+    public async Task DeletePerfil_ShouldNotThrow_WhenOnlyIncidentExchangesExist()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var userId = Guid.NewGuid();
+        var supabaseId = "user-incident-exchange";
+
+        db.Users.Add(new BaseUser
+        {
+            Id = userId,
+            SupabaseId = supabaseId,
+            Email = "inc@test.com",
+            Username = "inc",
+            Name = "Inc User",
+            ProfilePhoto = "i.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 }
+        });
+
+        db.Matches.Add(new Bookmerang.Api.Models.Entities.Match
+        {
+            Id = 11,
+            User1Id = userId,
+            User2Id = Guid.NewGuid(),
+            Status = MatchStatus.CHAT_CREATED,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.Exchanges.Add(new Exchange
+        {
+            ExchangeId = 21,
+            ChatId = Guid.NewGuid(),
+            MatchId = 11,
+            Status = ExchangeStatus.INCIDENT,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync();
+
+        var deleted = await service.DeletePerfil(supabaseId);
+
+        Assert.NotNull(deleted);
+        Assert.False(await db.Users.AnyAsync(u => u.SupabaseId == supabaseId));
+    }
+
+    [Fact]
+    public async Task DeletePerfil_ShouldRemoveCommunityMembershipsLikesAndAttendances()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var userId = Guid.NewGuid();
+        var supabaseId = "user-with-community-data";
+
+        db.Users.Add(new BaseUser
+        {
+            Id = userId,
+            SupabaseId = supabaseId,
+            Email = "c@test.com",
+            Username = "cuser",
+            Name = "Community User",
+            ProfilePhoto = "c.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 }
+        });
+
+        db.Bookspots.Add(new Bookspot
+        {
+            Id = 50,
+            Nombre = "Spot",
+            AddressText = "Addr",
+            Location = new Point(0, 0) { SRID = 4326 },
+            Status = BookspotStatus.ACTIVE,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        db.Communities.Add(new Community
+        {
+            Id = 100,
+            Name = "Comm",
+            ReferenceBookspotId = 50,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = Guid.NewGuid(),
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = 100,
+            UserId = userId,
+            Role = CommunityRole.MEMBER,
+            JoinedAt = DateTime.UtcNow
+        });
+
+        db.Books.Add(new Book { Id = 500, OwnerId = Guid.NewGuid(), Titulo = "B", Status = BookStatus.PUBLISHED });
+
+        db.CommunityLibraryLikes.Add(new CommunityLibraryLike
+        {
+            CommunityId = 100,
+            UserId = userId,
+            BookId = 500,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.Meetups.Add(new Meetup
+        {
+            Id = 700,
+            CommunityId = 100,
+            Title = "M",
+            ScheduledAt = DateTime.UtcNow,
+            Status = MeetupStatus.SCHEDULED,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        db.MeetupAttendances.Add(new MeetupAttendance
+        {
+            MeetupId = 700,
+            UserId = userId,
+            SelectedBookId = 500,
+            Status = MeetupAttendanceStatus.REGISTERED
+        });
+
+        await db.SaveChangesAsync();
+
+        var deleted = await service.DeletePerfil(supabaseId);
+
+        Assert.NotNull(deleted);
+        Assert.False(await db.CommunityMembers.AnyAsync(cm => cm.UserId == userId));
+        Assert.False(await db.CommunityLibraryLikes.AnyAsync(ll => ll.UserId == userId));
+        Assert.False(await db.MeetupAttendances.AnyAsync(ma => ma.UserId == userId));
+    }
+
+    [Fact]
+    public async Task DeletePerfil_ShouldTransferCommunityCreator_WhenOtherMembersExist()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var creatorId = Guid.NewGuid();
+        var otherMemberId = Guid.NewGuid();
+        var supabaseId = "creator-to-delete";
+
+        db.Users.Add(new BaseUser
+        {
+            Id = creatorId,
+            SupabaseId = supabaseId,
+            Email = "cr@test.com",
+            Username = "creator",
+            Name = "Creator",
+            ProfilePhoto = "cr.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 }
+        });
+
+        db.Bookspots.Add(new Bookspot
+        {
+            Id = 60,
+            Nombre = "Spot",
+            AddressText = "Addr",
+            Location = new Point(0, 0) { SRID = 4326 },
+            Status = BookspotStatus.ACTIVE,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        db.Communities.Add(new Community
+        {
+            Id = 200,
+            Name = "Comm2",
+            ReferenceBookspotId = 60,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = creatorId,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.CommunityMembers.AddRange(
+            new CommunityMember { CommunityId = 200, UserId = creatorId, Role = CommunityRole.MODERATOR, JoinedAt = DateTime.UtcNow },
+            new CommunityMember { CommunityId = 200, UserId = otherMemberId, Role = CommunityRole.MEMBER, JoinedAt = DateTime.UtcNow }
+        );
+
+        await db.SaveChangesAsync();
+
+        var deleted = await service.DeletePerfil(supabaseId);
+
+        Assert.NotNull(deleted);
+        var community = await db.Communities.FindAsync(200);
+        Assert.NotNull(community);
+        Assert.Equal(otherMemberId, community!.CreatorId);
+
+        var newCreatorMembership = await db.CommunityMembers
+            .FirstOrDefaultAsync(cm => cm.CommunityId == 200 && cm.UserId == otherMemberId);
+        Assert.NotNull(newCreatorMembership);
+        Assert.Equal(CommunityRole.MODERATOR, newCreatorMembership!.Role);
+    }
+
+    [Fact]
+    public async Task DeletePerfil_ShouldNullCommunityCreator_WhenNoOtherMembers()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var creatorId = Guid.NewGuid();
+        var supabaseId = "lonely-creator";
+
+        db.Users.Add(new BaseUser
+        {
+            Id = creatorId,
+            SupabaseId = supabaseId,
+            Email = "lc@test.com",
+            Username = "lcreator",
+            Name = "Lonely",
+            ProfilePhoto = "lc.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 }
+        });
+
+        db.Bookspots.Add(new Bookspot
+        {
+            Id = 70,
+            Nombre = "Spot",
+            AddressText = "Addr",
+            Location = new Point(0, 0) { SRID = 4326 },
+            Status = BookspotStatus.ACTIVE,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        db.Communities.Add(new Community
+        {
+            Id = 300,
+            Name = "Comm3",
+            ReferenceBookspotId = 70,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = creatorId,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = 300,
+            UserId = creatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync();
+
+        var deleted = await service.DeletePerfil(supabaseId);
+
+        Assert.NotNull(deleted);
+        var community = await db.Communities.FindAsync(300);
+        Assert.NotNull(community);
+        Assert.Null(community!.CreatorId);
+    }
+
+    [Fact]
+    public async Task DeletePerfil_ShouldNullBookspotAndMeetupRefs_WhenInMemory()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var userId = Guid.NewGuid();
+        var supabaseId = "user-with-bookspot-meetup-refs";
+
+        db.Users.Add(new BaseUser
+        {
+            Id = userId,
+            SupabaseId = supabaseId,
+            Email = "br@test.com",
+            Username = "br",
+            Name = "B Refs",
+            ProfilePhoto = "br.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 }
+        });
+
+        db.Bookspots.Add(new Bookspot
+        {
+            Id = 80,
+            Nombre = "Spot",
+            AddressText = "Addr",
+            Location = new Point(0, 0) { SRID = 4326 },
+            Status = BookspotStatus.ACTIVE,
+            CreatedByUserId = userId,
+            OwnerId = userId,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        db.Communities.Add(new Community
+        {
+            Id = 400,
+            Name = "Comm4",
+            ReferenceBookspotId = 80,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = Guid.NewGuid(),
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.Meetups.Add(new Meetup
+        {
+            Id = 900,
+            CommunityId = 400,
+            Title = "M",
+            CreatorId = userId,
+            ScheduledAt = DateTime.UtcNow,
+            Status = MeetupStatus.SCHEDULED,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync();
+
+        var deleted = await service.DeletePerfil(supabaseId);
+
+        Assert.NotNull(deleted);
+
+        var spot = await db.Bookspots.FindAsync(80);
+        Assert.NotNull(spot);
+        Assert.Null(spot!.CreatedByUserId);
+        Assert.Null(spot.OwnerId);
+
+        var meetup = await db.Meetups.FindAsync(900);
+        Assert.NotNull(meetup);
+        Assert.Null(meetup!.CreatorId);
+    }
+
+    [Fact]
+    public async Task DeletePerfil_ShouldRemoveLibraryLikesAndAttendances_OnUserBooks()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        var supabaseId = "user-book-cascade";
+
+        db.Users.Add(new BaseUser
+        {
+            Id = userId,
+            SupabaseId = supabaseId,
+            Email = "bk@test.com",
+            Username = "bk",
+            Name = "Book User",
+            ProfilePhoto = "bk.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 }
+        });
+
+        var bookId = 1234;
+        db.Books.Add(new Book { Id = bookId, OwnerId = userId, Titulo = "B", Status = BookStatus.PUBLISHED });
+
+        db.Bookspots.Add(new Bookspot
+        {
+            Id = 90,
+            Nombre = "Spot",
+            AddressText = "Addr",
+            Location = new Point(0, 0) { SRID = 4326 },
+            Status = BookspotStatus.ACTIVE,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        db.Communities.Add(new Community
+        {
+            Id = 500,
+            Name = "Comm5",
+            ReferenceBookspotId = 90,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = otherUserId,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.CommunityLibraryLikes.Add(new CommunityLibraryLike
+        {
+            CommunityId = 500,
+            UserId = otherUserId,
+            BookId = bookId,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.Meetups.Add(new Meetup
+        {
+            Id = 1000,
+            CommunityId = 500,
+            Title = "M",
+            ScheduledAt = DateTime.UtcNow,
+            Status = MeetupStatus.SCHEDULED,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        db.MeetupAttendances.Add(new MeetupAttendance
+        {
+            MeetupId = 1000,
+            UserId = otherUserId,
+            SelectedBookId = bookId,
+            Status = MeetupAttendanceStatus.REGISTERED
+        });
+
+        await db.SaveChangesAsync();
+
+        var deleted = await service.DeletePerfil(supabaseId);
+
+        Assert.NotNull(deleted);
+        Assert.False(await db.Books.AnyAsync(b => b.Id == bookId));
+        Assert.False(await db.CommunityLibraryLikes.AnyAsync(ll => ll.BookId == bookId));
+        Assert.False(await db.MeetupAttendances.AnyAsync(ma => ma.SelectedBookId == bookId));
+    }
+
+    [Fact]
+    public async Task DeletePerfil_ShouldRemoveBookdropUserSubtype()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var userId = Guid.NewGuid();
+        var supabaseId = "bookdrop-to-delete";
+
+        db.Users.Add(new BaseUser
+        {
+            Id = userId,
+            SupabaseId = supabaseId,
+            Email = "bd@test.com",
+            Username = "bd",
+            Name = "Bookdrop User",
+            ProfilePhoto = "bd.jpg",
+            UserType = BaseUserType.BOOKDROP_USER,
+            Location = new Point(0, 0) { SRID = 4326 }
+        });
+
+        db.Bookspots.Add(new Bookspot
+        {
+            Id = 95,
+            Nombre = "Spot",
+            AddressText = "Addr",
+            Location = new Point(0, 0) { SRID = 4326 },
+            Status = BookspotStatus.ACTIVE,
+            IsBookdrop = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        db.BookdropUsers.Add(new BookdropUser { Id = userId, BookSpotId = 95 });
+
+        await db.SaveChangesAsync();
+
+        var deleted = await service.DeletePerfil(supabaseId);
+
+        Assert.NotNull(deleted);
+        Assert.False(await db.Users.AnyAsync(u => u.Id == userId));
+        Assert.False(await db.BookdropUsers.AnyAsync(b => b.Id == userId));
+    }
+
+    [Fact]
+    public async Task DeletePerfil_ShouldRemoveBookspotValidationsMadeByUser()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var userId = Guid.NewGuid();
+        var supabaseId = "validator-user";
+
+        db.Users.Add(new BaseUser
+        {
+            Id = userId,
+            SupabaseId = supabaseId,
+            Email = "v@test.com",
+            Username = "v",
+            Name = "Validator",
+            ProfilePhoto = "v.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 }
+        });
+
+        db.Bookspots.Add(new Bookspot
+        {
+            Id = 96,
+            Nombre = "Spot",
+            AddressText = "Addr",
+            Location = new Point(0, 0) { SRID = 4326 },
+            Status = BookspotStatus.ACTIVE,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        db.BookspotValidations.Add(new BookspotValidation
+        {
+            Id = 50,
+            BookspotId = 96,
+            ValidatorUserId = userId,
+            KnowsPlace = true,
+            SafeForExchange = true
+        });
+
+        await db.SaveChangesAsync();
+
+        var deleted = await service.DeletePerfil(supabaseId);
+
+        Assert.NotNull(deleted);
+        Assert.False(await db.BookspotValidations.AnyAsync(bv => bv.ValidatorUserId == userId));
     }
 
     [Fact]
