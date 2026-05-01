@@ -141,6 +141,24 @@ public class AuthController : ControllerBase
         return Ok(new AuthResponse(token, usuario.ToDto()));
     }
 
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        var error = await _authService.RequestPasswordReset(request.Email);
+        if (error != null) return BadRequest(error);
+
+        return Ok(new { message = "Si el email existe, recibirás un correo con instrucciones." });
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        var error = await _authService.ResetPassword(request.Token, request.NewPassword);
+        if (error != null) return BadRequest(new { error });
+
+        return Ok(new { message = "Contraseña actualizada correctamente." });
+    }
+
     [HttpGet("me")]
     [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> GetMe()
@@ -356,6 +374,20 @@ public record BookdropCheckoutInitResponse(
 public record UpdateCosmeticsRequest(
     string? ActiveFrameId,
     string? ActiveColorId
+);
+
+public record ForgotPasswordRequest(
+    [Required]
+    [EmailAddress]
+    string Email
+);
+
+public record ResetPasswordRequest(
+    [Required]
+    string Token,
+    [Required]
+    [MinLength(8)]
+    string NewPassword
 );
 
 

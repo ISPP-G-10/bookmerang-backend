@@ -9,9 +9,12 @@ using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.IdentityModel.Tokens;
+using SendGrid;
+using SendGrid.Helpers.Mail;
 
 namespace Bookmerang.Api.Services.Implementation.Auth;
 
@@ -634,6 +637,95 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public async Task<string?> RequestPasswordReset(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "El email es obligatorio.";
+
+        var normalizedEmail = NormalizeEmail(email);
+        if (!IsValidEmail(normalizedEmail))
+            return "El correo electrónico no es válido.";
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+        if (user == null)
+            return null; // no revelamos si el email existe
+
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        var token = Convert.ToBase64String(tokenBytes)
+            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+
+        user.PasswordResetToken = token;
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddMinutes(30);
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        await SendPasswordResetEmail(normalizedEmail, token);
+        return null;
+    }
+
+    public async Task<string?> ResetPassword(string token, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return "El token es obligatorio.";
+
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+            return "La nueva contraseña debe tener al menos 8 caracteres.";
+
+        var normalizedCode = token.Trim().ToUpperInvariant();
+
+        var candidates = await _db.Users
+            .Where(u => u.PasswordResetToken != null && u.PasswordResetTokenExpiry != null)
+            .ToListAsync();
+
+        var user = candidates.FirstOrDefault(u =>
+            u.PasswordResetToken != null &&
+            u.PasswordResetToken[..6].ToUpperInvariant() == normalizedCode);
+
+        if (user == null)
+            return "El código de recuperación no es válido.";
+
+        if (user.PasswordResetTokenExpiry == null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
+            return "El enlace de recuperación ha expirado.";
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        user.PasswordResetToken = null;
+        user.PasswordResetTokenExpiry = null;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return null;
+    }
+
+    private static async Task SendPasswordResetEmail(string toEmail, string token)
+    {
+        var apiKey = Environment.GetEnvironmentVariable("SENDGRID_API_KEY");
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("SENDGRID_API_KEY no está configurado.");
+
+        var client = new SendGridClient(apiKey);
+        var from = new EmailAddress("bookmerangproject@gmail.com", "Bookmerang Team");
+        var to = new EmailAddress(toEmail);
+        var subject = "Recuperar tu contraseña de Bookmerang";
+
+        var htmlContent = $@"
+            <div style='font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;'>
+                <h2 style='color: #3d405b;'>Recuperar contraseña</h2>
+                <p style='color: #555;'>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta de Bookmerang.</p>
+                <p style='color: #555;'>Introduce el siguiente código en la app para establecer tu nueva contraseña:</p>
+                <div style='background-color: #f4f1eb; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;'>
+                    <span style='font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #e07a5f;'>{token[..6].ToUpperInvariant()}</span>
+                </div>
+                <p style='color: #999; font-size: 13px;'>Este código expira en 30 minutos. Si no solicitaste este cambio, ignora este correo.</p>
+                <p style='color: #999; font-size: 13px;'>— El equipo de Bookmerang</p>
+            </div>";
+
+        var plainTextContent = $"Tu código de recuperación de contraseña de Bookmerang es: {token[..6].ToUpperInvariant()}. Expira en 30 minutos.";
+
+        var msg = MailHelper.CreateSingleEmail(from, to, subject, plainTextContent, htmlContent);
+        msg.SetReplyTo(new EmailAddress("bookmerangproject@gmail.com", "Bookmerang Team"));
+        await client.SendEmailAsync(msg);
     }
 
     private static string NormalizeEmail(string email) =>
