@@ -1019,4 +1019,11 @@ ON CONFLICT DO NOTHING;
 
 END $$;
 
+SELECT setval(pg_get_serial_sequence('meetups', 'id'), COALESCE((SELECT MAX(id) FROM meetups), 0) + 1, false);
+SELECT setval(pg_get_serial_sequence('communities', 'id'), COALESCE((SELECT MAX(id) FROM communities), 0) + 1, false);
+SELECT setval(pg_get_serial_sequence('books', 'id'), COALESCE((SELECT MAX(id) FROM books), 0) + 1, false);
+SELECT setval(pg_get_serial_sequence('bookspots', 'id'), COALESCE((SELECT MAX(id) FROM bookspots), 0) + 1, false);
+SELECT setval(pg_get_serial_sequence('matches', 'id'), COALESCE((SELECT MAX(id) FROM matches), 0) + 1, false);
+SELECT setval(pg_get_serial_sequence('exchanges', 'id'), COALESCE((SELECT MAX(id) FROM exchanges), 0) + 1, false);
+
 COMMIT;
