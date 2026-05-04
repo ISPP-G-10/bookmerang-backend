@@ -99,7 +99,9 @@ public class PostgresFixture : IAsyncLifetime
             "20260413083046_add_cosmetics_to_user_progress.sql",
             "20260414110000_0010_subscriptions_base_user_fk.sql",
             "20260414113000_0010_add_tutorial_completed_to_users.sql",
-            "20260414120001_0011_allow_multiple_matches_per_pair.sql"
+            "20260414120001_0011_allow_multiple_matches_per_pair.sql",
+            "20260428000000_0012_nullable_creator_ids.sql",
+            "20260501000000_0013_add_chat_encryption_key.sql"
         })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

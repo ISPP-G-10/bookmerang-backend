@@ -220,7 +220,8 @@ public class ChatService(AppDbContext db) : IChatService
         {
             Id = Guid.NewGuid(),
             Type = type,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            EncryptionKey = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()
         };
 
         _db.Chats.Add(chat);
