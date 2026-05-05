@@ -485,10 +485,12 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
 
     /// <summary>
     /// Filtros base compartidos por P1 y P2: status PUBLISHED, no propios,
-    /// no swipeados ya y dentro del radio del usuario.
+    /// no swipeados ya (en los últimos SwipeValidDays) y dentro del radio del usuario.
     /// </summary>
     private IQueryable<Book> GetBaseCandidates(Guid userId, UserPreference prefs)
     {
+        var cutoff = DateTime.UtcNow.AddDays(-_settings.Feed.SwipeValidDays);
+        
         var matchedBookIds = _db.Exchanges
             .Where(e => e.Status != ExchangeStatus.COMPLETED)
             .Where(e => e.Status != ExchangeStatus.REJECTED)
@@ -503,7 +505,7 @@ public class MatcherService(AppDbContext db, IOptions<MatcherSettings> settings,
             .Where(b => !_db.Matches.Any(m =>
                 (m.User1Id == userId && m.User2Id == b.OwnerId && m.Book2Id == b.Id)
                 || (m.User1Id == b.OwnerId && m.User2Id == userId && m.Book1Id == b.Id)))
-            .Where(b => !_db.Swipes.Any(s => s.SwiperId == userId && s.BookId == b.Id))
+            .Where(b => !_db.Swipes.Any(s => s.SwiperId == userId && s.BookId == b.Id && s.CreatedAt >= cutoff))
             .Where(b => _db.Users
                 .Any(bu => bu.Id == b.OwnerId
                     && bu.Location.IsWithinDistance(prefs.Location, prefs.RadioKm * 1000.0)));
