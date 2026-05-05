@@ -20,6 +20,7 @@ public interface IAuthService
         Point location);
     Task<(BaseUser? usuario, string token, string? error)> Login(string email, string password);
     Task<BaseUser?> UpdatePerfil(string supabaseId, string? username, string? name, string? profilePhoto);
+    Task<BaseUser?> UpdateLocation(string supabaseId, double latitude, double longitude);
     Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail);
     Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail, string currentPassword);
     Task<string?> PatchPassword(string supabaseId, string currentPassword, string newPassword);

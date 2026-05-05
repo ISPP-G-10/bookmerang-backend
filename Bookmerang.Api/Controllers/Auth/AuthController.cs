@@ -195,6 +195,19 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPatch("location")]
+    [Authorize(Policy = "UserOnly")]
+    public async Task<IActionResult> PatchLocation([FromBody] UpdateLocationRequest request)
+    {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var usuario = await _authService.UpdateLocation(supabaseId, request.Latitude, request.Longitude);
+        if (usuario == null) return NotFound("Usuario no encontrado.");
+
+        return Ok(usuario.ToDto());
+    }
+
     [HttpPatch("email")]
     [Authorize]
     public async Task<IActionResult> PatchEmail([FromBody] PatchEmailRequest request)
@@ -277,6 +290,13 @@ public record UpdatePerfilRequest(
     string? Username,
     string? Name,
     string? ProfilePhoto
+);
+
+public record UpdateLocationRequest(
+    [Required]
+    double Latitude,
+    [Required]
+    double Longitude
 );
 
 public record PatchEmailRequest(
