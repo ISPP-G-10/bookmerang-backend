@@ -28,6 +28,8 @@ DECLARE
   u14 UUID := 'eeeeeeee-000e-000e-000e-00000000000e'; -- Rodrigo Sánchez     (Nervión)
   u15 UUID := 'ffffffff-000f-000f-000f-00000000000f'; -- María José López    (Triana)
 
+  initial_password TEXT := 'Bookmerang2026!';
+
   now_ts   TIMESTAMPTZ := NOW();
 
 BEGIN
@@ -60,27 +62,27 @@ ON CONFLICT (language) DO NOTHING;
 --   La Cartuja:    -5.9980,  37.4100
 --   San Pablo:     -5.9650,  37.4150
 INSERT INTO base_users (id, supabase_id, email, password_hash, username, nombre, foto_perfil_url, type, location, created_at, updated_at) VALUES
-  (u01, u01::text, 'laura.fernandez@bookmerang.app',  crypt('Bookmerang2026!', gen_salt('bf')), 'laurafernandez',   'Laura Fernández',    '', 2, ST_MakePoint(-6.0016,  37.3815)::geography, now_ts, now_ts),
-  (u02, u02::text, 'marcos.delgado@bookmerang.app',   crypt('Bookmerang2026!', gen_salt('bf')), 'marcosdelgado',    'Marcos Delgado',     '', 2, ST_MakePoint(-5.9712,  37.3840)::geography, now_ts, now_ts),
-  (u03, u03::text, 'sofia.ramos@bookmerang.app',      crypt('Bookmerang2026!', gen_salt('bf')), 'sofiaramos',       'Sofía Ramos',        '', 2, ST_MakePoint(-5.9900,  37.4020)::geography, now_ts, now_ts),
-  (u04, u04::text, 'alejandro.torres@bookmerang.app', crypt('Bookmerang2026!', gen_salt('bf')), 'alejandrotorres',  'Alejandro Torres',   '', 2, ST_MakePoint(-6.0080,  37.3740)::geography, now_ts, now_ts),
-  (u05, u05::text, 'elena.castillo@bookmerang.app',   crypt('Bookmerang2026!', gen_salt('bf')), 'elenacastillo',    'Elena Castillo',     '', 2, ST_MakePoint(-5.9930,  37.3890)::geography, now_ts, now_ts),
-  (u06, u06::text, 'pablo.moreno@bookmerang.app',     crypt('Bookmerang2026!', gen_salt('bf')), 'pablomoreno',      'Pablo Moreno',       '', 2, ST_MakePoint(-5.9970,  37.3600)::geography, now_ts, now_ts),
-  (u07, u07::text, 'lucia.jimenez@bookmerang.app',    crypt('Bookmerang2026!', gen_salt('bf')), 'luciajimenez',     'Lucía Jiménez',      '', 2, ST_MakePoint(-5.9750,  37.4230)::geography, now_ts, now_ts),
-  (u08, u08::text, 'diego.vargas@bookmerang.app',     crypt('Bookmerang2026!', gen_salt('bf')), 'diegovargas',      'Diego Vargas',       '', 2, ST_MakePoint(-5.9600,  37.3500)::geography, now_ts, now_ts),
-  (u09, u09::text, 'carmen.ortega@bookmerang.app',    crypt('Bookmerang2026!', gen_salt('bf')), 'carmenortega',     'Carmen Ortega',      '', 2, ST_MakePoint(-5.9400,  37.3700)::geography, now_ts, now_ts),
-  (u10, u10::text, 'javier.ruiz@bookmerang.app',      crypt('Bookmerang2026!', gen_salt('bf')), 'javierruiz',       'Javier Ruiz',        '', 2, ST_MakePoint(-6.0000,  37.3420)::geography, now_ts, now_ts),
-  (u11, u11::text, 'natalia.vega@bookmerang.app',     crypt('Bookmerang2026!', gen_salt('bf')), 'nataliavega',      'Natalia Vega',       '', 2, ST_MakePoint(-6.0320,  37.3970)::geography, now_ts, now_ts),
-  (u12, u12::text, 'andres.herrera@bookmerang.app',   crypt('Bookmerang2026!', gen_salt('bf')), 'andresherrera',    'Andrés Herrera',     '', 2, ST_MakePoint(-5.9980,  37.4100)::geography, now_ts, now_ts),
-  (u13, u13::text, 'isabel.molina@bookmerang.app',    crypt('Bookmerang2026!', gen_salt('bf')), 'isabelmolina',     'Isabel Molina',      '', 2, ST_MakePoint(-5.9650,  37.4150)::geography, now_ts, now_ts),
-  (u14, u14::text, 'rodrigo.sanchez@bookmerang.app',  crypt('Bookmerang2026!', gen_salt('bf')), 'rodrigosanchez',   'Rodrigo Sánchez',    '', 2, ST_MakePoint(-5.9712,  37.3830)::geography, now_ts, now_ts),
-  (u15, u15::text, 'mariajose.lopez@bookmerang.app',  crypt('Bookmerang2026!', gen_salt('bf')), 'mariajoselopez',   'María José López',   '', 2, ST_MakePoint(-6.0020,  37.3800)::geography, now_ts, now_ts)
+  (u01, u01::text, 'laura.fernandez@bookmerang.app',  crypt(initial_password, gen_salt('bf')), 'laurafernandez',   'Laura Fernández',    '', 2, ST_MakePoint(-6.0016,  37.3815)::geography, now_ts, now_ts),
+  (u02, u02::text, 'marcos.delgado@bookmerang.app',   crypt(initial_password, gen_salt('bf')), 'marcosdelgado',    'Marcos Delgado',     '', 2, ST_MakePoint(-5.9712,  37.3840)::geography, now_ts, now_ts),
+  (u03, u03::text, 'sofia.ramos@bookmerang.app',      crypt(initial_password, gen_salt('bf')), 'sofiaramos',       'Sofía Ramos',        '', 2, ST_MakePoint(-5.9900,  37.4020)::geography, now_ts, now_ts),
+  (u04, u04::text, 'alejandro.torres@bookmerang.app', crypt(initial_password, gen_salt('bf')), 'alejandrotorres',  'Alejandro Torres',   '', 2, ST_MakePoint(-6.0080,  37.3740)::geography, now_ts, now_ts),
+  (u05, u05::text, 'elena.castillo@bookmerang.app',   crypt(initial_password, gen_salt('bf')), 'elenacastillo',    'Elena Castillo',     '', 2, ST_MakePoint(-5.9930,  37.3890)::geography, now_ts, now_ts),
+  (u06, u06::text, 'pablo.moreno@bookmerang.app',     crypt(initial_password, gen_salt('bf')), 'pablomoreno',      'Pablo Moreno',       '', 2, ST_MakePoint(-5.9970,  37.3600)::geography, now_ts, now_ts),
+  (u07, u07::text, 'lucia.jimenez@bookmerang.app',    crypt(initial_password, gen_salt('bf')), 'luciajimenez',     'Lucía Jiménez',      '', 2, ST_MakePoint(-5.9750,  37.4230)::geography, now_ts, now_ts),
+  (u08, u08::text, 'diego.vargas@bookmerang.app',     crypt(initial_password, gen_salt('bf')), 'diegovargas',      'Diego Vargas',       '', 2, ST_MakePoint(-5.9600,  37.3500)::geography, now_ts, now_ts),
+  (u09, u09::text, 'carmen.ortega@bookmerang.app',    crypt(initial_password, gen_salt('bf')), 'carmenortega',     'Carmen Ortega',      '', 2, ST_MakePoint(-5.9400,  37.3700)::geography, now_ts, now_ts),
+  (u10, u10::text, 'javier.ruiz@bookmerang.app',      crypt(initial_password, gen_salt('bf')), 'javierruiz',       'Javier Ruiz',        '', 2, ST_MakePoint(-6.0000,  37.3420)::geography, now_ts, now_ts),
+  (u11, u11::text, 'natalia.vega@bookmerang.app',     crypt(initial_password, gen_salt('bf')), 'nataliavega',      'Natalia Vega',       '', 2, ST_MakePoint(-6.0320,  37.3970)::geography, now_ts, now_ts),
+  (u12, u12::text, 'andres.herrera@bookmerang.app',   crypt(initial_password, gen_salt('bf')), 'andresherrera',    'Andrés Herrera',     '', 2, ST_MakePoint(-5.9980,  37.4100)::geography, now_ts, now_ts),
+  (u13, u13::text, 'isabel.molina@bookmerang.app',    crypt(initial_password, gen_salt('bf')), 'isabelmolina',     'Isabel Molina',      '', 2, ST_MakePoint(-5.9650,  37.4150)::geography, now_ts, now_ts),
+  (u14, u14::text, 'rodrigo.sanchez@bookmerang.app',  crypt(initial_password, gen_salt('bf')), 'rodrigosanchez',   'Rodrigo Sánchez',    '', 2, ST_MakePoint(-5.9712,  37.3830)::geography, now_ts, now_ts),
+  (u15, u15::text, 'mariajose.lopez@bookmerang.app',  crypt(initial_password, gen_salt('bf')), 'mariajoselopez',   'María José López',   '', 2, ST_MakePoint(-6.0020,  37.3800)::geography, now_ts, now_ts)
 ON CONFLICT (id) DO NOTHING;
 
 UPDATE base_users
-SET password_hash = crypt('Bookmerang2026!', gen_salt('bf'))
+SET password_hash = crypt(initial_password, gen_salt('bf'))
 WHERE id IN (u01, u02, u03, u04, u05, u06, u07, u08, u09, u10, u11, u12, u13, u14, u15)
-  AND (password_hash IS NULL OR btrim(password_hash) = '');
+  AND (password_hash IS NULL OR btrim(password_hash) IS NULL);
 
 -- ==============================================================
 -- 3. USERS
