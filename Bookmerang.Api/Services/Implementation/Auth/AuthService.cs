@@ -219,6 +219,30 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
         return user;
     }
 
+    public async Task<BaseUser?> UpdateLocation(string supabaseId, double latitude, double longitude)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+
+        if (user == null)
+            return null;
+
+        var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
+        var newLocation = factory.CreatePoint(new Coordinate(longitude, latitude));
+
+        user.Location = newLocation;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        var preference = await _db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == user.Id);
+        if (preference != null)
+        {
+            preference.Location = newLocation;
+            preference.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _db.SaveChangesAsync();
+        return user;
+    }
+
 public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail)
 {
     if (string.IsNullOrWhiteSpace(newEmail))
