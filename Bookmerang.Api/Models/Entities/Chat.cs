@@ -19,6 +19,10 @@ public class Chat
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    [Required]
+    [Column("encryption_key")]
+    public string EncryptionKey { get; set; } = string.Empty;
+
     // Navigation properties
     public ICollection<ChatParticipant> Participants { get; set; } = new List<ChatParticipant>();
     public ICollection<Message> Messages { get; set; } = new List<Message>();
