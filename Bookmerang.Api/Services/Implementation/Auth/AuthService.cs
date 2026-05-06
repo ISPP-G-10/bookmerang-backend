@@ -507,7 +507,7 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
         {
             await _db.Database.ExecuteSqlRawAsync("DELETE FROM points_ledgers WHERE user_id = {0}", userId);
             await _db.Database.ExecuteSqlRawAsync("DELETE FROM community_monthly_scores WHERE user_id = {0}", userId);
-            await _db.Database.ExecuteSqlRawAsync("DELETE FROM incidents WHERE informer_id = {0} OR informed_id = {0} OR admin_id = {0}", userId);
+
             await _db.Database.ExecuteSqlRawAsync("DELETE FROM admins WHERE id = {0}", userId);
         }
 
