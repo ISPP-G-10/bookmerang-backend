@@ -1669,4 +1669,219 @@ public class AuthServiceTests
         Assert.Equal("El email ya está registrado.", secondError);
         Assert.Single(db.Users);
     }
+
+    // ─── RequestPasswordReset tests ───
+
+    [Fact]
+    public async Task RequestPasswordReset_ShouldReturnError_WhenEmailIsEmpty()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+
+        var error = await service.RequestPasswordReset("");
+
+        Assert.Equal("El email es obligatorio.", error);
+    }
+
+    [Fact]
+    public async Task RequestPasswordReset_ShouldReturnError_WhenEmailIsInvalid()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+
+        var error = await service.RequestPasswordReset("not-an-email");
+
+        Assert.Equal("El correo electrónico no es válido.", error);
+    }
+
+    [Fact]
+    public async Task RequestPasswordReset_ShouldReturnNull_WhenEmailDoesNotExist()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+
+        var error = await service.RequestPasswordReset("nonexistent@test.com");
+
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public async Task RequestPasswordReset_ShouldSetTokenAndExpiry_WhenUserExists()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var email = "reset@test.com";
+        db.Users.Add(new BaseUser
+        {
+            SupabaseId = "reset-user",
+            Email = email,
+            Username = "resetuser",
+            Name = "Reset User",
+            ProfilePhoto = "r.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 },
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("OldPass123!")
+        });
+        await db.SaveChangesAsync();
+
+        // Will throw because SENDGRID_API_KEY is not set, but the token should be saved before the email call
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RequestPasswordReset(email));
+
+        var user = await db.Users.FirstAsync(u => u.Email == email);
+        Assert.NotNull(user.PasswordResetToken);
+        Assert.True(user.PasswordResetToken.Length >= 6);
+        Assert.NotNull(user.PasswordResetTokenExpiry);
+        Assert.True(user.PasswordResetTokenExpiry > DateTime.UtcNow);
+        Assert.True(user.PasswordResetTokenExpiry <= DateTime.UtcNow.AddMinutes(31));
+    }
+
+    // ─── ResetPassword tests ───
+
+    [Fact]
+    public async Task ResetPassword_ShouldReturnError_WhenTokenIsEmpty()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+
+        var error = await service.ResetPassword("", "NewPass123!");
+
+        Assert.Equal("El token es obligatorio.", error);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldReturnError_WhenNewPasswordTooShort()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+
+        var error = await service.ResetPassword("ABCDEF", "short");
+
+        Assert.Equal("La nueva contraseña debe tener al menos 8 caracteres.", error);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldReturnError_WhenTokenDoesNotMatch()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+
+        var error = await service.ResetPassword("XXXXXX", "NewPass123!");
+
+        Assert.Equal("El código de recuperación no es válido.", error);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldReturnError_WhenTokenHasExpired()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var token = "ABCDEF_rest_of_token_here";
+        db.Users.Add(new BaseUser
+        {
+            SupabaseId = "expired-token-user",
+            Email = "expired@test.com",
+            Username = "expireduser",
+            Name = "Expired",
+            ProfilePhoto = "e.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 },
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("OldPass123!"),
+            PasswordResetToken = token,
+            PasswordResetTokenExpiry = DateTime.UtcNow.AddMinutes(-5)
+        });
+        await db.SaveChangesAsync();
+
+        var error = await service.ResetPassword("ABCDEF", "NewPass123!");
+
+        Assert.Equal("El enlace de recuperación ha expirado.", error);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldSucceed_WhenTokenIsValidAndNotExpired()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var token = "XYZ123_rest_of_token_here";
+        var newPassword = "BrandNewPass1!";
+        db.Users.Add(new BaseUser
+        {
+            SupabaseId = "valid-reset-user",
+            Email = "valid@test.com",
+            Username = "validuser",
+            Name = "Valid",
+            ProfilePhoto = "v.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 },
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("OldPass123!"),
+            PasswordResetToken = token,
+            PasswordResetTokenExpiry = DateTime.UtcNow.AddMinutes(15)
+        });
+        await db.SaveChangesAsync();
+
+        var error = await service.ResetPassword("XYZ123", newPassword);
+
+        Assert.Null(error);
+
+        var user = await db.Users.FirstAsync(u => u.Email == "valid@test.com");
+        Assert.True(BCrypt.Net.BCrypt.Verify(newPassword, user.PasswordHash));
+        Assert.Null(user.PasswordResetToken);
+        Assert.Null(user.PasswordResetTokenExpiry);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldMatchCodeCaseInsensitively()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var token = "aBcDeF_rest_of_token";
+        var newPassword = "CaseTest1!";
+        db.Users.Add(new BaseUser
+        {
+            SupabaseId = "case-user",
+            Email = "case@test.com",
+            Username = "caseuser",
+            Name = "Case",
+            ProfilePhoto = "c.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 },
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("OldPass123!"),
+            PasswordResetToken = token,
+            PasswordResetTokenExpiry = DateTime.UtcNow.AddMinutes(15)
+        });
+        await db.SaveChangesAsync();
+
+        var error = await service.ResetPassword("abcdef", newPassword);
+
+        Assert.Null(error);
+        var user = await db.Users.FirstAsync(u => u.Email == "case@test.com");
+        Assert.True(BCrypt.Net.BCrypt.Verify(newPassword, user.PasswordHash));
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldNotAllowReusingToken()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        var token = "REUSE1_rest_of_token";
+        db.Users.Add(new BaseUser
+        {
+            SupabaseId = "reuse-user",
+            Email = "reuse@test.com",
+            Username = "reuseuser",
+            Name = "Reuse",
+            ProfilePhoto = "r.jpg",
+            UserType = BaseUserType.USER,
+            Location = new Point(0, 0) { SRID = 4326 },
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("OldPass123!"),
+            PasswordResetToken = token,
+            PasswordResetTokenExpiry = DateTime.UtcNow.AddMinutes(15)
+        });
+        await db.SaveChangesAsync();
+
+        var firstError = await service.ResetPassword("REUSE1", "FirstNew1!");
+        Assert.Null(firstError);
+
+        var secondError = await service.ResetPassword("REUSE1", "SecondNew1!");
+        Assert.Equal("El código de recuperación no es válido.", secondError);
+    }
 }

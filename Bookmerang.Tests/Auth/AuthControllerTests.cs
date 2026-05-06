@@ -437,4 +437,97 @@ public class AuthControllerTests
         Assert.Equal("Contraseña actualizada correctamente.", (string)val.message);
     }
 
+    // ─── ForgotPassword controller tests ───
+
+    [Fact]
+    public async Task ForgotPassword_ShouldReturnOk_WhenServiceReturnsNull()
+    {
+        var request = new ForgotPasswordRequest("user@test.com");
+        _mockAuthService.Setup(s => s.RequestPasswordReset(request.Email))
+            .ReturnsAsync((string?)null);
+
+        var result = await _authController.ForgotPassword(request);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        dynamic val = ok.Value!;
+        Assert.Equal("Si el email existe, recibirás un correo con instrucciones.", (string)val.message);
+    }
+
+    [Fact]
+    public async Task ForgotPassword_ShouldReturnBadRequest_WhenServiceReturnsError()
+    {
+        var request = new ForgotPasswordRequest("");
+        _mockAuthService.Setup(s => s.RequestPasswordReset(request.Email))
+            .ReturnsAsync("El email es obligatorio.");
+
+        var result = await _authController.ForgotPassword(request);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("El email es obligatorio.", bad.Value);
+    }
+
+    [Fact]
+    public async Task ForgotPassword_ShouldReturnOk_EvenForNonExistentEmail()
+    {
+        var request = new ForgotPasswordRequest("nobody@test.com");
+        _mockAuthService.Setup(s => s.RequestPasswordReset(request.Email))
+            .ReturnsAsync((string?)null);
+
+        var result = await _authController.ForgotPassword(request);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    // ─── ResetPassword controller tests ───
+
+    [Fact]
+    public async Task ResetPassword_ShouldReturnOk_WhenServiceReturnsNull()
+    {
+        var request = new ResetPasswordRequest("ABCDEF", "NewPass123!");
+        _mockAuthService.Setup(s => s.ResetPassword(request.Token, request.NewPassword))
+            .ReturnsAsync((string?)null);
+
+        var result = await _authController.ResetPassword(request);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        dynamic val = ok.Value!;
+        Assert.Equal("Contraseña actualizada correctamente.", (string)val.message);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldReturnBadRequest_WhenTokenInvalid()
+    {
+        var request = new ResetPasswordRequest("XXXXXX", "NewPass123!");
+        _mockAuthService.Setup(s => s.ResetPassword(request.Token, request.NewPassword))
+            .ReturnsAsync("El código de recuperación no es válido.");
+
+        var result = await _authController.ResetPassword(request);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldReturnBadRequest_WhenTokenExpired()
+    {
+        var request = new ResetPasswordRequest("ABCDEF", "NewPass123!");
+        _mockAuthService.Setup(s => s.ResetPassword(request.Token, request.NewPassword))
+            .ReturnsAsync("El enlace de recuperación ha expirado.");
+
+        var result = await _authController.ResetPassword(request);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ShouldReturnBadRequest_WhenPasswordTooShort()
+    {
+        var request = new ResetPasswordRequest("ABCDEF", "short");
+        _mockAuthService.Setup(s => s.ResetPassword(request.Token, request.NewPassword))
+            .ReturnsAsync("La nueva contraseña debe tener al menos 8 caracteres.");
+
+        var result = await _authController.ResetPassword(request);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+    }
+
 }

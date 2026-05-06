@@ -35,4 +35,6 @@ public interface IAuthService
         string nombreEstablecimiento,
         string addressText);
     Task<bool> UpdateCosmetics(string supabaseId, string? activeFrameId, string? activeColorId);
+    Task<string?> RequestPasswordReset(string email);
+    Task<string?> ResetPassword(string token, string newPassword);
 }
