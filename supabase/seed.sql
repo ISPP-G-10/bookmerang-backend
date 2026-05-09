@@ -989,9 +989,6 @@ SET pin = '123456',
     bookdrop_status = 'AWAITING_DROP_1'::bookdrop_exchange_status
 WHERE exchange_id = 15;
 
-INSERT INTO incidents (exchange_id, meetup_id, informer_id, informed_id, admin_id, comment, status, created_at) VALUES
-  (7, 3, u13, u10, '00000000-0000-0000-0000-0000000000a1'::uuid, 'El usuario no se presento en el punto acordado.', 'PENDING', now_ts - INTERVAL '10 hours')
-ON CONFLICT DO NOTHING;
 
 -- 16.9 Typing indicators para probar /typing en chats
 INSERT INTO typing_indicators (chat_id, user_id, started_at) VALUES
