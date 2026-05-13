@@ -44,6 +44,12 @@ public class BaseUser
     [Column("location", TypeName = "geography (point, 4326)")]
     public Point Location { get; set; } = null!;
 
+    [Column("password_reset_token")]
+    public string? PasswordResetToken { get; set; }
+
+    [Column("password_reset_token_expiry")]
+    public DateTime? PasswordResetTokenExpiry { get; set; }
+
     [Required]
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

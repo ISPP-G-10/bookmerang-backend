@@ -133,7 +133,7 @@ builder.Services.AddRateLimiter(options =>
             "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier") ?? "anon";
         return RateLimitPartition.GetSlidingWindowLimiter(userId, _ => new SlidingWindowRateLimiterOptions
         {
-            PermitLimit = 30,          // 30 swipes
+            PermitLimit = 60,          // 60 swipes (1 por segundo)
             Window = TimeSpan.FromMinutes(1), // por minuto
             SegmentsPerWindow = 6,     // ventanas de 10 s
             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
@@ -152,7 +152,8 @@ builder.Services.AddCors(options =>
                 "https://bookmerang-frontend.onrender.com",
                 "https://bookmerang-front.jollytree-74260255.spaincentral.azurecontainerapps.io",
                 "https://bookmerang-frontend.whitedune-16348441.spaincentral.azurecontainerapps.io",
-                "https://bookmerang-frontend-s3.whitedune-16348441.spaincentral.azurecontainerapps.io"
+                "https://bookmerang-frontend-s3.whitedune-16348441.spaincentral.azurecontainerapps.io",
+                "https://bookmerang-frontend-launch.whitedune-16348441.spaincentral.azurecontainerapps.io"
             )
             .AllowAnyHeader()
             .AllowAnyMethod()

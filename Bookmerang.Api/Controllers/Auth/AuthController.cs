@@ -141,6 +141,24 @@ public class AuthController : ControllerBase
         return Ok(new AuthResponse(token, usuario.ToDto()));
     }
 
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        var error = await _authService.RequestPasswordReset(request.Email);
+        if (error != null) return BadRequest(error);
+
+        return Ok(new { message = "Si el email existe, recibirás un correo con instrucciones." });
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        var error = await _authService.ResetPassword(request.Token, request.NewPassword);
+        if (error != null) return BadRequest(new { error });
+
+        return Ok(new { message = "Contraseña actualizada correctamente." });
+    }
+
     [HttpGet("me")]
     [Authorize(Policy = "UserOnly")]
     public async Task<IActionResult> GetMe()
@@ -176,13 +194,33 @@ public class AuthController : ControllerBase
         var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
         if (supabaseId == null) return Unauthorized();
 
-        var usuario = await _authService.UpdatePerfil(
-            supabaseId,
-            request.Username,
-            request.Name,
-            request.ProfilePhoto
-        );
+        try
+        {
+            var usuario = await _authService.UpdatePerfil(
+                supabaseId,
+                request.Username,
+                request.Name,
+                request.ProfilePhoto
+            );
 
+            if (usuario == null) return NotFound("Usuario no encontrado.");
+
+            return Ok(usuario.ToDto());
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+    }
+
+    [HttpPatch("location")]
+    [Authorize(Policy = "UserOnly")]
+    public async Task<IActionResult> PatchLocation([FromBody] UpdateLocationRequest request)
+    {
+        var supabaseId = User.FindFirstValue("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        if (supabaseId == null) return Unauthorized();
+
+        var usuario = await _authService.UpdateLocation(supabaseId, request.Latitude, request.Longitude);
         if (usuario == null) return NotFound("Usuario no encontrado.");
 
         return Ok(usuario.ToDto());
@@ -272,6 +310,13 @@ public record UpdatePerfilRequest(
     string? ProfilePhoto
 );
 
+public record UpdateLocationRequest(
+    [Required]
+    double Latitude,
+    [Required]
+    double Longitude
+);
+
 public record PatchEmailRequest(
     [Required]
     [EmailAddress]
@@ -349,6 +394,20 @@ public record BookdropCheckoutInitResponse(
 public record UpdateCosmeticsRequest(
     string? ActiveFrameId,
     string? ActiveColorId
+);
+
+public record ForgotPasswordRequest(
+    [Required]
+    [EmailAddress]
+    string Email
+);
+
+public record ResetPasswordRequest(
+    [Required]
+    string Token,
+    [Required]
+    [MinLength(8)]
+    string NewPassword
 );
 
 

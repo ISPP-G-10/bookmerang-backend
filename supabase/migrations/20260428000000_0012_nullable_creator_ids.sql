@@ -1,0 +1,2 @@
+ALTER TABLE meetups ALTER COLUMN creator_id DROP NOT NULL;
+ALTER TABLE communities ALTER COLUMN creator_id DROP NOT NULL;

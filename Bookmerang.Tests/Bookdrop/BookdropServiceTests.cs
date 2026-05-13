@@ -1,4 +1,5 @@
 using Bookmerang.Api.Data;
+using Bookmerang.Api.Models.Entities;
 using Bookmerang.Api.Models.Enums;
 using Bookmerang.Api.Services.Implementation.Auth;
 using Bookmerang.Api.Services.Implementation.Bookdrop;
@@ -11,6 +12,7 @@ using NetTopologySuite.Geometries;
 using Xunit;
 using System.IdentityModel.Tokens.Jwt;
 using Bookmerang.Api.Models.DTOs.Bookdrop;
+using MatchEntity = Bookmerang.Api.Models.Entities.Match;
 
 namespace Bookmerang.Tests.Bookdrop;
 
@@ -356,5 +358,72 @@ public class BookdropServiceTests(PostgresFixture fixture) : IClassFixture<Postg
 
         Assert.False(found);
         Assert.Null(error);
+    }
+
+    // ===== Eliminar bookdrop con intercambio activo =====
+
+    [Fact]
+    public async Task DeleteBookdrop_WithActiveExchange_ReturnsConflictAndKeepsData()
+    {
+        await using var db = _fixture.CreateDbContext();
+        var authService = CreateAuthService(db);
+        var bookdropService = CreateBookdropService(db);
+
+        var (usuario, _, _) = await authService.RegisterBusiness(
+            "delete_active@test.com", "Test1234", "delete_active", "Delete Active",
+            null, CreateLocation(), "Local Active", "Calle Active 1");
+
+        var userId = usuario!.Id;
+        var bookspotId = (await db.BookdropUsers.FindAsync(userId))!.BookSpotId;
+
+        // Exchange ACCEPTED (activo) entre dos usuarios regulares, en el bookspot del bookdrop
+        var u1 = await TestSeedHelper.SeedUser(db, "active_u1");
+        var u2 = await TestSeedHelper.SeedUser(db, "active_u2");
+
+        var book1 = new Book { OwnerId = u1, Status = BookStatus.PUBLISHED, Titulo = "Libro 1" };
+        var book2 = new Book { OwnerId = u2, Status = BookStatus.PUBLISHED, Titulo = "Libro 2" };
+        db.Books.AddRange(book1, book2);
+        await db.SaveChangesAsync();
+
+        var match = new MatchEntity
+        {
+            User1Id = u1, User2Id = u2,
+            Book1Id = book1.Id, Book2Id = book2.Id,
+            Status = MatchStatus.CHAT_CREATED, CreatedAt = DateTime.UtcNow
+        };
+        db.Matches.Add(match);
+        var chat = new Chat { Type = ChatType.EXCHANGE, CreatedAt = DateTime.UtcNow };
+        db.Chats.Add(chat);
+        await db.SaveChangesAsync();
+
+        var exchange = new Exchange { ChatId = chat.Id, MatchId = match.Id, Status = ExchangeStatus.ACCEPTED };
+        db.Exchanges.Add(exchange);
+        await db.SaveChangesAsync();
+
+        var meeting = new ExchangeMeeting
+        {
+            ExchangeId = exchange.ExchangeId,
+            ExchangeMode = ExchangeMode.BOOKDROP,
+            BookspotId = bookspotId,
+            CustomLocation = new Point(-5.98, 37.39) { SRID = 4326 },
+            ProposerId = u1,
+            MeetingStatus = ExchangeMeetingStatus.ACCEPTED,
+            BookDropStatus = BookdropExchangeStatus.AWAITING_DROP_1,
+            ScheduledAt = DateTime.UtcNow.AddHours(1)
+        };
+        db.ExchangeMeetings.Add(meeting);
+        await db.SaveChangesAsync();
+
+        var (found, error) = await bookdropService.DeleteBookdrop(userId);
+
+        Assert.True(found);
+        Assert.Equal("No se puede eliminar el establecimiento porque tiene intercambios activos.", error);
+
+        // Nada se ha borrado ni desvinculado
+        Assert.NotNull(await db.Users.FindAsync(userId));
+        Assert.NotNull(await db.BookdropUsers.FindAsync(userId));
+        Assert.NotNull(await db.Bookspots.FindAsync(bookspotId));
+        var meetingAfter = await db.ExchangeMeetings.FindAsync(meeting.ExchangeMeetingId);
+        Assert.Equal(bookspotId, meetingAfter!.BookspotId);
     }
 }

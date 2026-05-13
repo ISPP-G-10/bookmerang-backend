@@ -173,7 +173,7 @@ public class MeetupService(AppDbContext db, IValidator<CreateMeetupRequest> crea
                 .ThenInclude(u => u.BaseUser)
             .Include(m => m.Attendances)
                 .ThenInclude(a => a.SelectedBook)
-            .OrderBy(m => m.ScheduledAt)
+            .OrderByDescending(m => m.CreatedAt)
             .ToListAsync();
 
         var allAttendeeIds = meetups

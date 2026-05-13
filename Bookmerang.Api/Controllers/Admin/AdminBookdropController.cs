@@ -24,7 +24,7 @@ public class AdminBookdropController(IBookdropService bookdropService) : Control
         var (found, error) = await _bookdropService.DeleteBookdrop(id);
 
         if (!found) return NotFound("Establecimiento no encontrado.");
-        if (error != null) return BadRequest(error);
+        if (error != null) return Conflict(new { error });
 
         return Ok(new { message = "Establecimiento eliminado correctamente." });
     }

@@ -59,7 +59,7 @@ public class ExchangeMeetingController(IExchangeMeetingService meetingService, A
         if (userId == null) return Unauthorized();
 
         var meeting = await _meetingService.GetMeetingByExchangeId(exchangeId);
-        if (meeting == null) return NotFound($"No existe meeting para exchange con id {exchangeId}.");
+        if (meeting == null) return Ok((object?)null);
 
         var exchange = await _exchangeService.GetExchangeWithMatch(exchangeId);
 

@@ -547,6 +547,46 @@ public class CommunityServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DeleteCommunity_WithMonthlyScores_RemovesScores()
+    {
+        var moderatorId = Guid.NewGuid();
+        SeedUser(moderatorId, "ranking-moderator@test.com", PricingPlan.PREMIUM);
+
+        var bs = SeedBookspot(40, MakePoint(0, 0));
+        var comm = new Community
+        {
+            Name = "CommunityWithRanking",
+            ReferenceBookspotId = bs.Id,
+            Status = CommunityStatus.ACTIVE,
+            CreatorId = moderatorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Communities.Add(comm);
+        await _db.SaveChangesAsync();
+
+        _db.CommunityMembers.Add(new CommunityMember
+        {
+            CommunityId = comm.Id,
+            UserId = moderatorId,
+            Role = CommunityRole.MODERATOR,
+            JoinedAt = DateTime.UtcNow
+        });
+        _db.CommunityMonthlyScores.Add(new CommunityMonthlyScore
+        {
+            CommunityId = comm.Id,
+            UserId = moderatorId,
+            Month = "2026-04",
+            InkdropsThisMonth = 400
+        });
+        await _db.SaveChangesAsync();
+
+        await _service.DeleteCommunityAsync(moderatorId, comm.Id);
+
+        Assert.Null(await _db.Communities.FirstOrDefaultAsync(c => c.Id == comm.Id));
+        Assert.Empty(await _db.CommunityMonthlyScores.Where(s => s.CommunityId == comm.Id).ToListAsync());
+    }
+
+    [Fact]
     public async Task DeleteCommunity_MemberWithoutModeratorRole_ThrowsForbidden()
     {
         var creatorId = Guid.NewGuid();

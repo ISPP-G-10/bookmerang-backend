@@ -66,7 +66,14 @@ public class SwipeCleanupHostedService(
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var deleted = await db.Swipes.ExecuteDeleteAsync(cancellationToken);
-        _logger.LogInformation("[SWIPE-CLEANUP] Deleted {DeletedCount} swipes.", deleted);
+        // Solo borrar swipes más antiguos que SwipeValidDays para evitar perder el historial
+        // de libros ya vistos (lo que permite filtrarlos del feed) mientras estén dentro de la ventana de validez
+        var cutoff = DateTime.UtcNow.AddDays(-_feedSettings.SwipeValidDays);
+        var deleted = await db.Swipes
+            .Where(s => s.CreatedAt < cutoff)
+            .ExecuteDeleteAsync(cancellationToken);
+        
+        _logger.LogInformation("[SWIPE-CLEANUP] Deleted {DeletedCount} old swipes (older than {CutoffDays} days).", 
+            deleted, _feedSettings.SwipeValidDays);
     }
 }

@@ -11,7 +11,8 @@ public record ChatDto(
     DateTime CreatedAt,
     List<ChatParticipantDto> Participants,
     MessageDto? LastMessage,
-    string? Name = null
+    string? Name = null,
+    string? EncryptionKey = null
 );
 
 public record ChatParticipantDto(
@@ -56,7 +57,8 @@ public static class ChatExtensions
         chat.CreatedAt,
         chat.Participants.Select(p => p.ToDto()).ToList(),
         lastMessage?.ToDto(),
-        name
+        name,
+        chat.EncryptionKey
     );
 
     public static ChatDto ToDto(this Chat chat, Dictionary<Guid, (string? frameId, string? colorId)> userPersonalization, Message? lastMessage = null, string? name = null) => new(
@@ -68,7 +70,8 @@ public static class ChatExtensions
             return p.ToDto(personalization.frameId, personalization.colorId);
         }).ToList(),
         lastMessage?.ToDto(),
-        name
+        name,
+        chat.EncryptionKey
     );
 
     public static ChatDto ToDtoWithRoles(this Chat chat, Dictionary<Guid, CommunityRole> userRoles, Message? lastMessage = null, string? name = null) => new(
@@ -77,7 +80,8 @@ public static class ChatExtensions
         chat.CreatedAt,
         chat.Participants.Select(p => p.ToDto(userRoles.TryGetValue(p.UserId, out var role) ? role : null)).ToList(),
         lastMessage?.ToDto(),
-        name
+        name,
+        chat.EncryptionKey
     );
 
     public static ChatDto ToDtoWithRoles(this Chat chat, Dictionary<Guid, CommunityRole> userRoles, Dictionary<Guid, (string? frameId, string? colorId)> userPersonalization, Message? lastMessage = null, string? name = null) => new(
@@ -89,7 +93,8 @@ public static class ChatExtensions
             return p.ToDto(userRoles.TryGetValue(p.UserId, out var role) ? role : null, personalization.frameId, personalization.colorId);
         }).ToList(),
         lastMessage?.ToDto(),
-        name
+        name,
+        chat.EncryptionKey
     );
 
     public static ChatParticipantDto ToDto(this ChatParticipant participant) => new(

@@ -324,6 +324,11 @@ public class CommunityService(
                 .ToListAsync();
             _db.CommunityMembers.RemoveRange(members);
 
+            var monthlyScores = await _db.CommunityMonthlyScores
+                .Where(s => s.CommunityId == communityId)
+                .ToListAsync();
+            _db.CommunityMonthlyScores.RemoveRange(monthlyScores);
+
             if (communityChat != null)
             {
                 var chatParticipants = await _db.ChatParticipants

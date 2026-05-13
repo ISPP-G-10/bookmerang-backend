@@ -9,9 +9,12 @@ using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.IdentityModel.Tokens;
+using SendGrid;
+using SendGrid.Helpers.Mail;
 
 namespace Bookmerang.Api.Services.Implementation.Auth;
 
@@ -216,6 +219,30 @@ public class AuthService(AppDbContext db, IConfiguration config, ILevelingServic
         return user;
     }
 
+    public async Task<BaseUser?> UpdateLocation(string supabaseId, double latitude, double longitude)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.SupabaseId == supabaseId);
+
+        if (user == null)
+            return null;
+
+        var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
+        var newLocation = factory.CreatePoint(new Coordinate(longitude, latitude));
+
+        user.Location = newLocation;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        var preference = await _db.UserPreferences.FirstOrDefaultAsync(p => p.UserId == user.Id);
+        if (preference != null)
+        {
+            preference.Location = newLocation;
+            preference.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _db.SaveChangesAsync();
+        return user;
+    }
+
 public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabaseId, string newEmail)
 {
     if (string.IsNullOrWhiteSpace(newEmail))
@@ -309,12 +336,17 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
             .Include(e => e.Match)
             .AnyAsync(e => (e.Match.User1Id == userId || e.Match.User2Id == userId) &&
                            e.Status != ExchangeStatus.COMPLETED &&
-                           e.Status != ExchangeStatus.REJECTED);
+                           e.Status != ExchangeStatus.REJECTED &&
+                           e.Status != ExchangeStatus.INCIDENT);
 
         if (hasActiveExchanges)
         {
             throw new Exception("No puedes borrar tu cuenta porque tienes intercambios en proceso.");
         }
+
+        await using var tx = _db.Database.IsRelational()
+            ? await _db.Database.BeginTransactionAsync()
+            : null;
 
         // 2. Borrado en cascada local manual (ya que EF tiene Restrict/NoAction en muchas de estas)
 
@@ -365,6 +397,69 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
         var userSwipes = await _db.Swipes.Where(s => s.SwiperId == userId).ToListAsync();
         if (userSwipes.Any()) _db.Swipes.RemoveRange(userSwipes);
 
+        // Participaciones en comunidades y quedadas
+        var meetupAttendances = await _db.MeetupAttendances.Where(ma => ma.UserId == userId).ToListAsync();
+        if (meetupAttendances.Any()) _db.MeetupAttendances.RemoveRange(meetupAttendances);
+
+        var libraryLikes = await _db.CommunityLibraryLikes.Where(ll => ll.UserId == userId).ToListAsync();
+        if (libraryLikes.Any()) _db.CommunityLibraryLikes.RemoveRange(libraryLikes);
+
+        // Transferir rol de creator/admin de comunidades a otro miembro antes de remover membresías
+        var communitiesAsCreator = await _db.Communities
+            .Include(c => c.Members)
+            .Where(c => c.CreatorId == userId)
+            .ToListAsync();
+
+        foreach (var community in communitiesAsCreator)
+        {
+            var otherMemberIds = community.Members
+                .Where(m => m.UserId != userId)
+                .Select(m => m.UserId)
+                .ToList();
+
+            if (otherMemberIds.Count == 0)
+            {
+                community.CreatorId = null;
+            }
+            else
+            {
+                var newCreatorId = otherMemberIds[Random.Shared.Next(otherMemberIds.Count)];
+                community.CreatorId = newCreatorId;
+
+                var newCreatorMembership = community.Members.FirstOrDefault(m => m.UserId == newCreatorId);
+                if (newCreatorMembership != null)
+                {
+                    newCreatorMembership.Role = CommunityRole.MODERATOR;
+                }
+            }
+        }
+
+        var communityMembers = await _db.CommunityMembers.Where(cm => cm.UserId == userId).ToListAsync();
+        if (communityMembers.Any()) _db.CommunityMembers.RemoveRange(communityMembers);
+
+        // Validaciones de bookspots hechas por el usuario
+        var bookspotValidations = await _db.BookspotValidations.Where(bv => bv.ValidatorUserId == userId).ToListAsync();
+        if (bookspotValidations.Any()) _db.BookspotValidations.RemoveRange(bookspotValidations);
+
+        // Bookspots y Meetups (Desvincular en lugar de borrar para que la comunidad no los pierda)
+        if (_db.Database.IsRelational())
+        {
+            await _db.Database.ExecuteSqlRawAsync("UPDATE bookspots SET created_by_user_id = NULL WHERE created_by_user_id = {0}", userId);
+            await _db.Database.ExecuteSqlRawAsync("UPDATE bookspots SET owner_id = NULL WHERE owner_id = {0}", userId);
+            await _db.Database.ExecuteSqlRawAsync("UPDATE meetups SET creator_id = NULL WHERE creator_id = {0}", userId);
+        }
+        else
+        {
+            var userCreatedBookspots = await _db.Bookspots.Where(b => b.CreatedByUserId == userId).ToListAsync();
+            foreach (var spot in userCreatedBookspots) spot.CreatedByUserId = null;
+
+            var userOwnedBookspots = await _db.Bookspots.Where(b => b.OwnerId == userId).ToListAsync();
+            foreach (var spot in userOwnedBookspots) spot.OwnerId = null;
+
+            var userMeetups = await _db.Meetups.Where(m => m.CreatorId == userId).ToListAsync();
+            foreach (var meetup in userMeetups) meetup.CreatorId = null;
+        }
+
         // Libros y sus dependencias
         var userBooks = await _db.Books.Where(b => b.OwnerId == userId).ToListAsync();
         if (userBooks.Any())
@@ -384,6 +479,14 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
             var swipesToUserBooks = await _db.Swipes.Where(s => bookIds.Contains(s.BookId)).ToListAsync();
             if (swipesToUserBooks.Any()) _db.Swipes.RemoveRange(swipesToUserBooks);
 
+            // Likes de biblioteca hacia los libros del usuario
+            var otherLibraryLikes = await _db.CommunityLibraryLikes.Where(ll => bookIds.Contains(ll.BookId)).ToListAsync();
+            if (otherLibraryLikes.Any()) _db.CommunityLibraryLikes.RemoveRange(otherLibraryLikes);
+
+            // Asistencias a quedadas usando los libros del usuario (por si acaso)
+            var otherMeetupAttendances = await _db.MeetupAttendances.Where(ma => bookIds.Contains(ma.SelectedBookId)).ToListAsync();
+            if (otherMeetupAttendances.Any()) _db.MeetupAttendances.RemoveRange(otherMeetupAttendances);
+
             _db.Books.RemoveRange(userBooks);
         }
 
@@ -399,13 +502,30 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
             _db.UserPreferences.Remove(preferences);
         }
 
-        // Finalmente, el usuario base
+        // Tablas sin entidad EF que referencian al usuario (limpieza por SQL crudo)
+        if (_db.Database.IsRelational())
+        {
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM points_ledgers WHERE user_id = {0}", userId);
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM community_monthly_scores WHERE user_id = {0}", userId);
+
+            await _db.Database.ExecuteSqlRawAsync("DELETE FROM admins WHERE id = {0}", userId);
+        }
+
+        // Finalmente, el usuario base — limpiar primero subtipos por si la fila no es de tipo User
         var regularUser = await _db.RegularUsers.FindAsync(userId);
         if (regularUser != null) _db.RegularUsers.Remove(regularUser);
+
+        var bookdropUser = await _db.BookdropUsers.FindAsync(userId);
+        if (bookdropUser != null) _db.BookdropUsers.Remove(bookdropUser);
 
         _db.Users.Remove(user);
 
         await _db.SaveChangesAsync();
+
+        if (tx != null)
+        {
+            await tx.CommitAsync();
+        }
 
         return user;
     }
@@ -541,6 +661,95 @@ public async Task<(BaseUser? usuario, string? error)> PatchEmail(string supabase
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public async Task<string?> RequestPasswordReset(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "El email es obligatorio.";
+
+        var normalizedEmail = NormalizeEmail(email);
+        if (!IsValidEmail(normalizedEmail))
+            return "El correo electrónico no es válido.";
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+        if (user == null)
+            return null; // no revelamos si el email existe
+
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        var token = Convert.ToBase64String(tokenBytes)
+            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+
+        user.PasswordResetToken = token;
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddMinutes(30);
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        await SendPasswordResetEmail(normalizedEmail, token);
+        return null;
+    }
+
+    public async Task<string?> ResetPassword(string token, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return "El token es obligatorio.";
+
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+            return "La nueva contraseña debe tener al menos 8 caracteres.";
+
+        var normalizedCode = token.Trim().ToUpperInvariant();
+
+        var candidates = await _db.Users
+            .Where(u => u.PasswordResetToken != null && u.PasswordResetTokenExpiry != null)
+            .ToListAsync();
+
+        var user = candidates.FirstOrDefault(u =>
+            u.PasswordResetToken != null &&
+            u.PasswordResetToken[..6].ToUpperInvariant() == normalizedCode);
+
+        if (user == null)
+            return "El código de recuperación no es válido.";
+
+        if (user.PasswordResetTokenExpiry == null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
+            return "El enlace de recuperación ha expirado.";
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        user.PasswordResetToken = null;
+        user.PasswordResetTokenExpiry = null;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return null;
+    }
+
+    private static async Task SendPasswordResetEmail(string toEmail, string token)
+    {
+        var apiKey = Environment.GetEnvironmentVariable("SENDGRID_API_KEY");
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("SENDGRID_API_KEY no está configurado.");
+
+        var client = new SendGridClient(apiKey);
+        var from = new EmailAddress("bookmerangproject@gmail.com", "Bookmerang Team");
+        var to = new EmailAddress(toEmail);
+        var subject = "Recuperar tu contraseña de Bookmerang";
+
+        var htmlContent = $@"
+            <div style='font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;'>
+                <h2 style='color: #3d405b;'>Recuperar contraseña</h2>
+                <p style='color: #555;'>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta de Bookmerang.</p>
+                <p style='color: #555;'>Introduce el siguiente código en la app para establecer tu nueva contraseña:</p>
+                <div style='background-color: #f4f1eb; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;'>
+                    <span style='font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #e07a5f;'>{token[..6].ToUpperInvariant()}</span>
+                </div>
+                <p style='color: #999; font-size: 13px;'>Este código expira en 30 minutos. Si no solicitaste este cambio, ignora este correo.</p>
+                <p style='color: #999; font-size: 13px;'>— El equipo de Bookmerang</p>
+            </div>";
+
+        var plainTextContent = $"Tu código de recuperación de contraseña de Bookmerang es: {token[..6].ToUpperInvariant()}. Expira en 30 minutos.";
+
+        var msg = MailHelper.CreateSingleEmail(from, to, subject, plainTextContent, htmlContent);
+        msg.SetReplyTo(new EmailAddress("bookmerangproject@gmail.com", "Bookmerang Team"));
+        await client.SendEmailAsync(msg);
     }
 
     private static string NormalizeEmail(string email) =>
